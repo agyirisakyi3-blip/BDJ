@@ -1,7 +1,7 @@
 window.ATT_CONFIG = {
   // The web app URL from: Apps Script > Deploy > New deployment > Web app.
   // Replace YOUR_SCRIPT_ID below after deploying. Keep the /exec suffix.
-  API_URL: 'https://script.google.com/macros/s/AKfycby3SMGo4XJb5bYzDactHVhzpEgHR8EpFVK3HYMt9Jq2h6jmWinDsAFvJyM3ofaXyQr-/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbzY8Qf01Mlb7A6r0dd6WYFlBaKN2_swnW7GkvYmlkwNqCe0iAyqXaIY4-GFSS7PlRd3pQ/exec',
 
   // Fallback office settings used only if the Config sheet can't be reached.
   DEFAULT_OFFICE_LAT: 5.6037168,

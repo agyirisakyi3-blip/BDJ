@@ -122,6 +122,7 @@
       fetchConfig()
         .then(renderHome)
         .catch(function (err) {
+          if (!state.config) state.config = defaultsConfig();
           if (isConfigured()) showFeedback('warn', 'Could not load office settings: ' + err.message);
           renderHome();
         });

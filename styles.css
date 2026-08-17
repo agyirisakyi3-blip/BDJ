@@ -477,7 +477,7 @@ table td.empty { color: var(--muted); text-align: center; padding: 18px 8px; whi
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 48px -16px rgba(0, 0, 0, 0.7);
 }
 #qr-reader { width: 100%; height: 100%; }
-#qr-reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
+#qr-reader video { width: 100% !important; height: 100% !important; object-fit: contain; }
 
 .scan-line {
   position: absolute; left: 0; right: 0; height: 2px; z-index: 2;
