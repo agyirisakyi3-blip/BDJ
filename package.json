@@ -1,0 +1,14 @@
+{
+  "name": "attendance-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "jest --runInBand --forceExit --detectOpenHandles",
+    "test:headed": "HEADLESS=false jest --runInBand --forceExit"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "puppeteer": "^22.12.0",
+    "express": "^4.19.2"
+  }
+}

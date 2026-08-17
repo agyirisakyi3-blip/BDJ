@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+npm-debug.log
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Build outputs
+dist/
+build/
+
+# Test reports
+*.log
+
+# Temporary files
+*~
+.temp/
+
+# Environment variables
+.env
+.env.local
+
+# All markdown docs EXCEPT README
+TEST_REPORT.md
+ADVANCED_TEST_REPORT.md
+TESTING_SUMMARY.md
+DEPLOYMENT_GUIDE.md
+GITHUB_DEPLOYMENT.md
