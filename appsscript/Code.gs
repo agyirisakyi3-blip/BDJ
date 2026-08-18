@@ -532,7 +532,6 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
     date: dateStr,
     time: timeStr,
     status: status,
-    distance: distance,
     office: office.name
   };
 }
