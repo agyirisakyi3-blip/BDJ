@@ -1,4 +1,4 @@
-var CACHE = 'att-v5';
+var CACHE = 'att-v6';
 var ASSETS = [
   './',
   './index.html',
@@ -37,6 +37,7 @@ self.addEventListener('activate', function (e) {
 
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
+  if (e.request.url.indexOf(self.location.origin) !== 0) return;
   e.respondWith(
     caches.match(e.request).then(function (hit) {
       var refresh = fetch(e.request).then(function (resp) {
