@@ -327,10 +327,7 @@ function ensureSheets_(ss) {
     c.appendRow(['pinLockoutMs', '900000']);
     c.appendRow(['writeQuotaPerEmail', '60']);
     c.appendRow(['writeQuotaTenant', '600']);
-    c.appendRow(['maxAccuracyM', '200']);
-    c.appendRow(['maxMoveKmh', '300']);
     c.appendRow(['retentionDays', '0']);
-    c.appendRow(['coordReuseBlock', 'true']);
     c.appendRow(['lateAfter', '']);
   }
   if (!ss.getSheetByName(SHEET_ATT)) {
@@ -397,8 +394,6 @@ function getConfig_(ss) {
   cfg.pinLockoutMs = Number(cfg.pinLockoutMs || 900000);
   cfg.writeQuotaPerEmail = Number(cfg.writeQuotaPerEmail || 60);
   cfg.writeQuotaTenant = Number(cfg.writeQuotaTenant || 600);
-  cfg.maxAccuracyM = Number(cfg.maxAccuracyM || 200);
-  cfg.maxMoveKmh = Number(cfg.maxMoveKmh || 300);
   cfg.retentionDays = Number(cfg.retentionDays || 0);
 
   var secPin = getSecret_(ss, 'adminPin');
@@ -412,7 +407,7 @@ function getConfig_(ss) {
 
 function publicConfig_(cfg, ss) {
   var offices = (getOffices_(ss, cfg) || []).map(function (o) {
-    return { name: o.name, lat: o.lat, lng: o.lng, radius: o.radius };
+    return { name: o.name, token: o.token, lat: o.lat, lng: o.lng, radius: o.radius };
   });
   return {
     appName: cfg.appName,
@@ -492,57 +487,11 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
   var employee = findEmployee_(ss, email);
   if (employee && employee.name) name = employee.name;
 
-  var lat = Number(payload.lat);
-  var lng = Number(payload.lng);
-  if (isNaN(lat) || isNaN(lng)) {
-    logAudit_(ss, email, 'Location unavailable', 'NO_LOCATION', now, tz);
-    return error_('Location unavailable. Allow location access.');
-  }
-
-  var distance = Math.round(haversine_(lat, lng, office.lat, office.lng));
-  if (distance > office.radius) {
-    logAudit_(ss, email, 'Outside radius (' + distance + ' m > ' + office.radius + ' m)', 'OUTSIDE_RANGE', now, tz);
-    return {
-      ok: false,
-      code: 'OUTSIDE_RANGE',
-      message: 'You are ' + distance + ' m from ' + office.name + '. Check-in is only allowed within ' + office.radius + ' m.',
-      distance: distance
-    };
-  }
-
-  var accuracy = Number(payload.accuracy);
-  if (isFinite(accuracy) && accuracy > cfg.maxAccuracyM) {
-    logAudit_(ss, email, 'Low GPS accuracy (' + Math.round(accuracy) + ' m)', 'ACCURACY_LOW', now, tz);
-    return error_('Your GPS fix is too weak (' + Math.round(accuracy) + ' m). Move closer to a window or outdoors and scan again.');
-  }
-
-  var lastPosKey = 'lastpos:' + ss.getId() + ':' + email;
-  var lastPosRaw = CacheService.getScriptCache().get(lastPosKey);
-  var lastPos = null;
-  if (lastPosRaw) { try { lastPos = JSON.parse(lastPosRaw); } catch (e) {} }
-  if (lastPos && Number(lastPos.lat) && Number(lastPos.lng)) {
-    var dtHours = (now.getTime() - Number(lastPos.ts || 0)) / 3600000;
-    if (dtHours > 0 && dtHours < 24) {
-      var km = haversine_(lat, lng, Number(lastPos.lat), Number(lastPos.lng)) / 1000;
-      var kmh = km / dtHours;
-      if (kmh > cfg.maxMoveKmh) {
-        logAudit_(ss, email, 'Implausible travel speed (' + Math.round(kmh) + ' km/h)', 'IMPLAUSIBLE', now, tz);
-        return error_('Check-in blocked: your position implies impossible travel speed. Location spoofing is suspected.');
-      }
-    }
-  }
-
   var status = 'On-site';
   var att = ss.getSheetByName(SHEET_ATT);
   var data = att.getDataRange().getValues();
   var dateStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
   var timeStr = Utilities.formatDate(now, tz, 'HH:mm:ss');
-
-  var reuseMsg = coordReuseCheck_(data, dateStr, email, lat, lng, cfg);
-  if (reuseMsg) {
-    logAudit_(ss, email, 'Coord reuse (shared location)', 'SPOOF_REUSE', now, tz);
-    return { ok: false, code: 'SPOOF_REUSE', message: reuseMsg };
-  }
 
   var lastAction = null;
   var lastTimeSec = -1;
@@ -575,8 +524,7 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
   }
 
   var action = (lastAction === 'Check-in') ? 'Check-out' : 'Check-in';
-  att.appendRow([dateStr, timeStr, safeCell_(name), email, action, status, lat, lng, distance, qr, office.name]);
-  CacheService.getScriptCache().put(lastPosKey, JSON.stringify({ lat: lat, lng: lng, ts: now.getTime() }), 1800);
+  att.appendRow([dateStr, timeStr, safeCell_(name), email, action, status, '', '', 0, qr, office.name]);
 
   return {
     ok: true,
@@ -612,19 +560,6 @@ function isEmailAllowed_(ss, email, cfg) {
   }
 
   return true;
-}
-
-function coordReuseCheck_(data, dateStr, emailLower, lat, lng, cfg) {
-  if (String(cfg.coordReuseBlock) !== 'true') return null;
-  for (var i = 1; i < data.length; i++) {
-    var r = data[i];
-    if (String(r[0]) !== dateStr) continue;
-    if (String(r[3]).toLowerCase() === emailLower) continue;
-    if (Number(r[6]) === lat && Number(r[7]) === lng) {
-      return 'This exact location was already reported by someone else today. Location reuse looks suspicious.';
-    }
-  }
-  return null;
 }
 
 function logAudit_(ss, email, reason, code, now, tz) {
@@ -1383,16 +1318,6 @@ function createSession_(ss, now) {
 function validSession_(ss, token) {
   if (!token) return false;
   return !!CacheService.getScriptCache().get('adminsess:' + ss.getId() + ':' + token);
-}
-
-function haversine_(lat1, lon1, lat2, lon2) {
-  var R = 6371000;
-  var dLat = (lat2 - lat1) * Math.PI / 180;
-  var dLon = (lon2 - lon1) * Math.PI / 180;
-  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-          Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function randomToken_() {

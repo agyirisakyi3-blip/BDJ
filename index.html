@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>BDJ Consulting</title>
-  <meta name="description" content="Glad to be one them - BDJ Consulting Attendance System. QR + geolocation check-in and check-out.">
+  <meta name="description" content="BDJ Consulting Attendance System. Scan QR code to check in and check out.">
   <meta name="theme-color" content="#6366f1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https:; worker-src 'self'; frame-src 'self' blob:; manifest-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
@@ -60,7 +60,6 @@
         </div>
         <div class="status-clock">
           <span id="status-time" class="status-time">--:--</span>
-          <span id="status-dist" class="status-dist"></span>
           <span class="status-dot" aria-hidden="true"></span>
         </div>
       </div>
@@ -69,7 +68,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         <span class="btn-label" id="btn-scan-label">Scan QR to check in</span>
       </button>
-      <p class="hint">Camera opens on the office QR at the entrance</p>
+      <p class="hint">Scan the QR code at the office entrance</p>
 
       <section id="recent-card" class="card block hidden">
         <div class="block-head">

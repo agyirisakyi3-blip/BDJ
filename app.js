@@ -8,11 +8,10 @@
   var LS_QUEUE = 'att.queue.v1';
   var LS_ONBOARDED = 'att.onboarded.v1';
   var LS_THEME = 'att.theme.v1';
-  var RECENT_LIMIT = 5;
 
   var state = {
     profile: null,
-    config: null,
+    config: defaultsConfig(),
     status: null,
     qrScanner: null,
     admin: null,
@@ -46,26 +45,6 @@
     return { tenant: String(text).slice(0, idx).trim(), token: String(text).slice(idx + 1).trim() };
   }
 
-  function findOfficeByToken(token) {
-    var list = state.config && state.config.offices;
-    if (!list || !list.length) return null;
-    token = String(token || '');
-    for (var i = 0; i < list.length; i++) {
-      if (String(list[i].token || '') === token) return list[i];
-    }
-    return null;
-  }
-
-  function findOfficeByName(name) {
-    var list = state.config && state.config.offices;
-    if (!list || !list.length) return null;
-    name = String(name || '');
-    for (var i = 0; i < list.length; i++) {
-      if (String(list[i].name || '') === name) return list[i];
-    }
-    return null;
-  }
-
   function vibrate(pattern) {
     if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch (e) {} }
   }
@@ -95,10 +74,7 @@
 
   function defaultsConfig() {
     return {
-      appName: DEFAULTS.APP_NAME || 'Attendance',
-      officeLat: Number(DEFAULTS.DEFAULT_OFFICE_LAT),
-      officeLng: Number(DEFAULTS.DEFAULT_OFFICE_LNG),
-      radiusMeters: Number(DEFAULTS.DEFAULT_RADIUS_METERS)
+      appName: DEFAULTS.APP_NAME || 'Attendance'
     };
   }
 
@@ -428,7 +404,6 @@
               date: lastRes.date || todayStr(),
               action: lastRes.action,
               time: lastRes.time,
-              distance: lastRes.distance,
               office: lastRes.office,
               tenant: lastRes.tenant || tenantFromProfile()
             };
@@ -455,32 +430,7 @@
     });
   }
 
-  /* ---------------- Geo ---------------- */
-
-  function getPosition() {
-    return new Promise(function (resolve, reject) {
-      if (!('geolocation' in navigator)) {
-        reject(new Error('Geolocation is not supported on this device.'));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(resolve, function (err) {
-        reject(new Error(err && err.message ? err.message : 'Location unavailable'));
-      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-    });
-  }
-
-  function haversine(lat1, lon1, lat2, lon2) {
-    var R = 6371000;
-    var toRad = function (x) { return x * Math.PI / 180; };
-    var dLat = toRad(lat2 - lat1);
-    var dLon = toRad(lon2 - lon1);
-    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return 2 * R * Math.asin(Math.sqrt(a));
-  }
-
-  /* ---------------- Scan flow ---------------- */
+  /* ---------------- Recent activity ---------------- */
 
   function onScanClick() {
     if (!state.config) { showFeedback('warn', 'Still loading office settings, try again in a moment.'); return; }
@@ -543,12 +493,17 @@
       showFeedback('error', 'No QR code detected.');
       return;
     }
-    var chain = processAttendance(text);
-    if (chain && chain.then) {
-      chain.then(function () { state.processing = false; }, function () { state.processing = false; });
-    } else {
-      state.processing = false;
-    }
+    setTimeout(function () {
+      var chain = processAttendance(text);
+      if (chain && chain.then) {
+        chain.then(
+          function () { state.processing = false; },
+          function () { state.processing = false; }
+        );
+      } else {
+        state.processing = false;
+      }
+    }, 200);
   }
 
   function closeScanner() {
@@ -567,7 +522,7 @@
     var btn = $('btn-scan');
     var label = $('btn-scan-label');
     btn.disabled = busy;
-    label.textContent = busy ? 'Checking location...' : (state.status ? 'Scan QR to check out' : 'Scan QR to check in');
+    label.textContent = busy ? 'Processing...' : (state.status ? 'Scan QR to check out' : 'Scan QR to check in');
   }
 
   function processAttendance(qrText) {
@@ -584,36 +539,24 @@
     }
 
     setBusy(true);
-    showFeedback('info', 'Checking your location...');
+    showFeedback('info', 'Processing your scan...');
 
     var parsed = parseQr(qrText);
     var tenant = parsed.tenant || tenantFromProfile();
     var token = parsed.token || qrText;
-    var office = findOfficeByToken(token);
-    var lat0 = office ? office.lat : state.config.officeLat;
-    var lng0 = office ? office.lng : state.config.officeLng;
-    var radius = (office && office.radius != null) ? office.radius : state.config.radiusMeters;
 
-    return getPosition().then(function (pos) {
-      var lat = pos.coords.latitude;
-      var lng = pos.coords.longitude;
-      var d = haversine(lat, lng, lat0, lng0);
-      if (office && d > radius) {
-        setBusy(false);
-        showFeedback('error', 'You are ' + Math.round(d) + ' m from the office. Check-in is only allowed within ' + radius + ' m.');
-        return;
-      }
     var payload = {
       action: 'attendance',
       tenant: tenant,
       qr: token,
       name: state.profile.name,
       email: state.profile.email,
-      lat: lat,
-      lng: lng,
-      accuracy: pos.coords.accuracy,
+      lat: 0,
+      lng: 0,
+      accuracy: 0,
       ts: Date.now()
     };
+
     return api(payload).then(function (res) {
       setBusy(false);
       if (!res.ok) {
@@ -624,7 +567,6 @@
         date: res.date || todayStr(),
         action: res.action,
         time: res.time,
-        distance: res.distance,
         office: res.office,
         tenant: tenant
       };
@@ -636,7 +578,7 @@
       showScanSuccess(res.action, res.time, state.profile.name);
       var verb = res.action === 'Check-in' ? 'checked in' : 'checked out';
       var loc = res.office ? ' at ' + res.office : '';
-      showFeedback('success', 'You ' + verb + loc + ' at ' + res.time + ' (distance ' + res.distance + ' m).');
+      showFeedback('success', 'You ' + verb + loc + ' at ' + res.time + '.');
     }, function (err) {
       setBusy(false);
       if (err && err.offline) {
@@ -646,15 +588,9 @@
         showFeedback('error', 'Could not reach the server: ' + err.message + '. Check your connection and try again.');
       }
     });
-    }, function (err) {
-      setBusy(false);
-      showFeedback('error', 'Location unavailable: ' + err.message + '. Allow location access (https) and try again.');
-    });
   }
 
   /* ---------------- Home render ---------------- */
-
-  var liveDistTimer = null;
 
   function renderHome() {
     var card = $('status-card');
@@ -663,11 +599,8 @@
     var sub = $('status-sub');
     var time = $('status-time');
     var btnLabel = $('btn-scan-label');
-    var dist = $('status-dist');
 
     card.classList.remove('checked-in');
-    stopLiveDistance();
-    if (dist) dist.textContent = '';
     var recentCard = $('recent-card');
     if (recentCard) recentCard.classList.toggle('hidden', !state.profile);
     var weekCard = $('week-card');
@@ -691,10 +624,6 @@
       sub.textContent = state.status.office ? 'At ' + state.status.office + '. Have a great day.' : 'Have a great day at the office.';
       time.textContent = state.status.time;
       btnLabel.textContent = 'Scan QR to check out';
-      if (dist && state.status.distance != null) {
-        dist.textContent = state.status.distance + ' m from office (at scan)';
-      }
-      startLiveDistance();
     } else if (state.status) {
       avatar.className = 'status-avatar out';
       avatar.textContent = 'OUT';
@@ -709,32 +638,6 @@
       sub.textContent = 'Scan the office QR at the entrance.';
       time.textContent = '--:--';
       btnLabel.textContent = 'Scan QR to check in';
-    }
-  }
-
-  function startLiveDistance() {
-    stopLiveDistance();
-    if (!state.status || state.status.action !== 'Check-in') return;
-    if (!state.config) return;
-    var el = $('status-dist');
-    if (!el) return;
-    var tick = function () {
-      getPosition().then(function (pos) {
-        var office = findOfficeByName(state.status.office);
-        var lat0 = office ? office.lat : state.config.officeLat;
-        var lng0 = office ? office.lng : state.config.officeLng;
-        var d = Math.round(haversine(pos.coords.latitude, pos.coords.longitude, lat0, lng0));
-        el.textContent = d + ' m from office';
-      }).catch(function () {});
-    };
-    tick();
-    liveDistTimer = setInterval(tick, 60000);
-  }
-
-  function stopLiveDistance() {
-    if (liveDistTimer) {
-      clearInterval(liveDistTimer);
-      liveDistTimer = null;
     }
   }
 
@@ -922,7 +825,7 @@
       setTimeout(function () { el.classList.remove('shake'); }, 550);
     }
     clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(function () { el.classList.add('hidden'); }, 9000);
+    feedbackTimer = setTimeout(function () { el.classList.add('hidden'); }, type === 'info' ? 12000 : 9000);
   }
 
   function showError(id, msg) {
@@ -949,7 +852,7 @@
   var ONBOARD_STEPS = [
     { title: 'Welcome', text: 'This app records your office check-ins using the QR code at the entrance. No download needed - open it from your browser or install it.', btn: 'Next' },
     { title: 'Your details', text: 'First, set your name and email. You only do this once - it is stored on this device.', btn: 'Open profile' },
-    { title: 'Allow location', text: 'Check-ins need your GPS position to confirm you are at the office. Allow location access when your browser asks.', btn: 'Get started' }
+    { title: 'Scan to check in', text: 'Point your camera at the QR code at the office entrance. That\'s it - you\'re checked in!', btn: 'Get started' }
   ];
   var onboardStep = 0;
 

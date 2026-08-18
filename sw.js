@@ -1,4 +1,4 @@
-var CACHE = 'att-v4';
+var CACHE = 'att-v5';
 var ASSETS = [
   './',
   './index.html',
@@ -15,7 +15,11 @@ var ASSETS = [
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(CACHE)
-      .then(function (c) { return c.addAll(ASSETS).catch(function () {}); })
+      .then(function (c) {
+        return Promise.allSettled(ASSETS.map(function (url) {
+          return c.add(url);
+        }));
+      })
       .then(function () { return self.skipWaiting(); })
   );
 });
