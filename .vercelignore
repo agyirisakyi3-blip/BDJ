@@ -1,0 +1,10 @@
+node_modules/
+tests/
+package.json
+package-lock.json
+jest.config.js
+dev-server.js
+.git/
+.vercel/
+*.md
+*.test.js

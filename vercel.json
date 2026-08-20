@@ -1,12 +1,6 @@
 {
-  "installCommand": "echo skipping",
-  "outputDirectory": ".",
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-      ]
-    }
-  ]
+  "framework": null,
+  "installCommand": "echo skip",
+  "buildCommand": "",
+  "outputDirectory": "."
 }
