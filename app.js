@@ -613,6 +613,7 @@
       sub.textContent = 'Set your name and email to begin.';
       time.textContent = '--:--';
       btnLabel.textContent = 'Scan QR to check in';
+      stopElapsedTimer();
       return;
     }
 
@@ -624,6 +625,7 @@
       sub.textContent = state.status.office ? 'At ' + state.status.office + '. Have a great day.' : 'Have a great day at the office.';
       time.textContent = state.status.time;
       btnLabel.textContent = 'Scan QR to check out';
+      startElapsedTimer();
     } else if (state.status) {
       avatar.className = 'status-avatar out';
       avatar.textContent = 'OUT';
@@ -631,6 +633,7 @@
       sub.textContent = state.status.office ? 'From ' + state.status.office + '. You can check back in later.' : 'You can check back in later today.';
       time.textContent = state.status.time;
       btnLabel.textContent = 'Scan QR to check in';
+      stopElapsedTimer();
     } else {
       avatar.className = 'status-avatar out';
       avatar.textContent = 'OUT';
@@ -638,6 +641,7 @@
       sub.textContent = 'Scan the office QR at the entrance.';
       time.textContent = '--:--';
       btnLabel.textContent = 'Scan QR to check in';
+      stopElapsedTimer();
     }
   }
 
@@ -791,6 +795,38 @@
   }
 
   /* ---------------- Scan success overlay ---------------- */
+
+  var elapsedInterval = null;
+
+  function startElapsedTimer() {
+    stopElapsedTimer();
+    var el = $('elapsed-wrap');
+    var timer = $('elapsed-timer');
+    if (!el || !timer || !state.status || state.status.action !== 'Check-in' || !state.status.time) {
+      if (el) el.classList.add('hidden');
+      return;
+    }
+    el.classList.remove('hidden');
+    var parts = state.status.time.split(':');
+    var checkInSec = Number(parts[0]) * 3600 + Number(parts[1]) * 60 + Number(parts[2] || 0);
+    function tick() {
+      var now = new Date();
+      var nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      var diff = Math.max(0, nowSec - checkInSec);
+      var h = Math.floor(diff / 3600);
+      var m = Math.floor((diff % 3600) / 60);
+      var s = diff % 60;
+      timer.textContent = h + 'h ' + m + 'm ' + s + 's';
+    }
+    tick();
+    elapsedInterval = setInterval(tick, 1000);
+  }
+
+  function stopElapsedTimer() {
+    if (elapsedInterval) { clearInterval(elapsedInterval); elapsedInterval = null; }
+    var el = $('elapsed-wrap');
+    if (el) el.classList.add('hidden');
+  }
 
   var ssTimer = null;
 
