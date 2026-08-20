@@ -522,7 +522,9 @@
     var btn = $('btn-scan');
     var label = $('btn-scan-label');
     btn.disabled = busy;
-    label.textContent = busy ? 'Processing...' : (state.status ? 'Scan QR to check out' : 'Scan QR to check in');
+    if (busy) {
+      label.textContent = 'Processing...';
+    }
   }
 
   function processAttendance(qrText) {
