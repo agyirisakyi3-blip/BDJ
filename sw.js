@@ -1,4 +1,4 @@
-var CACHE = 'att-v8';
+var CACHE = 'att-v9';
 var ASSETS = [
   './',
   './index.html',

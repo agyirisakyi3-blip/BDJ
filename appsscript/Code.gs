@@ -311,7 +311,7 @@ function ensureSheets_(ss) {
   if (!ss.getSheetByName(SHEET_CFG)) {
     var c = ss.insertSheet(SHEET_CFG);
     c.appendRow(['key', 'value']);
-    c.appendRow(['appName', 'Office Attendance']);
+    c.appendRow(['appName', 'Liste Des Presences']);
     c.appendRow(['officeName', 'Head Office']);
     c.appendRow(['officeLat', '5.6037168']);
     c.appendRow(['officeLng', '-0.1869644']);
@@ -381,7 +381,7 @@ function getConfig_(ss) {
       }
     }
   }
-  cfg.appName = cfg.appName || 'Office Attendance';
+  cfg.appName = cfg.appName || 'Liste Des Presences';
   cfg.officeName = cfg.officeName || 'Head Office';
   cfg.adminEmail = cfg.adminEmail || '';
   cfg.lateAfter = cfg.lateAfter || '';
