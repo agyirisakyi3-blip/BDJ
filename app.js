@@ -8,6 +8,7 @@
   var LS_QUEUE = 'att.queue.v1';
   var LS_ONBOARDED = 'att.onboarded.v1';
   var LS_THEME = 'att.theme.v1';
+  var LS_CONSENT = 'att.consent.v1';
 
   var state = {
     profile: null,
@@ -80,8 +81,24 @@
     };
   }
 
+  function hasConsent() {
+    try { return localStorage.getItem(LS_CONSENT) === '1'; } catch (e) { return false; }
+  }
+
+  function setConsent(val) {
+    try { localStorage.setItem(LS_CONSENT, val ? '1' : '0'); } catch (e) {}
+  }
+
   function init() {
     bindEvents();
+    if (!hasConsent()) {
+      $('consent-banner').classList.remove('hidden');
+      return;
+    }
+    bootApp();
+  }
+
+  function bootApp() {
     initTheme();
     initCollapsibles();
     loadProfile().then(function () {
@@ -145,6 +162,17 @@
     $('ob-skip').addEventListener('click', dismissOnboarding);
     $('admin-pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
     $('admin-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
+    var consentAccept = $('consent-accept');
+    var consentDecline = $('consent-decline');
+    if (consentAccept) consentAccept.addEventListener('click', function () {
+      setConsent(true);
+      $('consent-banner').classList.add('hidden');
+      bootApp();
+    });
+    if (consentDecline) consentDecline.addEventListener('click', function () {
+      setConsent(false);
+      $('consent-banner').classList.add('hidden');
+    });
     var themeBtn = $('btn-theme');
     if (themeBtn) themeBtn.addEventListener('click', function () {
       var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -165,7 +193,7 @@
   function applyTheme(t) {
     var light = t === 'light';
     document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
-    try { localStorage.setItem(LS_THEME, light ? 'light' : 'dark'); } catch (e) {}
+    if (hasConsent()) { try { localStorage.setItem(LS_THEME, light ? 'light' : 'dark'); } catch (e) {} }
     var sun = $('ic-sun');
     var moon = $('ic-moon');
     if (sun) sun.style.display = light ? 'none' : '';
@@ -249,6 +277,7 @@
   }
 
   function lsSet(key, val) {
+    if (!hasConsent()) return Promise.resolve();
     if (!ENC_SUPPORTED) { try { localStorage.setItem(key, val); } catch (e) {} return Promise.resolve(); }
     return encKey().then(function (k) {
       if (!k) { try { localStorage.setItem(key, val); } catch (e) {} return; }

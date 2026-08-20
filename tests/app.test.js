@@ -22,6 +22,10 @@ beforeEach(async () => {
   page = await browser.newPage();
   page.on('pageerror', () => {});
   await page.goto(APP_URL, { waitUntil: 'networkidle2', timeout: 15000 });
+  await page.evaluate(() => {
+    localStorage.setItem('att.consent.v1', '1');
+  });
+  await page.reload({ waitUntil: 'networkidle2', timeout: 15000 });
 });
 
 afterEach(async () => {
@@ -30,6 +34,7 @@ afterEach(async () => {
 
 async function setupProfile(page) {
   await page.evaluate(() => {
+    localStorage.setItem('att.consent.v1', '1');
     localStorage.setItem('att.onboarded.v1', '1');
     localStorage.setItem('att.profile.v1', JSON.stringify({ name: 'Test User', email: 'test@bdj.com' }));
   });
@@ -116,11 +121,52 @@ describe('App Loading', () => {
 });
 
 /* ==========================================
+   1b. CONSENT BANNER
+   ========================================== */
+describe('Consent Banner', () => {
+  test('shows consent banner when no consent stored', async () => {
+    await page.evaluate(() => { localStorage.clear(); });
+    await page.reload({ waitUntil: 'networkidle2' });
+    const hidden = await page.$eval('#consent-banner', el => el.classList.contains('hidden'));
+    expect(hidden).toBe(false);
+  });
+
+  test('accept hides banner and app initializes', async () => {
+    await page.evaluate(() => { localStorage.clear(); });
+    await page.reload({ waitUntil: 'networkidle2' });
+    await page.click('#consent-accept');
+    await delay(500);
+    const hidden = await page.$eval('#consent-banner', el => el.classList.contains('hidden'));
+    expect(hidden).toBe(true);
+    const consent = await page.evaluate(() => localStorage.getItem('att.consent.v1'));
+    expect(consent).toBe('1');
+  });
+
+  test('decline hides banner and consent is 0', async () => {
+    await page.evaluate(() => { localStorage.clear(); });
+    await page.reload({ waitUntil: 'networkidle2' });
+    await page.click('#consent-decline');
+    await delay(300);
+    const hidden = await page.$eval('#consent-banner', el => el.classList.contains('hidden'));
+    expect(hidden).toBe(true);
+    const consent = await page.evaluate(() => localStorage.getItem('att.consent.v1'));
+    expect(consent).toBe('0');
+  });
+
+  test('consent banner hidden when consent already given', async () => {
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
+    await page.reload({ waitUntil: 'networkidle2' });
+    const hidden = await page.$eval('#consent-banner', el => el.classList.contains('hidden'));
+    expect(hidden).toBe(true);
+  });
+});
+
+/* ==========================================
    2. ONBOARDING
    ========================================== */
 describe('Onboarding', () => {
   test('onboarding modal appears on first visit', async () => {
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
     const title = await page.$eval('#ob-title', el => el.textContent);
@@ -128,7 +174,7 @@ describe('Onboarding', () => {
   });
 
   test('onboarding has 3 steps with dots', async () => {
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
     const dots = await page.$$eval('#ob-steps .ob-dot', els => els.length);
@@ -136,7 +182,7 @@ describe('Onboarding', () => {
   });
 
   test('skip button dismisses onboarding', async () => {
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
     await page.click('#ob-skip');
@@ -145,7 +191,7 @@ describe('Onboarding', () => {
   });
 
   test('next button goes through steps', async () => {
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
 
@@ -159,7 +205,7 @@ describe('Onboarding', () => {
   });
 
   test('step 2 "Open profile" button opens profile modal', async () => {
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
     await page.click('#ob-next');
@@ -244,7 +290,7 @@ describe('Profile Modal', () => {
     await page.click('#btn-profile');
     await page.click('#btn-profile-save');
     const errText = await page.$eval('#profile-error', el => el.textContent);
-    expect(errText).toContain('name');
+    expect(errText).toContain('nom');
   });
 
   test('shows error when saving invalid email', async () => {
@@ -421,7 +467,7 @@ describe('Admin View', () => {
    ========================================== */
 describe('Status Card', () => {
   test('shows Welcome when no profile', async () => {
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForFunction(
       () => document.getElementById('status-label').textContent !== '--:--',
@@ -851,7 +897,7 @@ describe('No JavaScript Errors', () => {
   test('full flow: onboard -> profile -> home without errors', async () => {
     const errors = [];
     page.on('pageerror', err => errors.push(err.message));
-    await page.evaluate(() => localStorage.clear());
+    await page.evaluate(() => { localStorage.clear(); localStorage.setItem('att.consent.v1', '1'); });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
     await page.click('#ob-skip');

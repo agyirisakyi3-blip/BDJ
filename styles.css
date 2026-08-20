@@ -670,3 +670,22 @@ details[open] summary { margin-bottom: 8px; }
   .app { padding: 0; }
   .card { background: #fff; color: #111; box-shadow: none; border: 1px solid #ddd; }
 }
+
+.consent-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  padding: 16px;
+  background: var(--card-bg, #1e293b);
+  border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.4);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text, #e2e8f0);
+}
+.consent-banner p { margin: 0 0 12px; }
+.consent-actions { display: flex; gap: 10px; }
+.consent-actions .primary-btn,
+.consent-actions .ghost-btn { flex: 1; }
