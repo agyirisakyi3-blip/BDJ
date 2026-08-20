@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>BDJ Consulting</title>
-  <meta name="description" content="BDJ Consulting Attendance System. Scan QR code to check in and check out.">
+  <meta name="description" content="Systeme de presence BDJ Consulting. Scannez le QR code pour pointer l'entree et la sortie.">
   <meta name="theme-color" content="#059669">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https:; worker-src 'self'; frame-src 'self' blob:; manifest-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
@@ -31,20 +31,20 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
           </span>
           <div class="brand-text">
-            <h1 id="app-name">Attendance</h1>
+            <h1 id="app-name">Presence</h1>
             <p id="today-date" class="muted"></p>
           </div>
         </div>
         <div class="topbar-right">
-          <div class="live-clock" role="timer" aria-label="Current time">
+          <div class="live-clock" role="timer" aria-label="Heure actuelle">
             <span class="live-dot" aria-hidden="true"></span>
             <span id="live-time">--:--:--</span>
           </div>
-          <button id="btn-theme" class="icon-btn" type="button" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">
+          <button id="btn-theme" class="icon-btn" type="button" title="Basculer clair/sombre" aria-label="Basculer clair/sombre">
             <svg id="ic-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             <svg id="ic-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           </button>
-          <button id="btn-profile" class="icon-btn" type="button" title="Your details" aria-label="Your details">
+          <button id="btn-profile" class="icon-btn" type="button" title="Vos coordonnees" aria-label="Vos coordonnees">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
         </div>
@@ -55,14 +55,14 @@
       <div id="status-card" class="card status-card">
         <div id="status-avatar" class="status-avatar">?</div>
         <div class="status-info">
-          <div id="status-label" class="status-label">Welcome</div>
+          <div id="status-label" class="status-label">Bienvenue</div>
           <div id="status-sub" class="status-sub"></div>
         </div>
         <div class="status-clock">
           <span id="status-time" class="status-time">--:--</span>
           <span class="status-dot" aria-hidden="true"></span>
           <div id="elapsed-wrap" class="elapsed-wrap hidden">
-            <span class="elapsed-label">Duration</span>
+            <span class="elapsed-label">Duree</span>
             <span id="elapsed-timer" class="elapsed-timer">0h 0m</span>
           </div>
         </div>
@@ -70,24 +70,24 @@
 
       <button id="btn-scan" class="primary-btn big-btn" type="button">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        <span class="btn-label" id="btn-scan-label">Scan QR to check in</span>
+        <span class="btn-label" id="btn-scan-label">Scanner QR pour pointer</span>
       </button>
-      <p class="hint">Scan the QR code at the office entrance</p>
+      <p class="hint">Scannez le QR code a l'entree du bureau</p>
 
       <section id="recent-card" class="card block hidden">
         <div class="block-head">
-          <h3>Recent activity</h3>
+          <h3>Activite recente</h3>
         </div>
         <ul id="recent-list" class="recent-list"></ul>
-        <p id="recent-empty" class="hint hidden">No check-ins yet.</p>
+        <p id="recent-empty" class="hint hidden">Aucun pointage pour l'instant.</p>
       </section>
 
       <section id="week-card" class="card block hidden">
         <div class="block-head">
-          <h3>Last 7 days</h3>
+          <h3>7 derniers jours</h3>
         </div>
-        <div id="week-chart" class="week-chart" role="img" aria-label="Hours per day over the last 7 days"></div>
-        <p id="week-empty" class="hint hidden">No check-ins in the last 7 days.</p>
+        <div id="week-chart" class="week-chart" role="img" aria-label="Heures par jour sur les 7 derniers jours"></div>
+        <p id="week-empty" class="hint hidden">Aucun pointage sur les 7 derniers jours.</p>
       </section>
 
       <div id="feedback" class="feedback hidden" role="status" aria-live="polite"></div>
@@ -95,7 +95,7 @@
       <footer class="footer">
         <button id="btn-history" class="link" type="button">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          My history
+          Mon historique
         </button>
         <button id="btn-admin" class="link" type="button">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -113,10 +113,10 @@
           </span>
           <div class="brand-text">
             <h1>Admin</h1>
-            <p id="admin-sub" class="muted">Today's summary</p>
+            <p id="admin-sub" class="muted">Resume du jour</p>
           </div>
         </div>
-        <button id="btn-back" class="icon-btn" type="button" title="Back" aria-label="Back">
+        <button id="btn-back" class="icon-btn" type="button" title="Retour" aria-label="Retour">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
         </button>
       </header>
@@ -127,22 +127,22 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </span>
           <div>
-            <h3>Admin access</h3>
-            <p class="muted">Log in with your admin email and PIN.</p>
+            <h3>Acces admin</h3>
+            <p class="muted">Connectez-vous avec votre email admin et votre code PIN.</p>
           </div>
         </div>
         <label for="admin-email">Email</label>
         <input id="admin-email" type="email" inputmode="email" autocomplete="email"
-               placeholder="you@company.com">
+               placeholder="vous@entreprise.com">
         <label for="admin-pin">PIN</label>
         <input id="admin-pin" type="password" inputmode="numeric" autocomplete="off"
-               placeholder="Enter admin PIN">
+               placeholder="Saisissez le code PIN">
         <div id="otp-row" class="hidden">
-          <label for="admin-otp">One-time code</label>
+          <label for="admin-otp">Code a usage unique</label>
           <input id="admin-otp" type="text" inputmode="numeric" autocomplete="one-time-code"
-                 placeholder="6-digit code emailed to you" maxlength="6">
+                 placeholder="Code a 6 chiffres envoye par email" maxlength="6">
         </div>
-        <button id="btn-admin-go" class="primary-btn" type="button">View today's summary</button>
+        <button id="btn-admin-go" class="primary-btn" type="button">Voir le resume du jour</button>
         <p id="admin-otp-note" class="hint hidden"></p>
         <p id="admin-error" class="feedback error hidden"></p>
       </div>
@@ -150,19 +150,19 @@
       <div id="admin-dash" class="hidden">
         <div class="card block">
           <div class="block-head collapsible">
-            <h3>Report range</h3>
+            <h3>Periode du rapport</h3>
           </div>
           <div class="block-body">
             <div class="range-row">
-              <label class="range-field">From
+              <label class="range-field">Du
                 <input id="rng-from" type="date">
               </label>
-              <label class="range-field">To
+              <label class="range-field">Au
                 <input id="rng-to" type="date">
               </label>
               <button id="btn-load" class="ghost-btn range-btn" type="button">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                Load report
+                Charger le rapport
               </button>
             </div>
           </div>
@@ -170,20 +170,20 @@
 
         <div class="card block collapsed">
           <div class="block-head collapsible">
-            <h3>Create a tenant</h3>
+            <h3>Creer un espace</h3>
           </div>
           <div class="block-body">
-            <p class="hint">Creates a new company workspace with its own spreadsheet, roster and reports. Requires the platform admin PIN you used to log in.</p>
+            <p class="hint">Cree un nouvel espace d'entreprise avec sa propre feuille de calcul, son effectif et ses rapports. Requiert le code PIN admin utilise pour vous connecter.</p>
             <div class="range-row">
-              <label class="range-field">Tenant code
-                <input id="prov-code" type="text" placeholder="e.g. acme" autocomplete="off">
+              <label class="range-field">Code espace
+                <input id="prov-code" type="text" placeholder="ex. acme" autocomplete="off">
               </label>
-              <label class="range-field">Company name
+              <label class="range-field">Nom de l'entreprise
                 <input id="prov-name" type="text" placeholder="Acme Corp" autocomplete="off">
               </label>
               <button id="btn-provision" class="ghost-btn range-btn" type="button">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                Create
+                Creer
               </button>
             </div>
             <p id="prov-error" class="feedback error hidden"></p>
@@ -194,47 +194,47 @@
         <div class="stat-row">
           <div class="stat stat-in">
             <b id="st-in">0</b>
-            <span>Check-ins today</span>
+            <span>Entrees aujourd'hui</span>
           </div>
           <div class="stat stat-out">
             <b id="st-out">0</b>
-            <span>Check-outs today</span>
+            <span>Sorties aujourd'hui</span>
           </div>
           <div class="stat stat-on">
             <b id="st-on">0</b>
-            <span>On site now</span>
+            <span>Sur place</span>
           </div>
         </div>
 
         <div class="report-summary stat-row">
           <div class="stat stat-in">
             <b id="rp-hours">0h</b>
-            <span>Total hours</span>
+            <span>Total heures</span>
           </div>
           <div class="stat stat-on">
             <b id="rp-days">0</b>
-            <span>Days present</span>
+            <span>Jours presents</span>
           </div>
           <div class="stat stat-out">
             <b id="rp-late">0</b>
-            <span>Late arrivals</span>
+            <span>Retards</span>
           </div>
           <div class="stat stat-in">
             <b id="rp-miss">0</b>
-            <span>No check-out</span>
+            <span>Pas de sortie</span>
           </div>
         </div>
 
         <div class="card block">
           <div class="block-head collapsible">
-            <h3>Present now</h3>
+            <h3>Present maintenant</h3>
             <span id="on-site-count" class="pill"></span>
           </div>
           <div class="block-body">
             <div id="on-site-list" class="chips"></div>
             <div class="absent-block">
               <div class="block-head">
-                <h3>Not checked in yet</h3>
+                <h3>Pas encore pointe</h3>
                 <span id="absent-count" class="pill"></span>
               </div>
               <div id="absent-list" class="chips"></div>
@@ -244,28 +244,28 @@
 
         <div class="card block collapsed">
           <div class="block-head collapsible">
-            <h3>Employees</h3>
+            <h3>Employes</h3>
             <span id="emp-count" class="pill"></span>
           </div>
           <div class="block-body">
-            <p class="hint">Pre-approved staff. A stored name overrides what an employee types in their profile, so records stay consistent.</p>
+            <p class="hint">Personnel pre-approuve. Un nom enregistre remplace ce que l'employe saisit dans son profil, pour garder la coherence des donnees.</p>
             <div class="emp-form">
-              <label class="range-field">Name
-                <input id="emp-name" type="text" placeholder="Full name" autocomplete="off">
+              <label class="range-field">Nom
+                <input id="emp-name" type="text" placeholder="Nom complet" autocomplete="off">
               </label>
               <label class="range-field">Email
-                <input id="emp-email" type="email" placeholder="you@company.com" autocomplete="off">
+                <input id="emp-email" type="email" placeholder="vous@entreprise.com" autocomplete="off">
               </label>
-              <label class="range-field">Department <span class="opt">(optional)</span>
-                <input id="emp-dept" type="text" placeholder="Engineering" autocomplete="off">
+              <label class="range-field">Departement <span class="opt">(facultatif)</span>
+                <input id="emp-dept" type="text" placeholder="Informatique" autocomplete="off">
               </label>
-              <button id="btn-emp-add" class="ghost-btn range-btn" type="button">Add</button>
+              <button id="btn-emp-add" class="ghost-btn range-btn" type="button">Ajouter</button>
             </div>
             <p id="emp-error" class="feedback error hidden"></p>
             <div class="table-wrap emp-table">
               <table id="emp-table">
                 <thead>
-                  <tr><th>Name</th><th>Email</th><th>Department</th><th></th></tr>
+                  <tr><th>Nom</th><th>Email</th><th>Departement</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -279,21 +279,21 @@
             <span id="adm-count" class="pill"></span>
           </div>
           <div class="block-body">
-            <p class="hint">People who can access this admin panel. Each admin logs in with their own email and receives their own one-time code.</p>
+            <p class="hint">Personnes ayant acces a ce panneau d'administration. Chaque admin se connecte avec son propre email et recoit son propre code a usage unique.</p>
             <div class="emp-form">
-              <label class="range-field">Name
-                <input id="adm-name" type="text" placeholder="Full name" autocomplete="off">
+              <label class="range-field">Nom
+                <input id="adm-name" type="text" placeholder="Nom complet" autocomplete="off">
               </label>
               <label class="range-field">Email
-                <input id="adm-email" type="email" placeholder="you@company.com" autocomplete="off">
+                <input id="adm-email" type="email" placeholder="vous@entreprise.com" autocomplete="off">
               </label>
-              <button id="btn-adm-add" class="ghost-btn range-btn" type="button">Add admin</button>
+              <button id="btn-adm-add" class="ghost-btn range-btn" type="button">Ajouter un admin</button>
             </div>
             <p id="adm-error" class="feedback error hidden"></p>
             <div class="table-wrap emp-table">
               <table id="adm-table">
                 <thead>
-                  <tr><th>Name</th><th>Email</th><th>Added on</th><th></th></tr>
+                  <tr><th>Nom</th><th>Email</th><th>Ajoute le</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -303,14 +303,14 @@
 
         <div class="card block">
           <div class="block-head collapsible">
-            <h3>Report</h3>
+            <h3>Rapport</h3>
             <span id="report-count" class="pill"></span>
           </div>
           <div class="block-body">
             <div class="table-wrap">
               <table id="report-table">
                 <thead>
-                  <tr><th>Date</th><th>Name</th><th>Check-in</th><th>Check-out</th><th>Hours</th><th>Status</th></tr>
+                  <tr><th>Date</th><th>Nom</th><th>Entree</th><th>Sortie</th><th>Heures</th><th>Statut</th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -325,11 +325,11 @@
           </button>
           <a id="link-sheet" class="ghost-btn" target="_blank" rel="noopener">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            Sheet
+            Feuille
           </a>
           <button id="btn-refresh" class="ghost-btn" type="button">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            Refresh
+            Actualiser
           </button>
         </div>
       </div>
@@ -338,59 +338,59 @@
   </main>
 
   <!-- ============ PROFILE ============ -->
-  <div id="modal-profile" class="modal hidden" role="dialog" aria-modal="true" aria-label="Your details">
+  <div id="modal-profile" class="modal hidden" role="dialog" aria-modal="true" aria-label="Vos coordonnees">
     <div class="modal-card card">
       <div class="modal-head">
         <span class="brand-mark sm" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </span>
         <div>
-          <h3>Your details</h3>
-          <p class="muted">Used only for attendance records on your device.</p>
+          <h3>Vos coordonnees</h3>
+          <p class="muted">Utilise uniquement pour les enregistrements de presence sur cet appareil.</p>
         </div>
       </div>
-      <label for="pf-name">Name</label>
-      <input id="pf-name" type="text" placeholder="Full name" autocomplete="name">
+      <label for="pf-name">Nom</label>
+      <input id="pf-name" type="text" placeholder="Nom complet" autocomplete="name">
       <label for="pf-email">Email</label>
-      <input id="pf-email" type="email" placeholder="you@company.com" autocomplete="email">
-      <label for="pf-tenant">Tenant code <span class="opt">(optional)</span></label>
-      <input id="pf-tenant" type="text" placeholder="e.g. acme" autocomplete="off"
+      <input id="pf-email" type="email" placeholder="vous@entreprise.com" autocomplete="email">
+      <label for="pf-tenant">Code espace <span class="opt">(facultatif)</span></label>
+      <input id="pf-tenant" type="text" placeholder="ex. acme" autocomplete="off"
              aria-describedby="pf-tenant-hint">
-      <p id="pf-tenant-hint" class="hint">Leave blank for this workspace's default tenant.</p>
-      <p id="pf-privacy" class="hint">Your name, email and check-in history are stored in the company's Google Sheet. Only you (with this email) and admins can read them. Clear this site's data if you share this device.</p>
+      <p id="pf-tenant-hint" class="hint">Laissez vide pour l'espace par defaut.</p>
+      <p id="pf-privacy" class="hint">Votre nom, email et historique de pointage sont enregistres dans la feuille Google de l'entreprise. Seuls vous (avec cet email) et les admins peuvent les consulter. Effacez les donnees de ce site si vous partagez cet appareil.</p>
       <p id="profile-error" class="feedback error hidden"></p>
-      <button id="btn-profile-save" class="primary-btn" type="button">Save</button>
+      <button id="btn-profile-save" class="primary-btn" type="button">Enregistrer</button>
     </div>
   </div>
 
   <!-- ============ ONBOARDING ============ -->
-  <div id="modal-onboard" class="modal hidden" role="dialog" aria-modal="true" aria-label="Welcome">
+  <div id="modal-onboard" class="modal hidden" role="dialog" aria-modal="true" aria-label="Bienvenue">
     <div class="modal-card card">
       <div class="modal-head">
         <span class="brand-mark sm" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
         </span>
         <div>
-          <h3 id="ob-title">Welcome</h3>
+          <h3 id="ob-title">Bienvenue</h3>
           <p id="ob-text" class="muted"></p>
         </div>
       </div>
       <div id="ob-steps" class="ob-steps" aria-hidden="true"></div>
-      <button id="ob-next" class="primary-btn" type="button">Next</button>
-      <button id="ob-skip" class="ghost-btn" type="button">Skip</button>
+      <button id="ob-next" class="primary-btn" type="button">Suivant</button>
+      <button id="ob-skip" class="ghost-btn" type="button">Passer</button>
     </div>
   </div>
 
   <!-- ============ SCANNER ============ -->
-  <div id="modal-scan" class="modal hidden" role="dialog" aria-modal="true" aria-label="Scan office QR">
+  <div id="modal-scan" class="modal hidden" role="dialog" aria-modal="true" aria-label="Scanner le QR du bureau">
     <div class="modal-card card scan-card">
       <div class="modal-head">
         <span class="brand-mark sm" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </span>
         <div>
-          <h3>Scan office QR</h3>
-          <p class="muted">Center the QR code in the frame</p>
+          <h3>Scanner le QR du bureau</h3>
+          <p class="muted">Centre le QR code dans le cadre</p>
         </div>
       </div>
       <div class="scan-frame">
@@ -402,54 +402,54 @@
         <span class="corner br" aria-hidden="true"></span>
       </div>
       <details>
-        <summary>Camera not working? Enter code manually</summary>
+        <summary>Camera ne fonctionne pas? Saisissez le code manuellement</summary>
         <div class="manual-row">
-          <input id="manual-qr" type="text" placeholder="Paste the QR content">
-          <button id="btn-manual-ok" class="ghost-btn" type="button">Use</button>
+          <input id="manual-qr" type="text" placeholder="Collez le contenu du QR">
+          <button id="btn-manual-ok" class="ghost-btn" type="button">Utiliser</button>
         </div>
       </details>
-      <button id="btn-scan-cancel" class="ghost-btn" type="button">Cancel</button>
+      <button id="btn-scan-cancel" class="ghost-btn" type="button">Annuler</button>
     </div>
   </div>
 
   <!-- ============ HISTORY ============ -->
-  <div id="modal-history" class="modal hidden" role="dialog" aria-modal="true" aria-label="My attendance history">
+  <div id="modal-history" class="modal hidden" role="dialog" aria-modal="true" aria-label="Mon historique de presence">
     <div class="modal-card card">
       <div class="modal-head">
         <span class="brand-mark sm" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </span>
         <div>
-          <h3>Your attendance</h3>
+          <h3>Votre presence</h3>
           <p id="hist-range" class="muted"></p>
         </div>
       </div>
       <div class="report-summary stat-row">
         <div class="stat stat-in">
           <b id="hist-days">0</b>
-          <span>Days present</span>
+          <span>Jours presents</span>
         </div>
         <div class="stat stat-on">
           <b id="hist-hours">0h</b>
-          <span>Total hours</span>
+          <span>Total heures</span>
         </div>
         <div class="stat stat-out">
           <b id="hist-late">0</b>
-          <span>Late</span>
+          <span>Retards</span>
         </div>
       </div>
       <div class="table-wrap">
         <table id="hist-table">
           <thead>
-            <tr><th>Date</th><th>Check-in</th><th>Check-out</th><th>Hours</th><th>Status</th></tr>
+            <tr><th>Date</th><th>Entree</th><th>Sortie</th><th>Heures</th><th>Statut</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
       <div class="btn-row">
-        <button id="btn-hist-export" class="ghost-btn" type="button">Download my data (CSV)</button>
-        <button id="btn-hist-delete" class="ghost-btn" type="button">Erase my data</button>
-        <button id="btn-hist-close" class="ghost-btn" type="button">Close</button>
+        <button id="btn-hist-export" class="ghost-btn" type="button">Telecharger mes donnees (CSV)</button>
+        <button id="btn-hist-delete" class="ghost-btn" type="button">Effacer mes donnees</button>
+        <button id="btn-hist-close" class="ghost-btn" type="button">Fermer</button>
       </div>
     </div>
   </div>
@@ -460,7 +460,7 @@
       <span class="scan-success-check" aria-hidden="true">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </span>
-      <span id="ss-title" class="scan-success-title">Checked in</span>
+      <span id="ss-title" class="scan-success-title">Pointe</span>
       <span id="ss-time" class="scan-success-time"></span>
     </div>
   </div>

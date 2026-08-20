@@ -35,7 +35,7 @@ async function setupProfile(page) {
   });
   await page.reload({ waitUntil: 'networkidle2' });
   await page.waitForFunction(
-    () => document.getElementById('status-label').textContent !== 'Welcome',
+    () => document.getElementById('status-label').textContent !== 'Bienvenue',
     { timeout: 5000 }
   );
 }
@@ -73,7 +73,7 @@ describe('App Loading', () => {
 
   test('scan button label says "Scan QR to check in"', async () => {
     const text = await page.$eval('#btn-scan-label', el => el.textContent);
-    expect(text).toBe('Scan QR to check in');
+    expect(text).toBe('Scanner le QR pour pointer');
   });
 
   test('status card shows status-avatar', async () => {
@@ -124,7 +124,7 @@ describe('Onboarding', () => {
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
     const title = await page.$eval('#ob-title', el => el.textContent);
-    expect(title).toBe('Welcome');
+    expect(title).toBe('Bienvenue');
   });
 
   test('onboarding has 3 steps with dots', async () => {
@@ -150,12 +150,12 @@ describe('Onboarding', () => {
     await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 5000 });
 
     const step1 = await page.$eval('#ob-title', el => el.textContent);
-    expect(step1).toBe('Welcome');
+    expect(step1).toBe('Bienvenue');
 
     await page.click('#ob-next');
     await delay(300);
     const step2 = await page.$eval('#ob-title', el => el.textContent);
-    expect(step2).toBe('Your details');
+    expect(step2).toBe('Vos coordonnees');
   });
 
   test('step 2 "Open profile" button opens profile modal', async () => {
@@ -316,7 +316,7 @@ describe('Profile Modal', () => {
     await page.type('#pf-tenant', 'INVALID CODE WITH SPACES');
     await page.click('#btn-profile-save');
     const errText = await page.$eval('#profile-error', el => el.textContent);
-    expect(errText).toContain('Tenant');
+    expect(errText).toContain('espace');
   });
 
   test('valid tenant code saves', async () => {
@@ -428,10 +428,10 @@ describe('Status Card', () => {
       { timeout: 5000 }
     );
     const label = await page.$eval('#status-label', el => el.textContent);
-    expect(label).toBe('Welcome');
+    expect(label).toBe('Bienvenue');
   });
 
-  test('shows "Not checked in" when profile exists but no status', async () => {
+  test('shows "Non pointe" when profile exists but no status', async () => {
     await page.evaluate(() => {
       localStorage.setItem('att.onboarded.v1', '1');
       localStorage.setItem('att.profile.v1', JSON.stringify({ name: 'Test', email: 't@t.com' }));
@@ -439,11 +439,11 @@ describe('Status Card', () => {
     });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForFunction(
-      () => document.getElementById('status-label').textContent !== 'Welcome',
+      () => document.getElementById('status-label').textContent !== 'Bienvenue',
       { timeout: 5000 }
     );
     const label = await page.$eval('#status-label', el => el.textContent);
-    expect(label).toBe('Not checked in');
+    expect(label).toBe('Non pointe');
   });
 
   test('shows "Checked in" with check-out button', async () => {
@@ -457,13 +457,13 @@ describe('Status Card', () => {
     });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForFunction(
-      () => document.getElementById('status-label').textContent !== 'Welcome',
+      () => document.getElementById('status-label').textContent !== 'Bienvenue',
       { timeout: 10000 }
     );
     const label = await page.$eval('#status-label', el => el.textContent);
-    expect(label).toBe('Checked in');
+    expect(label).toBe('Pointe');
     const btnText = await page.$eval('#btn-scan-label', el => el.textContent);
-    expect(btnText).toContain('check out');
+    expect(btnText).toContain('sortie');
   });
 
   test('shows "Checked out" after check-out', async () => {
@@ -477,11 +477,11 @@ describe('Status Card', () => {
     });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForFunction(
-      () => document.getElementById('status-label').textContent !== 'Welcome',
+      () => document.getElementById('status-label').textContent !== 'Bienvenue',
       { timeout: 5000 }
     );
     const label = await page.$eval('#status-label', el => el.textContent);
-    expect(label).toBe('Checked out');
+    expect(label).toBe('Sorti');
   });
 
   test('checked-in card has "checked-in" class', async () => {
@@ -495,7 +495,7 @@ describe('Status Card', () => {
     });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForFunction(
-      () => document.getElementById('status-label').textContent === 'Checked in',
+      () => document.getElementById('status-label').textContent === 'Pointe',
       { timeout: 10000 }
     );
     const hasClass = await page.$eval('#status-card', el => el.classList.contains('checked-in'));
@@ -512,11 +512,11 @@ describe('Status Card', () => {
     });
     await page.reload({ waitUntil: 'networkidle2' });
     await page.waitForFunction(
-      () => document.getElementById('status-label').textContent !== 'Welcome',
+      () => document.getElementById('status-label').textContent !== 'Bienvenue',
       { timeout: 5000 }
     );
     const label = await page.$eval('#status-label', el => el.textContent);
-    expect(label).toBe('Not checked in');
+    expect(label).toBe('Non pointe');
   });
 });
 
@@ -862,7 +862,7 @@ describe('No JavaScript Errors', () => {
     await page.click('#btn-profile-save');
     await delay(500);
     const label = await page.$eval('#status-label', el => el.textContent);
-    expect(label).toBe('Not checked in');
+    expect(label).toBe('Non pointe');
     expect(errors).toEqual([]);
   });
 });

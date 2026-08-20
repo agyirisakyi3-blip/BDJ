@@ -52,8 +52,8 @@
   }
 
   function fmtDateLabel(d) {
-    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var wd = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var months = ['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
+    var wd = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
     return wd[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
   }
 
@@ -76,7 +76,7 @@
 
   function defaultsConfig() {
     return {
-      appName: DEFAULTS.APP_NAME || 'Attendance'
+      appName: DEFAULTS.APP_NAME || 'Presence'
     };
   }
 
@@ -101,7 +101,7 @@
         .then(renderHome)
         .catch(function (err) {
           if (!state.config) state.config = defaultsConfig();
-          if (isConfigured()) showFeedback('warn', 'Could not load office settings: ' + err.message);
+          if (isConfigured()) showFeedback('warn', 'Impossible de charger les parametres du bureau : ' + err.message);
           renderHome();
         });
 
@@ -301,10 +301,10 @@
     var name = $('pf-name').value.trim();
     var email = $('pf-email').value.trim();
     var tenant = $('pf-tenant').value.trim();
-    if (!name) { showError('profile-error', 'Enter your name.'); return; }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('profile-error', 'Enter a valid email.'); return; }
+    if (!name) { showError('profile-error', 'Saisissez votre nom.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('profile-error', 'Saisissez un email valide.'); return; }
     if (tenant && !/^[a-z0-9][a-z0-9\-]{1,23}$/.test(tenant)) {
-      showError('profile-error', 'Tenant code: 2-24 chars, letters/digits/hyphens.');
+      showError('profile-error', 'Code espace : 2-24 caracteres, lettres/chiffres/tirets.');
       return;
     }
     var prevTenant = tenantFromProfile();
@@ -331,7 +331,7 @@
 
   function api(body) {
     if (!isConfigured()) {
-      return Promise.reject(new Error('The app is not configured yet. See the setup banner.'));
+      return Promise.reject(new Error("L'application n'est pas encore configuree. Consultez la banniere de configuration."));
     }
     return fetch(API_URL, {
       method: 'POST',
@@ -341,10 +341,10 @@
       return r.text();
     }).then(function (txt) {
       try { return JSON.parse(txt); }
-      catch (e) { throw new Error('Unexpected server response.'); }
+      catch (e) { throw new Error('Reponse inattendue du serveur.'); }
     }).catch(function (e) {
       if (!navigator.onLine || e instanceof TypeError) {
-        var ne = new Error('Network error');
+        var ne = new Error('Erreur reseau');
         ne.offline = true;
         throw ne;
       }
@@ -381,7 +381,7 @@
     if (!isConfigured()) return Promise.resolve();
     return loadQueue().then(function (q) {
       if (!q.length) return;
-      showFeedback('info', 'Syncing ' + q.length + ' saved check-in' + (q.length > 1 ? 's' : '') + '...');
+      showFeedback('info', 'Synchronisation de ' + q.length + ' pointage' + (q.length > 1 ? 's' : '') + ' enregistre' + (q.length > 1 ? 's' : '') + '...');
       var done = 0;
       var synced = 0;
       var lastRes = null;
@@ -401,7 +401,7 @@
         if (done !== q.length) return;
         saveQueue(remaining);
         if (remaining.length) {
-          showFeedback('warn', remaining.length + ' saved check-in' + (remaining.length > 1 ? 's' : '') + ' still waiting to sync.');
+          showFeedback('warn', remaining.length + ' pointage' + (remaining.length > 1 ? 's' : '') + ' en attente de synchronisation.');
         } else if (synced > 0) {
           if (lastRes && lastRes.ok) {
             state.status = {
@@ -413,7 +413,7 @@
             };
             saveStatus();
           }
-          showFeedback('success', synced + ' offline check-in' + (synced > 1 ? 's' : '') + ' synced.');
+          showFeedback('success', synced + ' pointage' + (synced > 1 ? 's' : '') + ' hors ligne synchronise' + (synced > 1 ? 's' : '') + '.');
           renderHome();
           loadRecent();
           loadWeek();
@@ -428,7 +428,7 @@
       return Promise.resolve();
     }
     return api({ action: 'config' }).then(function (res) {
-      if (!res.ok || !res.config) throw new Error((res && res.message) || 'Config error');
+      if (!res.ok || !res.config) throw new Error((res && res.message) || 'Erreur de configuration');
       state.config = Object.assign({}, defaultsConfig(), res.config);
       $('app-name').textContent = state.config.appName;
     });
@@ -437,7 +437,7 @@
   /* ---------------- Recent activity ---------------- */
 
   function onScanClick() {
-    if (!state.config) { showFeedback('warn', 'Still loading office settings, try again in a moment.'); return; }
+    if (!state.config) { showFeedback('warn', 'Chargement des parametres du bureau en cours, reessayez dans un instant.'); return; }
     if (!state.profile) {
       state.pendingScan = true;
       showProfileModal();
@@ -451,7 +451,7 @@
     var reader = $('qr-reader');
     reader.innerHTML = '';
     if (typeof Html5Qrcode === 'undefined') {
-      renderCameraError('The QR scanner failed to load (check your connection).');
+      renderCameraError('Le scanner QR n\'a pas pu se charger (verifiez votre connexion).');
       return;
     }
     if (!state.qrScanner) state.qrScanner = new Html5Qrcode('qr-reader');
@@ -461,7 +461,7 @@
       function (text) { handleScan(text); },
       function () {}
     ).catch(function (err) {
-      renderCameraError('Camera unavailable: ' + err);
+      renderCameraError('Camera indisponible: ' + err);
       var s = state.qrScanner;
       state.qrScanner = null;
       if (s) {
@@ -475,8 +475,8 @@
     reader.innerHTML =
       '<div class="cam-error">' +
         '<p class="cam-error-msg">' + escapeHtml(msg) + '</p>' +
-        '<button type="button" class="ghost-btn" id="cam-retry">Retry camera</button>' +
-        '<p class="hint">Camera not working? Enter the code manually below.</p>' +
+        '<button type="button" class="ghost-btn" id="cam-retry">Reessayer la camera</button>' +
+        '<p class="hint">Camera ne fonctionne pas? Saisissez le code manuellement ci-dessous.</p>' +
       '</div>';
     var retry = document.getElementById('cam-retry');
     if (retry) retry.addEventListener('click', function () { openScanner(); });
@@ -484,7 +484,7 @@
 
   function onManualQr() {
     var v = $('manual-qr').value.trim();
-    if (!v) { showFeedback('error', 'Enter the QR content first.'); return; }
+    if (!v) { showFeedback('error', 'Saisissez d\'abord le contenu du QR.'); return; }
     handleScan(v);
   }
 
@@ -494,7 +494,7 @@
     closeScanner();
     if (!text) {
       state.processing = false;
-      showFeedback('error', 'No QR code detected.');
+      showFeedback('error', 'Aucun QR code detecte.');
       return;
     }
     setTimeout(function () {
@@ -527,25 +527,25 @@
     var label = $('btn-scan-label');
     btn.disabled = busy;
     if (busy) {
-      label.textContent = 'Processing...';
+      label.textContent = 'Traitement en cours...';
     }
   }
 
   function processAttendance(qrText) {
     if (!state.config) {
       setBusy(false);
-      showFeedback('warn', 'Office settings are still loading. Try again in a moment.');
+      showFeedback('warn', 'Les parametres du bureau sont en cours de chargement. Reessayez dans un instant.');
       return;
     }
     if (!state.profile) {
       setBusy(false);
-      showFeedback('warn', 'Set your details first.');
+      showFeedback('warn', 'Definissez vos coordonnees d\'abord.');
       showProfileModal();
       return;
     }
 
     setBusy(true);
-    showFeedback('info', 'Processing your scan...');
+    showFeedback('info', 'Traitement de votre scan...');
 
     var parsed = parseQr(qrText);
     var tenant = parsed.tenant || tenantFromProfile();
@@ -566,7 +566,7 @@
     return api(payload).then(function (res) {
       setBusy(false);
       if (!res.ok) {
-        showFeedback('error', res.message || 'Check failed.');
+        showFeedback('error', res.message || 'Echec du pointage.');
         return;
       }
       state.status = {
@@ -582,16 +582,16 @@
       loadWeek();
       vibrate(40);
       showScanSuccess(res.action, res.time, state.profile.name);
-      var verb = res.action === 'Check-in' ? 'checked in' : 'checked out';
-      var loc = res.office ? ' at ' + res.office : '';
-      showFeedback('success', 'You ' + verb + loc + ' at ' + res.time + '.');
+      var verb = res.action === 'Check-in' ? 'passe' : 'sorti';
+      var loc = res.office ? ' a ' + res.office : '';
+      showFeedback('success', 'Vous etes ' + verb + loc + ' a ' + res.time + '.');
     }, function (err) {
       setBusy(false);
       if (err && err.offline) {
         queueAttendance(payload);
-        showFeedback('info', 'You are offline. Your check-in was saved and will sync automatically when you\'re back online.');
+        showFeedback('info', 'Vous etes hors ligne. Votre pointage a ete enregistre et se synchronisera automatiquement lorsque vous serez en ligne.');
       } else {
-        showFeedback('error', 'Could not reach the server: ' + err.message + '. Check your connection and try again.');
+        showFeedback('error', 'Impossible de joindre le serveur : ' + err.message + '. Verifiez votre connexion et reessayez.');
       }
     });
   }
@@ -615,10 +615,10 @@
     if (!state.profile) {
       avatar.className = 'status-avatar';
       avatar.textContent = '?';
-      label.textContent = 'Welcome';
-      sub.textContent = 'Set your name and email to begin.';
+      label.textContent = 'Bienvenue';
+      sub.textContent = 'Definissez votre nom et email pour commencer.';
       time.textContent = '--:--';
-      btnLabel.textContent = 'Scan QR to check in';
+      btnLabel.textContent = 'Scanner QR pour pointer';
       stopElapsedTimer();
       return;
     }
@@ -626,27 +626,27 @@
     if (state.status && state.status.action === 'Check-in') {
       card.classList.add('checked-in');
       avatar.className = 'status-avatar in';
-      avatar.textContent = 'IN';
-      label.textContent = 'Checked in';
-      sub.textContent = state.status.office ? 'At ' + state.status.office + '. Have a great day.' : 'Have a great day at the office.';
+      avatar.textContent = 'ENTREE';
+      label.textContent = 'Pointe';
+      sub.textContent = state.status.office ? 'A ' + state.status.office + '. Passez une bonne journee.' : 'Passez une bonne journee au bureau.';
       time.textContent = state.status.time;
-      btnLabel.textContent = 'Scan QR to check out';
+      btnLabel.textContent = 'Scanner QR pour la sortie';
       startElapsedTimer();
     } else if (state.status) {
       avatar.className = 'status-avatar out';
-      avatar.textContent = 'OUT';
-      label.textContent = 'Checked out';
-      sub.textContent = state.status.office ? 'From ' + state.status.office + '. You can check back in later.' : 'You can check back in later today.';
+      avatar.textContent = 'SORTIE';
+      label.textContent = 'Sorti';
+      sub.textContent = state.status.office ? 'De ' + state.status.office + '. Vous pouvez pointer a nouveau plus tard.' : 'Vous pouvez pointer a nouveau plus tard aujourd\'hui.';
       time.textContent = state.status.time;
-      btnLabel.textContent = 'Scan QR to check in';
+      btnLabel.textContent = 'Scanner QR pour pointer';
       stopElapsedTimer();
     } else {
       avatar.className = 'status-avatar out';
-      avatar.textContent = 'OUT';
-      label.textContent = 'Not checked in';
-      sub.textContent = 'Scan the office QR at the entrance.';
+      avatar.textContent = 'SORTIE';
+      label.textContent = 'Non pointe';
+      sub.textContent = 'Scannez le QR du bureau a l\'entree.';
       time.textContent = '--:--';
-      btnLabel.textContent = 'Scan QR to check in';
+      btnLabel.textContent = 'Scanner QR pour pointer';
       stopElapsedTimer();
     }
   }
@@ -708,12 +708,12 @@
       top.textContent = r.date;
       var meta = document.createElement('span');
       meta.className = 'recent-meta';
-      meta.textContent = (r.office ? r.office : 'Office') + ' \u00b7 ' + r.time;
+      meta.textContent = (r.office ? r.office : 'Bureau') + ' \u00b7 ' + r.time;
       main.appendChild(top);
       main.appendChild(meta);
       var badge = document.createElement('span');
       badge.className = 'tag ' + (r.action === 'Check-in' ? 'in' : 'out');
-      badge.textContent = r.action === 'Check-in' ? 'IN' : 'OUT';
+      badge.textContent = r.action === 'Check-in' ? 'ENTREE' : 'SORTIE';
       li.appendChild(dot);
       li.appendChild(main);
       li.appendChild(badge);
@@ -749,7 +749,7 @@
   function dayLabel(dateStr) {
     var p = dateStr.split('-');
     var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
-    var names = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    var names = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
     return names[d.getDay()];
   }
 
@@ -785,14 +785,14 @@
       wrap.className = 'week-bar-wrap';
       var bar = document.createElement('div');
       bar.className = 'week-bar' + (d.hours > 0 ? '' : ' zero');
-      bar.title = d.date + ': ' + (d.hours > 0 ? fmtHours(d.hours) : 'no check-in');
+      bar.title = d.date + ': ' + (d.hours > 0 ? fmtHours(d.hours) : 'pas de pointage');
       if (d.hours > 0) {
         bar.style.height = Math.max(8, Math.round((d.hours / max) * 100)) + '%';
       }
       wrap.appendChild(bar);
       var label = document.createElement('span');
       label.className = 'week-label';
-      label.textContent = d.date === today ? 'Today' : dayLabel(d.date);
+      label.textContent = d.date === today ? 'Aujourd\'hui' : dayLabel(d.date);
       col.appendChild(val);
       col.appendChild(wrap);
       col.appendChild(label);
@@ -843,8 +843,8 @@
     el.classList.remove('hidden', 'fade');
     var first = String(name || '').trim().split(/\s+/)[0] || '';
     $('ss-title').textContent = action === 'Check-in'
-      ? (first ? 'Welcome back, ' + first + '!' : 'Checked in')
-      : (first ? 'Goodbye, ' + first + '!' : 'Checked out');
+      ? (first ? 'Bon retour, ' + first + '!' : 'Pointe')
+      : (first ? 'Au revoir, ' + first + '!' : 'Sorti');
     $('ss-time').textContent = time || '';
     ssTimer = setTimeout(function () {
       el.classList.add('fade');
@@ -880,7 +880,7 @@
 
   function showSetupBanner() {
     var b = $('setup-banner');
-    b.innerHTML = 'Setup needed: set your Apps Script URL in <code>config.js</code> (API_URL), then deploy the backend. See README.md for steps.';
+    b.innerHTML = 'Configuration requise : definissez votre URL Apps Script dans <code>config.js</code> (API_URL), puis deployez le backend. Voir README.md pour les etapes.';
     b.classList.remove('hidden');
   }
 
@@ -892,9 +892,9 @@
   /* ---------------- Onboarding ---------------- */
 
   var ONBOARD_STEPS = [
-    { title: 'Welcome', text: 'This app records your office check-ins using the QR code at the entrance. No download needed - open it from your browser or install it.', btn: 'Next' },
-    { title: 'Your details', text: 'First, set your name and email. You only do this once - it is stored on this device.', btn: 'Open profile' },
-    { title: 'Scan to check in', text: 'Point your camera at the QR code at the office entrance. That\'s it - you\'re checked in!', btn: 'Get started' }
+    { title: 'Bienvenue', text: 'Cette application enregistre vos pointages au bureau grace au code QR a l\'entree. Aucun telechargement necessaire - ouvrez-la depuis votre navigateur ou installez-la.', btn: 'Suivant' },
+    { title: 'Vos coordonnees', text: 'Commencez par definir votre nom et email. Vous ne le faites qu\'une seule fois - les donnees sont stockees sur cet appareil.', btn: 'Ouvrir le profil' },
+    { title: 'Scanner pour pointer', text: 'Pointez votre camera vers le code QR a l\'entree du bureau. C\'est tout - vous etes pointe !', btn: 'Commencer' }
   ];
   var onboardStep = 0;
 
@@ -918,7 +918,7 @@
 
   function onOnboardNext() {
     var s = ONBOARD_STEPS[onboardStep];
-    if (s.btn === 'Open profile') {
+    if (s.btn === 'Ouvrir le profil') {
       showProfileModal();
       return;
     }
@@ -959,20 +959,20 @@
       var pin = $('admin-pin').value.trim() || state.pin || '';
       var otp = $('admin-otp') ? $('admin-otp').value.trim() : '';
 
-      if (!email && !pin) { showError('admin-error', 'Enter your email and PIN.'); return; }
+      if (!email && !pin) { showError('admin-error', 'Saisissez votre email et votre code PIN.'); return; }
       if (email) {
         body.email = email;
         if (!otp && $('otp-row') && !$('otp-row').classList.contains('hidden')) {
-          showError('admin-error', 'Enter the one-time code emailed to you.');
+          showError('admin-error', 'Saisissez le code a usage unique envoye par email.');
           return;
         }
         body.otp = otp;
         body.action = 'admin_login';
         body.pin = '';
       } else {
-        if (!pin) { showError('admin-error', 'Enter the admin PIN.'); return; }
+        if (!pin) { showError('admin-error', 'Saisissez le code PIN admin.'); return; }
         if (!otp && $('otp-row') && !$('otp-row').classList.contains('hidden')) {
-          showError('admin-error', 'Enter the one-time code emailed to you.');
+          showError('admin-error', 'Saisissez le code a usage unique envoye par email.');
           return;
         }
         body.pin = pin;
@@ -980,10 +980,10 @@
       }
     }
     hideError('admin-error');
-    $('btn-admin-go').textContent = 'Loading...';
+    $('btn-admin-go').textContent = 'Chargement...';
     showReportSkeleton();
     api(body).then(function (res) {
-      $('btn-admin-go').textContent = 'View today\'s summary';
+      $('btn-admin-go').textContent = 'Voir le resume du jour';
       if (res && res.needOtp) {
         clearReportSkeleton();
         showOtpStep(res);
@@ -991,7 +991,7 @@
       }
       if (!res.ok) {
         if (state.adminToken) state.adminToken = '';
-        throw new Error((res && res.message) || 'Session expired. Log in again.');
+        throw new Error((res && res.message) || 'Session expiree. Connectez-vous a nouveau.');
       }
       if (email) state.adminEmail = email;
       if (pin) state.pin = pin;
@@ -999,7 +999,7 @@
       if (email && res.ok) {
         var adminBody = { action: 'admin', from: from, to: to, token: state.adminToken };
         return api(adminBody).then(function (adminRes) {
-          if (!adminRes.ok) throw new Error(adminRes.message || 'Failed to load admin data.');
+          if (!adminRes.ok) throw new Error(adminRes.message || 'Echec du chargement des donnees admin.');
           state.admin = adminRes.admin;
           renderAdmin(adminRes.admin);
         });
@@ -1007,7 +1007,7 @@
       state.admin = res.admin;
       renderAdmin(res.admin);
     }).catch(function (err) {
-      $('btn-admin-go').textContent = 'View today\'s summary';
+      $('btn-admin-go').textContent = 'Voir le resume du jour';
       clearReportSkeleton();
       handleAdminAuthFail(err);
       showError('admin-error', err.message);
@@ -1019,10 +1019,10 @@
     $('admin-otp-note').textContent = res.message || '';
     $('admin-otp-note').classList.remove('hidden');
     if (res.otpDev) {
-      $('admin-otp-note').textContent = res.message + ' Development code: ' + res.otpDev;
+      $('admin-otp-note').textContent = res.message + ' Code de developpement : ' + res.otpDev;
     }
     if (res.email) state.pendingAdminEmail = res.email;
-    $('btn-admin-go').textContent = 'Verify code';
+    $('btn-admin-go').textContent = 'Verifier le code';
     $('admin-otp').focus();
   }
 
@@ -1069,13 +1069,13 @@
     $('rp-late').textContent = a.summary.lateCount;
     $('rp-miss').textContent = a.summary.missingOut;
 
-    $('on-site-count').textContent = a.live.onSite + ' on site';
+    $('on-site-count').textContent = a.live.onSite + ' sur place';
     var chips = $('on-site-list');
     chips.innerHTML = '';
     if (!a.live.onSiteNames || a.live.onSiteNames.length === 0) {
       var empty = document.createElement('span');
       empty.className = 'empty';
-      empty.textContent = 'No one is on site right now.';
+      empty.textContent = 'Personne n\'est sur place actuellement.';
       chips.appendChild(empty);
     } else {
       a.live.onSiteNames.forEach(function (n) {
@@ -1087,13 +1087,13 @@
     }
 
     var absent = a.live.absent || [];
-    $('absent-count').textContent = absent.length + ' not checked in';
+    $('absent-count').textContent = absent.length + ' non pointe' + (absent.length > 1 ? 's' : '');
     var absentList = $('absent-list');
     absentList.innerHTML = '';
     if (absent.length === 0) {
       var ae = document.createElement('span');
       ae.className = 'empty';
-      ae.textContent = 'Everyone on the roster has checked in today.';
+      ae.textContent = 'Tout le personnel a deja pointe aujourd\'hui.';
       absentList.appendChild(ae);
     } else {
       absent.forEach(function (p) {
@@ -1108,7 +1108,7 @@
     var pairs = (a.pairs || []).slice().sort(function (x, y) {
       return (y.date + y.in).localeCompare(x.date + x.in);
     });
-    $('report-count').textContent = pairs.length + ' entries';
+    $('report-count').textContent = pairs.length + ' entree' + (pairs.length > 1 ? 's' : '');
     var tbody = $('report-table').querySelector('tbody');
     tbody.innerHTML = '';
     if (pairs.length === 0) {
@@ -1116,7 +1116,7 @@
       var td0 = document.createElement('td');
       td0.colSpan = 6;
       td0.className = 'empty';
-      td0.textContent = 'No attendance in this range.';
+      td0.textContent = 'Aucune presence dans cette periode.';
       tr0.appendChild(td0);
       tbody.appendChild(tr0);
       $('rp-hours').textContent = '0h 0m';
@@ -1130,7 +1130,7 @@
         tr.appendChild(td);
       });
       var tdStatus = document.createElement('td');
-      var status = p.missing ? 'No check-out' : (p.late ? 'Late' : 'OK');
+      var status = p.missing ? 'Pas de sortie' : (p.late ? 'Retard' : 'OK');
       var tag = document.createElement('span');
       tag.className = 'tag ' + (p.late ? 'out' : 'in');
       tag.textContent = status;
@@ -1150,7 +1150,7 @@
   function loadEmployees() {
     if (!state.adminToken) return;
     api({ action: 'employees', token: state.adminToken }).then(function (res) {
-      if (!res.ok) { handleAdminAuthFail(res); showError('emp-error', res.message || 'Could not load employees.'); return; }
+      if (!res.ok) { handleAdminAuthFail(res); showError('emp-error', res.message || 'Impossible de charger les employes.'); return; }
       hideError('emp-error');
       state.employees = res.employees || [];
       renderEmployees();
@@ -1167,19 +1167,19 @@
     state.adminEmail = '';
     $('admin-login').classList.remove('hidden');
     $('admin-dash').classList.add('hidden');
-    showError('admin-error', 'Your admin session expired. Log in again.');
+    showError('admin-error', 'Votre session admin a expire. Connectez-vous a nouveau.');
   }
 
   function renderEmployees() {
     var tbody = $('emp-table').querySelector('tbody');
-    $('emp-count').textContent = state.employees.length + (state.employees.length === 1 ? ' employee' : ' employees');
+    $('emp-count').textContent = state.employees.length + (state.employees.length === 1 ? ' employe' : ' employes');
     tbody.innerHTML = '';
     if (state.employees.length === 0) {
       var tr0 = document.createElement('tr');
       var td0 = document.createElement('td');
       td0.colSpan = 4;
       td0.className = 'empty';
-      td0.textContent = 'No employees added yet.';
+      td0.textContent = 'Aucun employe ajoute pour l\'instant.';
       tr0.appendChild(td0);
       tbody.appendChild(tr0);
       return;
@@ -1195,7 +1195,7 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'ghost-btn sm';
-      btn.textContent = 'Remove';
+      btn.textContent = 'Supprimer';
       btn.dataset.email = e.email;
       btn.addEventListener('click', onEmployeeDelete);
       tdBtn.appendChild(btn);
@@ -1208,21 +1208,21 @@
     var name = $('emp-name').value.trim();
     var email = $('emp-email').value.trim();
     var dept = $('emp-dept').value.trim();
-    if (!name) { showError('emp-error', 'Enter the employee name.'); return; }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('emp-error', 'Enter a valid email.'); return; }
-    if (!state.adminToken) { showError('emp-error', 'Log in as admin first.'); return; }
+    if (!name) { showError('emp-error', 'Saisissez le nom de l\'employe.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('emp-error', 'Saisissez un email valide.'); return; }
+    if (!state.adminToken) { showError('emp-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
     hideError('emp-error');
-    $('btn-emp-add').textContent = 'Adding...';
+    $('btn-emp-add').textContent = 'Ajout...';
     api({ action: 'employee_add', token: state.adminToken, name: name, email: email, department: dept }).then(function (res) {
-      $('btn-emp-add').textContent = 'Add';
-      if (!res.ok) throw new Error(res.message || 'Could not add employee');
+      $('btn-emp-add').textContent = 'Ajouter';
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'ajouter l\'employe');
       $('emp-name').value = '';
       $('emp-email').value = '';
       $('emp-dept').value = '';
       loadEmployees();
-      showFeedback('success', 'Employee "' + res.employee.name + '" saved.');
+      showFeedback('success', 'Employe "' + res.employee.name + '" enregistre.');
     }).catch(function (err) {
-      $('btn-emp-add').textContent = 'Add';
+      $('btn-emp-add').textContent = 'Ajouter';
       handleAdminAuthFail(err);
       showError('emp-error', err.message);
     });
@@ -1231,11 +1231,11 @@
   function onEmployeeDelete(e) {
     var email = e.target && e.target.dataset.email;
     if (!email) return;
-    if (!window.confirm('Remove ' + email + ' from the employee list?')) return;
+    if (!window.confirm('Supprimer ' + email + ' de la liste des employes ?')) return;
     api({ action: 'employee_delete', token: state.adminToken, email: email }).then(function (res) {
-      if (!res.ok) throw new Error(res.message || 'Could not remove employee');
+      if (!res.ok) throw new Error(res.message || 'Impossible de supprimer l\'employe');
       loadEmployees();
-      showFeedback('success', email + ' removed.');
+      showFeedback('success', email + ' supprime.');
     }).catch(function (err) {
       handleAdminAuthFail(err);
       showError('emp-error', err.message);
@@ -1247,7 +1247,7 @@
   function loadAdmins() {
     if (!state.adminToken) return;
     api({ action: 'admins_list', token: state.adminToken }).then(function (res) {
-      if (!res.ok) { handleAdminAuthFail(res); showError('adm-error', res.message || 'Could not load admins.'); return; }
+      if (!res.ok) { handleAdminAuthFail(res); showError('adm-error', res.message || 'Impossible de charger les admins.'); return; }
       hideError('adm-error');
       state.admins = res.admins || [];
       renderAdmins();
@@ -1266,7 +1266,7 @@
       var td0 = document.createElement('td');
       td0.colSpan = 4;
       td0.className = 'empty';
-      td0.textContent = 'No admins added yet.';
+      td0.textContent = 'Aucun admin ajoute pour l\'instant.';
       tr0.appendChild(td0);
       tbody.appendChild(tr0);
       return;
@@ -1282,7 +1282,7 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'ghost-btn sm';
-      btn.textContent = 'Remove';
+      btn.textContent = 'Supprimer';
       btn.dataset.email = a.email;
       btn.addEventListener('click', onAdminRemove);
       tdBtn.appendChild(btn);
@@ -1294,20 +1294,20 @@
   function onAdminAdd() {
     var name = $('adm-name').value.trim();
     var email = $('adm-email').value.trim();
-    if (!email) { showError('adm-error', 'Enter the admin email.'); return; }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('adm-error', 'Enter a valid email.'); return; }
-    if (!state.adminToken) { showError('adm-error', 'Log in as admin first.'); return; }
+    if (!email) { showError('adm-error', 'Saisissez l\'email de l\'admin.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('adm-error', 'Saisissez un email valide.'); return; }
+    if (!state.adminToken) { showError('adm-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
     hideError('adm-error');
-    $('btn-adm-add').textContent = 'Adding...';
+    $('btn-adm-add').textContent = 'Ajout...';
     api({ action: 'admin_add', token: state.adminToken, name: name, email: email, adminEmail: state.adminEmail || '' }).then(function (res) {
-      $('btn-adm-add').textContent = 'Add admin';
-      if (!res.ok) throw new Error(res.message || 'Could not add admin');
+      $('btn-adm-add').textContent = 'Ajouter un admin';
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'ajouter l\'admin');
       $('adm-name').value = '';
       $('adm-email').value = '';
       loadAdmins();
-      showFeedback('success', res.message || (email + ' is now an admin.'));
+      showFeedback('success', res.message || (email + ' est maintenant admin.'));
     }).catch(function (err) {
-      $('btn-adm-add').textContent = 'Add admin';
+      $('btn-adm-add').textContent = 'Ajouter un admin';
       handleAdminAuthFail(err);
       showError('adm-error', err.message);
     });
@@ -1316,11 +1316,11 @@
   function onAdminRemove(e) {
     var email = e.target && e.target.dataset.email;
     if (!email) return;
-    if (!window.confirm('Remove admin access for ' + email + '?')) return;
+    if (!window.confirm('Retirer l\'acces admin de ' + email + ' ?')) return;
     api({ action: 'admin_remove', token: state.adminToken, email: email, adminEmail: state.adminEmail || '' }).then(function (res) {
-      if (!res.ok) throw new Error(res.message || 'Could not remove admin');
+      if (!res.ok) throw new Error(res.message || 'Impossible de supprimer l\'admin');
       loadAdmins();
-      showFeedback('success', email + ' removed from admins.');
+      showFeedback('success', email + ' retire des admins.');
     }).catch(function (err) {
       handleAdminAuthFail(err);
       showError('adm-error', err.message);
@@ -1328,10 +1328,10 @@
   }
 
   function buildCsv(pairs) {
-    var head = ['Date', 'Name', 'Email', 'Check-in', 'Check-out', 'Hours', 'Status'];
+    var head = ['Date', 'Nom', 'Email', 'Entree', 'Sortie', 'Heures', 'Statut'];
     var lines = [head.join(',')];
     (pairs || []).forEach(function (p) {
-      var status = p.missing ? 'No check-out' : (p.late ? 'Late' : 'OK');
+      var status = p.missing ? 'Pas de sortie' : (p.late ? 'Retard' : 'OK');
       var row = [p.date, p.name, p.email, p.in || '', p.out || '', p.hours != null ? p.hours : '', status];
       lines.push(row.map(function (c) {
         return '"' + String(c).replace(/"/g, '""') + '"';
@@ -1345,7 +1345,7 @@
     var blob = new Blob([buildCsv(state.admin.pairs)], { type: 'text/csv;charset=utf-8;' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'attendance-' + state.admin.range.from + '_' + state.admin.range.to + '.csv';
+    a.download = 'presence-' + state.admin.range.from + '_' + state.admin.range.to + '.csv';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1357,27 +1357,27 @@
   function onProvision() {
     var code = $('prov-code').value.trim();
     var appName = $('prov-name').value.trim();
-    if (!state.pin) { showError('prov-error', 'Log in as admin first.'); return; }
-    if (!code) { showError('prov-error', 'Enter a tenant code.'); return; }
+    if (!state.pin) { showError('prov-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
+    if (!code) { showError('prov-error', 'Saisissez un code espace.'); return; }
     if (!/^[a-z0-9][a-z0-9\-]{1,23}$/.test(code)) {
-      showError('prov-error', 'Tenant code: 2-24 chars, letters/digits/hyphens.');
+      showError('prov-error', 'Code espace : 2-24 caracteres, lettres/chiffres/tirets.');
       return;
     }
     hideError('prov-error');
-    $('btn-provision').textContent = 'Creating...';
+    $('btn-provision').textContent = 'Creation...';
     api({ action: 'provision', masterPin: state.pin, code: code, appName: appName }).then(function (res) {
-      $('btn-provision').textContent = 'Create tenant';
-      if (!res.ok) throw new Error(res.message || 'Provision failed');
+      $('btn-provision').textContent = 'Creer l\'espace';
+      if (!res.ok) throw new Error(res.message || 'Echec de la creation');
       var t = res.tenant;
       $('prov-result').innerHTML =
-        '<b>' + t.code + '</b> created. Save these now - the PIN is shown once.<br>' +
-        'Admin PIN: <code>' + t.adminPin + '</code><br>' +
-        'Office QR content: <code>' + t.code + '|' + t.qrSecret + '</code><br>' +
-        'Spreadsheet: <a href="' + t.url + '" target="_blank" rel="noopener">' + t.url + '</a>';
+        '<b>' + t.code + '</b> cree. Enregistrez ces informations - le PIN n\'est affiche qu\'une seule fois.<br>' +
+        'PIN admin : <code>' + t.adminPin + '</code><br>' +
+        'Contenu QR du bureau : <code>' + t.code + '|' + t.qrSecret + '</code><br>' +
+        'Feuille de calcul : <a href="' + t.url + '" target="_blank" rel="noopener">' + t.url + '</a>';
       $('prov-result').classList.remove('hidden');
-      showFeedback('success', 'Tenant "' + t.code + '" created.');
+      showFeedback('success', 'Espace "' + t.code + '" cree.');
     }).catch(function (err) {
-      $('btn-provision').textContent = 'Create tenant';
+      $('btn-provision').textContent = 'Creer l\'espace';
       showError('prov-error', err.message);
     });
   }
@@ -1386,13 +1386,13 @@
 
   function onHistoryClick() {
     if (!state.profile) {
-      showFeedback('warn', 'Set your details first, then open My history.');
+      showFeedback('warn', 'Definissez vos coordonnees d\'abord, puis ouvrez Mon historique.');
       showProfileModal();
       return;
     }
-    showFeedback('info', 'Loading your history...');
+    showFeedback('info', 'Chargement de votre historique...');
     api({ action: 'myattendance', email: state.profile.email }).then(function (res) {
-      if (!res.ok) throw new Error(res.message || 'Could not load history');
+      if (!res.ok) throw new Error(res.message || 'Impossible de charger l\'historique');
       renderHistory(res.attendance);
       showModal('modal-history');
     }).catch(function (err) {
@@ -1401,11 +1401,11 @@
   }
 
   function onHistoryExport() {
-    if (!state.profile) { showFeedback('warn', 'Set your details first.'); return; }
-    showFeedback('info', 'Preparing your data...');
+    if (!state.profile) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
+    showFeedback('info', 'Preparation de vos donnees...');
     api({ action: 'myexport', email: state.profile.email }).then(function (res) {
-      if (!res.ok) throw new Error(res.message || 'Could not export');
-      var csv = '\uFEFF' + ['Date,Time,Name,Action,Status,Distance(m),Office'].concat((res.rows || []).map(function (r) {
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'exporter');
+      var csv = '\uFEFF' + ['Date,Heure,Nom,Action,Statut,Distance(m),Bureau'].concat((res.rows || []).map(function (r) {
         return [r.date, r.time, r.name, r.action, r.status, r.distance, r.office].map(function (c) {
           return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"';
         }).join(',');
@@ -1413,25 +1413,25 @@
       var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'my-attendance-' + state.profile.email + '.csv';
+      a.download = 'ma-presence-' + state.profile.email + '.csv';
       document.body.appendChild(a);
       a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
-      showFeedback('success', (res.rows || []).length + ' record(s) exported.');
+      showFeedback('success', (res.rows || []).length + ' enregistrement(s) exporte(s).');
     }).catch(function (err) {
       showFeedback('error', err.message);
     });
   }
 
   function onHistoryDelete() {
-    if (!state.profile) { showFeedback('warn', 'Set your details first.'); return; }
-    if (!window.confirm('Erase ALL of your attendance records from the office sheet? This cannot be undone.')) return;
+    if (!state.profile) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
+    if (!window.confirm('Effacer TOUS vos enregistrements de presence de la feuille du bureau ? Cette action est irreversible.')) return;
     api({ action: 'mydelete', email: state.profile.email }).then(function (res) {
-      if (!res.ok) throw new Error(res.message || 'Could not erase data');
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'effacer les donnees');
       hideModal('modal-history');
       loadRecent();
       loadWeek();
-      showFeedback('success', (res.deleted || 0) + ' record(s) erased from the office sheet.');
+      showFeedback('success', (res.deleted || 0) + ' enregistrement(s) efface(s) de la feuille du bureau.');
     }).catch(function (err) {
       showFeedback('error', err.message);
     });
@@ -1453,7 +1453,7 @@
       var td0 = document.createElement('td');
       td0.colSpan = 5;
       td0.className = 'empty';
-      td0.textContent = 'No attendance yet this month.';
+      td0.textContent = 'Aucune presence ce mois-ci.';
       tr0.appendChild(td0);
       tbody.appendChild(tr0);
     }
@@ -1465,7 +1465,7 @@
         tr.appendChild(td);
       });
       var tdStatus = document.createElement('td');
-      var status = p.missing ? 'No check-out' : (p.late ? 'Late' : 'OK');
+      var status = p.missing ? 'Pas de sortie' : (p.late ? 'Retard' : 'OK');
       var tag = document.createElement('span');
       tag.className = 'tag ' + (p.late ? 'out' : 'in');
       tag.textContent = status;
