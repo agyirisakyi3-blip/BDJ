@@ -128,9 +128,12 @@
           </span>
           <div>
             <h3>Admin access</h3>
-            <p class="muted">Enter your PIN to view today's attendance.</p>
+            <p class="muted">Log in with your admin email and PIN.</p>
           </div>
         </div>
+        <label for="admin-email">Email</label>
+        <input id="admin-email" type="email" inputmode="email" autocomplete="email"
+               placeholder="you@company.com">
         <label for="admin-pin">PIN</label>
         <input id="admin-pin" type="password" inputmode="numeric" autocomplete="off"
                placeholder="Enter admin PIN">
@@ -263,6 +266,34 @@
               <table id="emp-table">
                 <thead>
                   <tr><th>Name</th><th>Email</th><th>Department</th><th></th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card block collapsed">
+          <div class="block-head collapsible">
+            <h3>Admins</h3>
+            <span id="adm-count" class="pill"></span>
+          </div>
+          <div class="block-body">
+            <p class="hint">People who can access this admin panel. Each admin logs in with their own email and receives their own one-time code.</p>
+            <div class="emp-form">
+              <label class="range-field">Name
+                <input id="adm-name" type="text" placeholder="Full name" autocomplete="off">
+              </label>
+              <label class="range-field">Email
+                <input id="adm-email" type="email" placeholder="you@company.com" autocomplete="off">
+              </label>
+              <button id="btn-adm-add" class="ghost-btn range-btn" type="button">Add admin</button>
+            </div>
+            <p id="adm-error" class="feedback error hidden"></p>
+            <div class="table-wrap emp-table">
+              <table id="adm-table">
+                <thead>
+                  <tr><th>Name</th><th>Email</th><th>Added on</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
               </table>

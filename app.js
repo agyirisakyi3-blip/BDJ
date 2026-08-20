@@ -15,9 +15,11 @@
     status: null,
     qrScanner: null,
     admin: null,
+    adminEmail: '',
     pendingScan: false,
     processing: false,
     employees: [],
+    admins: [],
     recent: [],
     recentLoading: false,
     week: [],
@@ -138,9 +140,11 @@
     $('btn-csv').addEventListener('click', downloadCsv);
     $('btn-provision').addEventListener('click', onProvision);
     $('btn-emp-add').addEventListener('click', onEmployeeAdd);
+    $('btn-adm-add').addEventListener('click', onAdminAdd);
     $('ob-next').addEventListener('click', onOnboardNext);
     $('ob-skip').addEventListener('click', dismissOnboarding);
     $('admin-pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
+    $('admin-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
     var themeBtn = $('btn-theme');
     if (themeBtn) themeBtn.addEventListener('click', function () {
       var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -951,15 +955,29 @@
     if (state.adminToken) {
       body.token = state.adminToken;
     } else {
+      var email = $('admin-email') ? $('admin-email').value.trim() : '';
       var pin = $('admin-pin').value.trim() || state.pin || '';
-      if (!pin) { showError('admin-error', 'Enter the admin PIN.'); return; }
       var otp = $('admin-otp') ? $('admin-otp').value.trim() : '';
-      if (!otp && $('otp-row') && !$('otp-row').classList.contains('hidden')) {
-        showError('admin-error', 'Enter the one-time code emailed to you.');
-        return;
+
+      if (!email && !pin) { showError('admin-error', 'Enter your email and PIN.'); return; }
+      if (email) {
+        body.email = email;
+        if (!otp && $('otp-row') && !$('otp-row').classList.contains('hidden')) {
+          showError('admin-error', 'Enter the one-time code emailed to you.');
+          return;
+        }
+        body.otp = otp;
+        body.action = 'admin_login';
+        body.pin = '';
+      } else {
+        if (!pin) { showError('admin-error', 'Enter the admin PIN.'); return; }
+        if (!otp && $('otp-row') && !$('otp-row').classList.contains('hidden')) {
+          showError('admin-error', 'Enter the one-time code emailed to you.');
+          return;
+        }
+        body.pin = pin;
+        body.otp = otp;
       }
-      body.pin = pin;
-      body.otp = otp;
     }
     hideError('admin-error');
     $('btn-admin-go').textContent = 'Loading...';
@@ -975,8 +993,17 @@
         if (state.adminToken) state.adminToken = '';
         throw new Error((res && res.message) || 'Session expired. Log in again.');
       }
+      if (email) state.adminEmail = email;
       if (pin) state.pin = pin;
-      state.adminToken = res.sessionToken || state.adminToken || '';
+      state.adminToken = res.sessionToken || res.token || state.adminToken || '';
+      if (email && res.ok) {
+        var adminBody = { action: 'admin', from: from, to: to, token: state.adminToken };
+        return api(adminBody).then(function (adminRes) {
+          if (!adminRes.ok) throw new Error(adminRes.message || 'Failed to load admin data.');
+          state.admin = adminRes.admin;
+          renderAdmin(adminRes.admin);
+        });
+      }
       state.admin = res.admin;
       renderAdmin(res.admin);
     }).catch(function (err) {
@@ -994,6 +1021,7 @@
     if (res.otpDev) {
       $('admin-otp-note').textContent = res.message + ' Development code: ' + res.otpDev;
     }
+    if (res.email) state.pendingAdminEmail = res.email;
     $('btn-admin-go').textContent = 'Verify code';
     $('admin-otp').focus();
   }
@@ -1116,6 +1144,7 @@
     $('admin-dash').classList.remove('hidden');
 
     loadEmployees();
+    loadAdmins();
   }
 
   function loadEmployees() {
@@ -1135,6 +1164,7 @@
     if (!(res && res.message && String(res.message).indexOf('Admin login required') !== -1)) return;
     state.adminToken = '';
     state.pin = '';
+    state.adminEmail = '';
     $('admin-login').classList.remove('hidden');
     $('admin-dash').classList.add('hidden');
     showError('admin-error', 'Your admin session expired. Log in again.');
@@ -1209,6 +1239,91 @@
     }).catch(function (err) {
       handleAdminAuthFail(err);
       showError('emp-error', err.message);
+    });
+  }
+
+  /* ---------------- Admins ---------------- */
+
+  function loadAdmins() {
+    if (!state.adminToken) return;
+    api({ action: 'admins_list', token: state.adminToken }).then(function (res) {
+      if (!res.ok) { handleAdminAuthFail(res); showError('adm-error', res.message || 'Could not load admins.'); return; }
+      hideError('adm-error');
+      state.admins = res.admins || [];
+      renderAdmins();
+    }).catch(function (err) {
+      handleAdminAuthFail(err);
+      showError('adm-error', err.message);
+    });
+  }
+
+  function renderAdmins() {
+    var tbody = $('adm-table').querySelector('tbody');
+    $('adm-count').textContent = state.admins.length + (state.admins.length === 1 ? ' admin' : ' admins');
+    tbody.innerHTML = '';
+    if (state.admins.length === 0) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.colSpan = 4;
+      td0.className = 'empty';
+      td0.textContent = 'No admins added yet.';
+      tr0.appendChild(td0);
+      tbody.appendChild(tr0);
+      return;
+    }
+    state.admins.forEach(function (a) {
+      var tr = document.createElement('tr');
+      [a.name || '\u2014', a.email, a.addedOn || '\u2014'].forEach(function (txt) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        tr.appendChild(td);
+      });
+      var tdBtn = document.createElement('td');
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ghost-btn sm';
+      btn.textContent = 'Remove';
+      btn.dataset.email = a.email;
+      btn.addEventListener('click', onAdminRemove);
+      tdBtn.appendChild(btn);
+      tr.appendChild(tdBtn);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function onAdminAdd() {
+    var name = $('adm-name').value.trim();
+    var email = $('adm-email').value.trim();
+    if (!email) { showError('adm-error', 'Enter the admin email.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('adm-error', 'Enter a valid email.'); return; }
+    if (!state.adminToken) { showError('adm-error', 'Log in as admin first.'); return; }
+    hideError('adm-error');
+    $('btn-adm-add').textContent = 'Adding...';
+    api({ action: 'admin_add', token: state.adminToken, name: name, email: email, adminEmail: state.adminEmail || '' }).then(function (res) {
+      $('btn-adm-add').textContent = 'Add admin';
+      if (!res.ok) throw new Error(res.message || 'Could not add admin');
+      $('adm-name').value = '';
+      $('adm-email').value = '';
+      loadAdmins();
+      showFeedback('success', res.message || (email + ' is now an admin.'));
+    }).catch(function (err) {
+      $('btn-adm-add').textContent = 'Add admin';
+      handleAdminAuthFail(err);
+      showError('adm-error', err.message);
+    });
+  }
+
+  function onAdminRemove(e) {
+    var email = e.target && e.target.dataset.email;
+    if (!email) return;
+    if (!window.confirm('Remove admin access for ' + email + '?')) return;
+    api({ action: 'admin_remove', token: state.adminToken, email: email, adminEmail: state.adminEmail || '' }).then(function (res) {
+      if (!res.ok) throw new Error(res.message || 'Could not remove admin');
+      loadAdmins();
+      showFeedback('success', email + ' removed from admins.');
+    }).catch(function (err) {
+      handleAdminAuthFail(err);
+      showError('adm-error', err.message);
     });
   }
 

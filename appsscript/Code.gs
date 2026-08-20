@@ -26,6 +26,7 @@ var SHEET_ROSTER = 'Roster';
 var SHEET_AUDIT = 'Audit';
 var SHEET_OFFICES = 'Offices';
 var SHEET_EMPLOYEES = 'Employees';
+var SHEET_ADMINS = 'Admins';
 
 function setup() {
   var master = SpreadsheetApp.getActiveSpreadsheet();
@@ -171,6 +172,18 @@ function handleRequest_(e) {
     }
     if (action === 'employee_delete') {
       return json_(employeeDelete_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'admin_login') {
+      return json_(adminLogin_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'admins_list') {
+      return json_(adminsList_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'admin_add') {
+      return json_(adminAdd_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'admin_remove') {
+      return json_(adminRemove_(payload, cfg, now, tz, ss));
     }
     return json_(error_('Unknown action: ' + action));
   } catch (err) {
@@ -359,6 +372,11 @@ function ensureSheets_(ss) {
     var t = ss.insertSheet(SHEET_TENANTS);
     t.appendRow(['Code', 'Spreadsheet ID', 'Created']);
     t.getRange('A1:C1').setFontWeight('bold');
+  }
+  if (!ss.getSheetByName(SHEET_ADMINS)) {
+    var ad = ss.insertSheet(SHEET_ADMINS);
+    ad.appendRow(['Email', 'Name', 'Added On', 'Added By']);
+    ad.getRange('A1:D1').setFontWeight('bold');
   }
 }
 
@@ -635,6 +653,22 @@ function adminData_(payload, cfg, now, tz, ss) {
   var lateSec = timeToSec_(cfg.lateAfter || '');
   var report = computeReport_(rangeRows, from, to, lateSec, tz);
 
+  var adminSheet = ss.getSheetByName(SHEET_ADMINS);
+  var admins = [];
+  if (adminSheet) {
+    var aRows = adminSheet.getDataRange().getValues();
+    for (var ai = 1; ai < aRows.length; ai++) {
+      var ae = String(aRows[ai][0] || '').trim().toLowerCase();
+      if (!ae) continue;
+      admins.push({
+        email: ae,
+        name: String(aRows[ai][1] || ''),
+        addedOn: String(aRows[ai][2] || ''),
+        addedBy: String(aRows[ai][3] || '')
+      });
+    }
+  }
+
   return {
     ok: true,
     sessionToken: access.token,
@@ -651,7 +685,8 @@ function adminData_(payload, cfg, now, tz, ss) {
         absent: absent
       },
       summary: report.summary,
-      pairs: report.pairs
+      pairs: report.pairs,
+      admins: admins
     }
   };
 }
@@ -924,6 +959,174 @@ function employeeDelete_(payload, cfg, now, tz, ss) {
     }
   }
   return error_('Employee not found: ' + email);
+}
+
+/* ================= Admin Users ================= */
+
+/**
+ * Check if an email is in the Admins sheet.
+ */
+function isAdmin_(ss, email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!email) return false;
+  var sheet = ss.getSheetByName(SHEET_ADMINS);
+  if (!sheet) return false;
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === email) return true;
+  }
+  return false;
+}
+
+/**
+ * Email-based admin login.
+ * Step 1: Client sends { action:'admin_login', email } → sends OTP.
+ * Step 2: Client sends { action:'admin_login', email, otp } → verifies OTP, creates session.
+ */
+function adminLogin_(payload, cfg, now, tz, ss) {
+  var email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return error_('Email required');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Invalid email address');
+
+  if (!isAdmin_(ss, email)) {
+    logAudit_(ss, email, 'Admin login attempt by non-admin email', 'NOT_ADMIN', now, tz);
+    return error_('This email does not have admin access. Contact an admin to grant access.');
+  }
+
+  var otp = String(payload.otp || '').trim();
+
+  // Step 2: OTP provided → verify and create session
+  if (otp) {
+    if (!verifyAdminOtp_(email, otp, now, ss)) {
+      logAudit_(ss, email, 'Bad admin one-time code (email login)', 'BAD_OTP', now, tz);
+      return error_('Invalid or expired one-time code.');
+    }
+    logAudit_(ss, email, 'Admin signed in (email 2FA)', 'ADMIN_2FA', now, tz);
+    return { ok: true, token: createSession_(ss, now) };
+  }
+
+  // Step 1: No OTP → send one
+  var guard = pinGuard_(cfg, now, ss);
+  if (guard.locked) return { ok: false, message: guard.message };
+
+  var sent = sendOtpTo_(email, now, ss);
+  logAudit_(ss, email, 'Admin OTP requested', 'ADMIN_OTP', now, tz);
+  return {
+    ok: true,
+    needOtp: true,
+    message: 'A one-time code was sent to ' + email + '.',
+    otpDev: sent.dev,
+    email: email
+  };
+}
+
+/**
+ * Send an OTP to a specific admin email address.
+ */
+function sendOtpTo_(email, now, ss) {
+  var cache = CacheService.getScriptCache();
+  var key = 'otp:admin:' + ss.getId() + ':' + email;
+  var code = String(Math.floor(100000 + Math.random() * 900000));
+  cache.put(key, JSON.stringify({ code: code, until: now.getTime() + 600000, tries: 0 }), 600);
+  try {
+    MailApp.sendEmail(email, 'Your admin access code',
+      'Your one-time code is: ' + code + '\n\nIt is valid for 10 minutes.\nIf you did not request this, ignore this email.');
+  } catch (e) {}
+  return { dev: code };
+}
+
+/**
+ * Verify an OTP sent to an admin email and create a session.
+ * Client sends { action:'admin', email, otp, ... }.
+ * We check the email-specific OTP cache here.
+ */
+function verifyAdminOtp_(email, otp, now, ss) {
+  var cache = CacheService.getScriptCache();
+  var key = 'otp:admin:' + ss.getId() + ':' + email;
+  var entry = cache.get(key);
+  if (!entry) return false;
+  var o = {};
+  try { o = JSON.parse(entry); } catch (e) { return false; }
+  if (now.getTime() > Number(o.until || 0)) return false;
+  if (Number(o.tries || 0) >= 5) return false;
+  if (String(o.code) !== String(otp || '').trim()) {
+    o.tries = Number(o.tries || 0) + 1;
+    cache.put(key, JSON.stringify(o), 600);
+    return false;
+  }
+  cache.remove(key);
+  return true;
+}
+
+/**
+ * List all admins. Requires an existing admin session.
+ */
+function adminsList_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var sheet = ss.getSheetByName(SHEET_ADMINS);
+  var list = [];
+  if (sheet) {
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      var email = String(rows[i][0] || '').trim().toLowerCase();
+      if (!email) continue;
+      list.push({
+        email: email,
+        name: String(rows[i][1] || ''),
+        addedOn: String(rows[i][2] || ''),
+        addedBy: String(rows[i][3] || '')
+      });
+    }
+  }
+  return { ok: true, admins: list };
+}
+
+/**
+ * Add an admin. Requires an existing admin session.
+ */
+function adminAdd_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var email = String(payload.email || '').trim().toLowerCase();
+  var name = String(payload.name || '').trim();
+  if (!email) return error_('Email required');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Invalid email address');
+
+  if (isAdmin_(ss, email)) {
+    return { ok: true, message: email + ' is already an admin.' };
+  }
+
+  var sheet = ss.getSheetByName(SHEET_ADMINS);
+  var addedBy = String(payload.adminEmail || 'admin');
+  sheet.appendRow([email, safeCell_(name), Utilities.formatDate(now, tz, 'yyyy-MM-dd'), safeCell_(addedBy)]);
+  logAudit_(ss, addedBy, 'Added admin: ' + email, 'ADMIN_ADDED', now, tz);
+  return { ok: true, admin: { email: email, name: name } };
+}
+
+/**
+ * Remove an admin. Requires an existing admin session.
+ */
+function adminRemove_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return error_('Email required');
+
+  var sheet = ss.getSheetByName(SHEET_ADMINS);
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === email) {
+      sheet.deleteRow(i + 1);
+      var removedBy = String(payload.adminEmail || 'admin');
+      logAudit_(ss, removedBy, 'Removed admin: ' + email, 'ADMIN_REMOVED', now, tz);
+      return { ok: true, deleted: email };
+    }
+  }
+  return error_('Admin not found: ' + email);
 }
 
 /* ================= Reports ================= */
@@ -1257,17 +1460,38 @@ function pinCheck_(payload, cfg, now, tz, ss) {
 function adminAccess_(payload, cfg, now, tz, ss) {
   if (validSession_(ss, String(payload.token || ''))) return { ok: true };
 
+  var email = String(payload.email || '').trim().toLowerCase();
   var pin = String(payload.pin || '').trim();
   var otp = String(payload.otp || '').trim();
+
+  // Email-based admin login (OTP sent to the admin's own email)
+  if (email && otp && isAdmin_(ss, email)) {
+    if (!verifyAdminOtp_(email, otp, now, ss)) {
+      logAudit_(ss, email, 'Bad admin one-time code (email login)', 'BAD_OTP', now, tz);
+      return { ok: false, message: 'Invalid or expired one-time code.' };
+    }
+    logAudit_(ss, email, 'Admin signed in (email 2FA)', 'ADMIN_2FA', now, tz);
+    return { ok: true, token: createSession_(ss, now) };
+  }
+
+  // Legacy PIN-based login (backward compatibility)
   if (!pin) return { ok: false, message: 'Admin login required.' };
 
   var auth = pinCheck_(payload, cfg, now, tz, ss);
   if (!auth.ok) return auth;
 
   if (!otp) {
-    var sent = sendOtp_(cfg, now, ss);
-    var msg = cfg.adminEmail
-      ? 'A one-time code was emailed to ' + cfg.adminEmail + '.'
+    // If the admin email is in the Admins sheet, send OTP to them
+    // Otherwise fall back to the configured adminEmail
+    var otpEmail = cfg.adminEmail;
+    var sent;
+    if (otpEmail && isAdmin_(ss, otpEmail)) {
+      sent = sendOtpTo_(otpEmail, now, ss);
+    } else {
+      sent = sendOtp_(cfg, now, ss);
+    }
+    var msg = otpEmail
+      ? 'A one-time code was emailed to ' + otpEmail + '.'
       : 'No admin email is configured, so a development code is shown below. Set adminEmail in Config for production.';
     return { ok: false, code: 'NEED_OTP', needOtp: true, otpDev: sent.dev, message: msg };
   }
@@ -1276,7 +1500,7 @@ function adminAccess_(payload, cfg, now, tz, ss) {
     logAudit_(ss, '', 'Bad admin one-time code', 'BAD_OTP', now, tz);
     return { ok: false, message: 'Invalid or expired one-time code.' };
   }
-  logAudit_(ss, '', 'Admin signed in (2FA)', 'ADMIN_2FA', now, tz);
+  logAudit_(ss, '', 'Admin signed in (PIN 2FA)', 'ADMIN_2FA', now, tz);
   return { ok: true, token: createSession_(ss, now) };
 }
 
