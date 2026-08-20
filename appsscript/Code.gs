@@ -497,7 +497,8 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
   var lastTimeSec = -1;
   for (var i = data.length - 1; i > 0; i--) {
     var row = data[i];
-    if (row[3] && String(row[3]).toLowerCase() === email && String(row[0]) === dateStr) {
+    var rowDate = cellDateStr_(row[0], tz);
+    if (row[3] && String(row[3]).toLowerCase() === email && rowDate === dateStr) {
       lastAction = String(row[4]);
       lastTimeSec = timeToSec_(row[1]);
       break;
@@ -605,7 +606,7 @@ function adminData_(payload, cfg, now, tz, ss) {
 
   for (var i = 1; i < data.length; i++) {
     var r = data[i];
-    var d = String(r[0] || '');
+    var d = cellDateStr_(r[0], tz);
     var email = String(r[3] || '').toLowerCase();
     var action = String(r[4] || '');
     if (d === today) {
@@ -632,7 +633,7 @@ function adminData_(payload, cfg, now, tz, ss) {
   }
 
   var lateSec = timeToSec_(cfg.lateAfter || '');
-  var report = computeReport_(rangeRows, from, to, lateSec);
+  var report = computeReport_(rangeRows, from, to, lateSec, tz);
 
   return {
     ok: true,
@@ -701,7 +702,7 @@ function myAttendance_(payload, cfg, now, tz, ss) {
   }
 
   var lateSec = timeToSec_(cfg.lateAfter || '');
-  var report = computeReport_(rows, from, to, lateSec);
+  var report = computeReport_(rows, from, to, lateSec, tz);
 
   return {
     ok: true,
@@ -726,7 +727,7 @@ function myExport_(payload, cfg, now, tz, ss) {
     var r = data[i];
     if (String(r[3] || '').trim().toLowerCase() !== email) continue;
     rows.push({
-      date: String(r[0] || ''),
+      date: cellDateStr_(r[0], tz),
       time: String(r[1] || ''),
       name: String(r[2] || ''),
       action: String(r[4] || ''),
@@ -760,12 +761,13 @@ function purgeOldData_() {
   var cfg = getConfig_(ss);
   var days = Number(cfg.retentionDays || 0);
   if (days <= 0) return 'retentionDays is 0 - purge disabled.';
-  var cutoff = Utilities.formatDate(new Date(Date.now() - days * 86400000), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var tz = Session.getScriptTimeZone();
+  var cutoff = Utilities.formatDate(new Date(Date.now() - days * 86400000), tz, 'yyyy-MM-dd');
   var att = ss.getSheetByName(SHEET_ATT);
   var data = att.getDataRange().getValues();
   var dels = [];
   for (var i = data.length - 1; i > 0; i--) {
-    if (String(data[i][0]) < cutoff) dels.push(i + 1);
+    if (cellDateStr_(data[i][0], tz) < cutoff) dels.push(i + 1);
   }
   for (var j = 0; j < dels.length; j++) att.deleteRow(dels[j]);
   return 'Purged ' + dels.length + ' row(s) older than ' + days + ' days.';
@@ -795,7 +797,7 @@ function recentAttendance_(payload, cfg, now, tz, ss) {
     var r = data[i];
     if (String(r[3] || '').trim().toLowerCase() === email) {
       out.push({
-        date: String(r[0] || ''),
+        date: cellDateStr_(r[0], tz),
         time: String(r[1] || ''),
         action: String(r[4] || ''),
         office: String(r[10] || '')
@@ -821,12 +823,12 @@ function weekData_(payload, cfg, now, tz, ss) {
   for (var i = 1; i < data.length; i++) {
     var r = data[i];
     if (String(r[3] || '').trim().toLowerCase() !== email) continue;
-    var d = String(r[0] || '');
+    var d = cellDateStr_(r[0], tz);
     if (d >= from && d <= to) rows.push(r);
   }
 
   var lateSec = timeToSec_(cfg.lateAfter || '');
-  var report = computeReport_(rows, from, to, lateSec);
+  var report = computeReport_(rows, from, to, lateSec, tz);
 
   var byDate = {};
   for (var j = 0; j < report.pairs.length; j++) {
@@ -926,11 +928,11 @@ function employeeDelete_(payload, cfg, now, tz, ss) {
 
 /* ================= Reports ================= */
 
-function computeReport_(rows, from, to, lateAfterSec) {
+function computeReport_(rows, from, to, lateAfterSec, tz) {
   var byKey = {};
   var order = [];  for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
-    var d = String(r[0] || '');
+    var d = cellDateStr_(r[0], tz);
     if (d < from || d > to) continue;
     var email = String(r[3] || '').toLowerCase();
     if (!email) continue;
@@ -1057,7 +1059,7 @@ function sendDailyDigest_() {
         if (String(data[j][0]) === today) rows.push(data[j]);
       }
       var lateSec = timeToSec_(cfg.lateAfter || '');
-      var report = computeReport_(rows, today, today, lateSec);
+      var report = computeReport_(rows, today, today, lateSec, tz);
       var body = buildDigestBody_(today, cfg, report);
       MailApp.sendEmail({ to: cfg.adminEmail, subject: 'Attendance summary \u2014 ' + today, body: body });
       sent.push({ code: target.code, to: cfg.adminEmail });
@@ -1331,4 +1333,15 @@ function json_(obj) {
 
 function error_(message) {
   return { ok: false, message: message };
+}
+
+/**
+ * Extract a yyyy-MM-dd string from a spreadsheet cell that may be a Date object
+ * or a plain string.
+ */
+function cellDateStr_(cell, tz) {
+  if (cell instanceof Date) return Utilities.formatDate(cell, tz, 'yyyy-MM-dd');
+  var s = String(cell || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return s;
 }
