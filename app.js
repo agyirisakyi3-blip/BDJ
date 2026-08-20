@@ -158,6 +158,8 @@
     $('btn-provision').addEventListener('click', onProvision);
     $('btn-emp-add').addEventListener('click', onEmployeeAdd);
     $('btn-adm-add').addEventListener('click', onAdminAdd);
+    $('btn-help').addEventListener('click', function () { showModal('modal-help'); });
+    $('btn-help-close').addEventListener('click', function () { hideModal('modal-help'); });
     $('ob-next').addEventListener('click', onOnboardNext);
     $('ob-skip').addEventListener('click', dismissOnboarding);
     $('admin-pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
