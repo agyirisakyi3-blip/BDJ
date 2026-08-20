@@ -1,6 +1,6 @@
 {
+  "installCommand": "echo skipping",
   "outputDirectory": ".",
-  "cleanUrls": false,
   "headers": [
     {
       "source": "/(.*)",
