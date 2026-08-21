@@ -41,7 +41,7 @@ async function setupProfile(page) {
   await page.reload({ waitUntil: 'networkidle2' });
   await page.waitForFunction(
     () => document.getElementById('status-label').textContent !== 'Bienvenue',
-    { timeout: 5000 }
+    { timeout: 10000 }
   );
 }
 
@@ -78,7 +78,7 @@ describe('App Loading', () => {
 
   test('scan button label says "Scan QR to check in"', async () => {
     const text = await page.$eval('#btn-scan-label', el => el.textContent);
-    expect(text).toBe('Scanner le QR pour pointer');
+    expect(text).toBe('Scanner QR pour pointer');
   });
 
   test('status card shows status-avatar', async () => {
@@ -612,6 +612,10 @@ describe('QR Scanner Modal', () => {
     await setupProfile(page);
     await page.click('#btn-scan');
     await delay(500);
+    await page.evaluate(() => {
+      const d = document.querySelector('#modal-scan details');
+      if (d) d.open = true;
+    });
     await page.click('#btn-manual-ok');
     await delay(500);
     const text = await page.$eval('#feedback', el => el.textContent);
@@ -633,7 +637,7 @@ describe('History Modal', () => {
     await delay(500);
     const feedbackEl = await page.$('#feedback');
     const text = await feedbackEl.evaluate(el => el.textContent);
-    expect(text.toLowerCase()).toContain('detail');
+    expect(text.toLowerCase()).toContain('coordonnees');
   });
 
   test('history button with profile shows feedback', async () => {

@@ -653,6 +653,8 @@ function adminData_(payload, cfg, now, tz, ss) {
   var lateSec = timeToSec_(cfg.lateAfter || '');
   var report = computeReport_(rangeRows, from, to, lateSec, tz);
 
+  var people = aggregatePeople_(report.pairs, staff, onSite, checkedInSet);
+
   var adminSheet = ss.getSheetByName(SHEET_ADMINS);
   var admins = [];
   if (adminSheet) {
@@ -686,6 +688,7 @@ function adminData_(payload, cfg, now, tz, ss) {
       },
       summary: report.summary,
       pairs: report.pairs,
+      people: people,
       admins: admins
     }
   };
@@ -701,7 +704,7 @@ function expectedStaff_(ss) {
       var email = String(rows[i][1] || '').trim().toLowerCase();
       if (!email || seen[email]) continue;
       seen[email] = 1;
-      out.push({ name: String(rows[i][0] || ''), email: email });
+      out.push({ name: String(rows[i][0] || ''), email: email, department: String(rows[i][2] || '') });
     }
   }
   var roster = ss.getSheetByName(SHEET_ROSTER);
@@ -714,6 +717,93 @@ function expectedStaff_(ss) {
       out.push({ name: '', email: e2 });
     }
   }
+  return out;
+}
+
+/**
+ * Per-person report covering EVERYONE: every staff email from Employees/Roster
+ * (even with zero activity in the range) plus any email found in the attendance
+ * data for the range. Aggregates days, hours, lates and missing check-outs.
+ */
+function aggregatePeople_(pairs, staff, onSite, checkedInSet) {
+  var byEmail = {};
+  var order = [];
+
+  function ensure_(email, name, department) {
+    var key = String(email || '').toLowerCase();
+    if (!key) return null;
+    if (!byEmail[key]) {
+      byEmail[key] = {
+        email: key,
+        name: '',
+        department: '',
+        daysPresent: 0,
+        totalHours: 0,
+        avgHours: null,
+        lateCount: 0,
+        missingOut: 0,
+        firstIn: '',
+        lastOut: '',
+        lastDate: '',
+        statusToday: ''
+      };
+      order.push(key);
+    }
+    if (name && !byEmail[key].name) byEmail[key].name = String(name);
+    if (department && !byEmail[key].department) byEmail[key].department = String(department);
+    return byEmail[key];
+  }
+
+  var s, i, person;
+  for (s = 0; s < staff.length; s++) {
+    var st = staff[s] || {};
+    person = ensure_(st.email, st.name, st.department || '');
+    if (person && !person.statusToday) person.statusToday = 'absent';
+  }
+
+  for (i = 0; i < pairs.length; i++) {
+    var rec = pairs[i];
+    person = ensure_(rec.email, rec.name, '');
+    if (!person) continue;
+    person.daysPresent++;
+    person.totalHours += (rec.hours != null && !isNaN(rec.hours)) ? rec.hours : 0;
+    if (rec.late) person.lateCount++;
+    if (rec.missing) person.missingOut++;
+    if (!person.lastDate || rec.date > person.lastDate) {
+      person.lastDate = rec.date;
+      person.firstIn = rec.in || '';
+      person.lastOut = rec.out || '';
+    } else if (rec.date === person.lastDate) {
+      if (rec.in && (!person.firstIn || rec.in < person.firstIn)) person.firstIn = rec.in;
+      if (rec.out && rec.out > (person.lastOut || '')) person.lastOut = rec.out;
+    }
+  }
+
+  var out = [];
+  for (i = 0; i < order.length; i++) {
+    var key2 = order[i];
+    person = byEmail[key2];
+    if (onSite[key2]) {
+      person.statusToday = 'onsite';
+    } else if (checkedInSet[key2]) {
+      person.statusToday = 'out';
+    } else if (!person.statusToday) {
+      person.statusToday = '';
+    }
+    person.totalHours = Math.round(person.totalHours * 100) / 100;
+    person.avgHours = person.daysPresent
+      ? Math.round((person.totalHours / person.daysPresent) * 100) / 100
+      : null;
+    out.push(person);
+  }
+
+  out.sort(function (a, b) {
+    var an = String(a.name || a.email).toLowerCase();
+    var bn = String(b.name || b.email).toLowerCase();
+    if (an !== bn) return an < bn ? -1 : 1;
+    return a.totalHours === b.totalHours ? 0 : (a.totalHours > b.totalHours ? -1 : 1);
+  });
+
   return out;
 }
 
@@ -1496,7 +1586,11 @@ function adminAccess_(payload, cfg, now, tz, ss) {
     return { ok: false, code: 'NEED_OTP', needOtp: true, otpDev: sent.dev, message: msg };
   }
 
-  if (!verifyOtp_(cfg, now, ss, otp)) {
+  var otpOk = verifyOtp_(cfg, now, ss, otp);
+  if (!otpOk && cfg.adminEmail && isAdmin_(ss, cfg.adminEmail)) {
+    otpOk = verifyAdminOtp_(cfg.adminEmail, otp, now, ss);
+  }
+  if (!otpOk) {
     logAudit_(ss, '', 'Bad admin one-time code', 'BAD_OTP', now, tz);
     return { ok: false, message: 'Invalid or expired one-time code.' };
   }

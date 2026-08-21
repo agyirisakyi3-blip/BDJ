@@ -114,6 +114,8 @@
 
       if (!isConfigured()) showSetupBanner();
 
+      renderHome();
+
       fetchConfig()
         .then(renderHome)
         .catch(function (err) {
@@ -155,6 +157,7 @@
     $('btn-load').addEventListener('click', onAdminGo);
     $('btn-refresh').addEventListener('click', onAdminGo);
     $('btn-csv').addEventListener('click', downloadCsv);
+    $('btn-people-csv').addEventListener('click', downloadPeopleCsv);
     $('btn-provision').addEventListener('click', onProvision);
     $('btn-emp-add').addEventListener('click', onEmployeeAdd);
     $('btn-adm-add').addEventListener('click', onAdminAdd);
@@ -564,12 +567,10 @@
 
   function processAttendance(qrText) {
     if (!state.config) {
-      setBusy(false);
       showFeedback('warn', 'Les parametres du bureau sont en cours de chargement. Reessayez dans un instant.');
       return;
     }
     if (!state.profile) {
-      setBusy(false);
       showFeedback('warn', 'Definissez vos coordonnees d\'abord.');
       showProfileModal();
       return;
@@ -588,9 +589,6 @@
       qr: token,
       name: state.profile.name,
       email: state.profile.email,
-      lat: 0,
-      lng: 0,
-      accuracy: 0,
       ts: Date.now()
     };
 
@@ -1052,7 +1050,6 @@
     if (res.otpDev) {
       $('admin-otp-note').textContent = res.message + ' Code de developpement : ' + res.otpDev;
     }
-    if (res.email) state.pendingAdminEmail = res.email;
     $('btn-admin-go').textContent = 'Verifier le code';
     $('admin-otp').focus();
   }
@@ -1174,8 +1171,87 @@
     $('admin-login').classList.add('hidden');
     $('admin-dash').classList.remove('hidden');
 
+    renderPeople(a.people || []);
+
     loadEmployees();
     loadAdmins();
+  }
+
+  var PEOPLE_STATUS = {
+    onsite: { label: 'Sur place', cls: 'in' },
+    out: { label: 'Sorti', cls: 'out' },
+    absent: { label: 'Absent', cls: 'neutral' }
+  };
+
+  function renderPeople(people) {
+    $('people-count').textContent = people.length + (people.length > 1 ? ' personnes' : ' personne');
+    var tbody = $('people-table').querySelector('tbody');
+    tbody.innerHTML = '';
+    if (people.length === 0) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.colSpan = 6;
+      td0.className = 'empty';
+      td0.textContent = 'Aucun membre d\'effectif configure.';
+      tr0.appendChild(td0);
+      tbody.appendChild(tr0);
+      return;
+    }
+    people.forEach(function (p) {
+      var tr = document.createElement('tr');
+      [p.name || p.email, String(p.daysPresent || 0), fmtHours(p.totalHours), fmtHours(p.avgHours), String(p.lateCount || 0)].forEach(function (txt) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        tr.appendChild(td);
+      });
+      var st = PEOPLE_STATUS[p.statusToday] || null;
+      var tdStatus = document.createElement('td');
+      if (st) {
+        var tag = document.createElement('span');
+        tag.className = 'tag ' + st.cls;
+        tag.textContent = st.label;
+        tdStatus.appendChild(tag);
+      } else {
+        tdStatus.textContent = '\u2014';
+      }
+      tr.appendChild(tdStatus);
+      tr.title = p.email + (p.department ? ' \u00b7 ' + p.department : '');
+      tbody.appendChild(tr);
+    });
+  }
+
+  function buildPeopleCsv(people) {
+    var head = ['Nom', 'Email', 'Departement', 'Jours presents', 'Total heures', 'Moyenne heures/jour', 'Retards', 'Pas de sortie', 'Derniere date', 'Premiere entree (dernier jour)', 'Derniere sortie (dernier jour)', 'Statut aujourd\'hui'];
+    var lines = [head.join(',')];
+    (people || []).forEach(function (p) {
+      var st = PEOPLE_STATUS[p.statusToday];
+      var row = [
+        p.name || '', p.email, p.department || '',
+        p.daysPresent || 0,
+        p.totalHours != null ? p.totalHours : '',
+        p.avgHours != null ? p.avgHours : '',
+        p.lateCount || 0,
+        p.missingOut || 0,
+        p.lastDate || '', p.firstIn || '', p.lastOut || '',
+        st ? st.label : ''
+      ];
+      lines.push(row.map(function (c) {
+        return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"';
+      }).join(','));
+    });
+    return '\uFEFF' + lines.join('\r\n');
+  }
+
+  function downloadPeopleCsv() {
+    if (!state.admin) return;
+    var blob = new Blob([buildPeopleCsv(state.admin.people)], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'effectif-' + state.admin.range.from + '_' + state.admin.range.to + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
   }
 
   function loadEmployees() {
