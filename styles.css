@@ -94,6 +94,9 @@
 
 :root[data-theme="light"] .week-bar.zero { background: rgba(15, 23, 42, 0.08); }
 
+:root[data-theme="light"] input { background: rgba(15, 23, 42, 0.03); color: #0f172a; }
+:root[data-theme="light"] input::placeholder { color: #94a3b8; }
+
 :root[data-theme="light"] .sk {
   background: linear-gradient(90deg, rgba(15, 23, 42, 0.04) 25%, rgba(15, 23, 42, 0.08) 50%, rgba(15, 23, 42, 0.04) 75%);
   background-size: 200% 100%;
