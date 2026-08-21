@@ -176,6 +176,9 @@ function handleRequest_(e) {
     if (action === 'admin_login') {
       return json_(adminLogin_(payload, cfg, now, tz, ss));
     }
+    if (action === 'admin_check') {
+      return json_(adminCheck_(payload, ss));
+    }
     if (action === 'admins_list') {
       return json_(adminsList_(payload, cfg, now, tz, ss));
     }
@@ -1066,6 +1069,17 @@ function isAdmin_(ss, email) {
     if (String(rows[i][0] || '').trim().toLowerCase() === email) return true;
   }
   return false;
+}
+
+/**
+ * Lightweight gate for the UI: tells the client whether this profile email may
+ * see the Admin entry point. The real enforcement stays in admin_login /
+ * adminAccess_ — this only hides the door, it does not unlock anything.
+ */
+function adminCheck_(payload, ss) {
+  var email = String(payload.email || '').trim().toLowerCase();
+  var valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+  return { ok: true, isAdmin: valid && isAdmin_(ss, email) };
 }
 
 /**

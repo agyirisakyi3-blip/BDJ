@@ -17,6 +17,8 @@
     qrScanner: null,
     admin: null,
     adminEmail: '',
+    isAdmin: false,
+    adminChecking: false,
     pendingScan: false,
     processing: false,
     employees: [],
@@ -115,6 +117,8 @@
       if (!isConfigured()) showSetupBanner();
 
       renderHome();
+
+      refreshAdminAccess();
 
       fetchConfig()
         .then(renderHome)
@@ -357,6 +361,7 @@
       openScanner();
     }
     renderHome();
+    refreshAdminAccess();
     loadRecent();
     loadWeek();
   }
@@ -969,10 +974,60 @@
   }
 
   function route() {
-    var admin = (location.hash || '#home').indexOf('admin') !== -1;
-    $('view-home').classList.toggle('hidden', admin);
-    $('view-admin').classList.toggle('hidden', !admin);
-    if (!admin && state.qrScanner) closeScanner();
+    var hash = location.hash || '#home';
+    var wantsAdmin = hash.indexOf('admin') !== -1;
+    var allowed = !!state.isAdmin || !!state.adminToken;
+
+    if (wantsAdmin && !allowed && state.adminChecking) {
+      $('view-home').classList.add('hidden');
+      $('view-admin').classList.add('hidden');
+      return;
+    }
+
+    if (wantsAdmin && !allowed) {
+      showFeedback('warn', 'Acces admin reserve au personnel autorise.');
+      location.hash = '#home';
+      return;
+    }
+
+    $('view-home').classList.toggle('hidden', wantsAdmin);
+    $('view-admin').classList.toggle('hidden', !wantsAdmin);
+    if (!wantsAdmin && state.qrScanner) closeScanner();
+  }
+
+  /* ---------------- Admin access gate ---------------- */
+
+  function applyAdminVisibility() {
+    var btn = $('btn-admin');
+    if (btn) btn.classList.toggle('hidden', !state.isAdmin);
+  }
+
+  function refreshAdminAccess() {
+    var email = state.profile && state.profile.email ? String(state.profile.email).trim() : '';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      state.isAdmin = false;
+      state.adminChecking = false;
+      state.adminCheck = null;
+      applyAdminVisibility();
+      return Promise.resolve(false);
+    }
+    state.adminChecking = true;
+    var p = api({ action: 'admin_check', email: email })
+      .then(function (res) {
+        state.isAdmin = !!(res && res.ok && res.isAdmin);
+      })
+      .catch(function () {
+        state.isAdmin = false;
+      })
+      .then(function () {
+        state.adminChecking = false;
+        state.adminCheck = null;
+        applyAdminVisibility();
+        route();
+        return state.isAdmin;
+      });
+    state.adminCheck = p;
+    return p;
   }
 
   /* ---------------- Admin ---------------- */
@@ -1012,7 +1067,7 @@
     $('btn-admin-go').textContent = 'Chargement...';
     showReportSkeleton();
     api(body).then(function (res) {
-      $('btn-admin-go').textContent = 'Voir le resume du jour';
+      $('btn-admin-go').textContent = 'Acceder au tableau de bord';
       if (res && res.needOtp) {
         clearReportSkeleton();
         showOtpStep(res);
@@ -1024,6 +1079,8 @@
       }
       if (email) state.adminEmail = email;
       if (pin) state.pin = pin;
+      state.isAdmin = true;
+      applyAdminVisibility();
       state.adminToken = res.sessionToken || res.token || state.adminToken || '';
       if (email && res.ok) {
         var adminBody = { action: 'admin', from: from, to: to, token: state.adminToken };
@@ -1036,7 +1093,7 @@
       state.admin = res.admin;
       renderAdmin(res.admin);
     }).catch(function (err) {
-      $('btn-admin-go').textContent = 'Voir le resume du jour';
+      $('btn-admin-go').textContent = 'Acceder au tableau de bord';
       clearReportSkeleton();
       handleAdminAuthFail(err);
       showError('admin-error', err.message);
@@ -1087,10 +1144,12 @@
     $('admin-sub').textContent = a.range.from + ' \u2192 ' + a.range.to + ' \u00b7 ' + a.appName;
     $('rng-from').value = a.range.from;
     $('rng-to').value = a.range.to;
+    $('dash-range-label').textContent = 'Periode : ' + a.range.from + ' \u2192 ' + a.range.to;
 
-    $('st-in').textContent = a.live.checkedInToday;
-    $('st-out').textContent = a.live.checkedOutToday;
-    $('st-on').textContent = a.live.onSite;
+    $('kpi-staff').textContent = (a.people || []).length;
+    $('kpi-onsite').textContent = a.live.onSite;
+    $('kpi-in').textContent = a.live.checkedInToday;
+    $('kpi-out').textContent = a.live.checkedOutToday;
 
     $('rp-hours').textContent = fmtHours(a.summary.totalHours);
     $('rp-days').textContent = a.summary.daysPresent;
@@ -1172,9 +1231,82 @@
     $('admin-dash').classList.remove('hidden');
 
     renderPeople(a.people || []);
+    renderHoursChart(a.pairs || []);
 
     loadEmployees();
     loadAdmins();
+  }
+
+  function renderHoursChart(pairs) {
+    var byDate = {};
+    var order = [];
+    (pairs || []).forEach(function (p) {
+      if (!p.date) return;
+      if (!byDate[p.date]) {
+        byDate[p.date] = 0;
+        order.push(p.date);
+      }
+      byDate[p.date] += (p.hours != null && !isNaN(p.hours)) ? p.hours : 0;
+    });
+    order.sort();
+
+    var chart = $('hours-chart');
+    var empty = $('hours-empty');
+    var pill = $('chart-pill');
+    chart.innerHTML = '';
+
+    var shown = order.slice(-14);
+    var total = 0;
+    shown.forEach(function (d) { total += byDate[d]; });
+    pill.textContent = Math.round(total * 10) / 10 + ' h';
+
+    if (shown.length === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+
+    var max = 0;
+    shown.forEach(function (d) { if (byDate[d] > max) max = byDate[d]; });
+
+    shown.forEach(function (d) {
+      var col = document.createElement('div');
+      col.className = 'bar-col';
+      var val = document.createElement('span');
+      val.className = 'bar-val';
+      val.textContent = Math.round(byDate[d] * 10) / 10 || '';
+      var bar = document.createElement('div');
+      bar.className = 'bar';
+      var pct = max > 0 ? Math.max(4, Math.round((byDate[d] / max) * 100)) : 4;
+      bar.style.height = pct + '%';
+      if (!byDate[d]) bar.classList.add('zero');
+      var lbl = document.createElement('span');
+      lbl.className = 'bar-label';
+      lbl.textContent = d.slice(8, 10) + '/' + d.slice(5, 7);
+      col.title = d + ' \u00b7 ' + fmtHours(byDate[d]);
+      col.appendChild(val);
+      col.appendChild(bar);
+      col.appendChild(lbl);
+      chart.appendChild(col);
+    });
+  }
+
+  function avatarInitials(name, email) {
+    var src = String(name || email || '?').trim();
+    var parts = src.split(/[\s._@-]+/).filter(Boolean);
+    var initials = '';
+    if (parts.length >= 2) initials = parts[0].charAt(0) + parts[1].charAt(0);
+    else if (parts.length === 1) initials = parts[0].slice(0, 2);
+    return initials.toUpperCase();
+  }
+
+  var AVATAR_HUES = [258, 160, 199, 24, 340, 42, 120, 286];
+
+  function avatarHue(email) {
+    var h = 0;
+    var s = String(email || '');
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return AVATAR_HUES[h % AVATAR_HUES.length];
   }
 
   var PEOPLE_STATUS = {
@@ -1199,7 +1331,28 @@
     }
     people.forEach(function (p) {
       var tr = document.createElement('tr');
-      [p.name || p.email, String(p.daysPresent || 0), fmtHours(p.totalHours), fmtHours(p.avgHours), String(p.lateCount || 0)].forEach(function (txt) {
+      var tdName = document.createElement('td');
+      var cell = document.createElement('div');
+      cell.className = 'person-cell';
+      var av = document.createElement('span');
+      av.className = 'avatar';
+      av.style.background = 'hsl(' + avatarHue(p.email) + ', 62%, 88%)';
+      av.style.color = 'hsl(' + avatarHue(p.email) + ', 55%, 32%)';
+      av.textContent = avatarInitials(p.name, p.email);
+      var nm = document.createElement('span');
+      nm.className = 'person-name';
+      nm.textContent = p.name || p.email;
+      cell.appendChild(av);
+      cell.appendChild(nm);
+      if (p.department) {
+        var dept = document.createElement('span');
+        dept.className = 'person-dept';
+        dept.textContent = p.department;
+        cell.appendChild(dept);
+      }
+      tdName.appendChild(cell);
+      tr.appendChild(tdName);
+      [String(p.daysPresent || 0), fmtHours(p.totalHours), fmtHours(p.avgHours), String(p.lateCount || 0)].forEach(function (txt) {
         var td = document.createElement('td');
         td.textContent = txt;
         tr.appendChild(td);

@@ -120,6 +120,10 @@ Camera and geolocation **require HTTPS**. Any static host works:
   office's QR token plus coordinates, which let anyone forge a check-in for any email. Tokens
   are now server-side only: the server alone validates the token and the geofence, and the app
   only receives office *names* and locations for display. Keep the Config/Offices sheets private.
+- **Admin entry point is hidden from employees** - the app asks the server (`admin_check`)
+  whether the signed-in profile email is in the Admins sheet; if not, the Admin button is
+  hidden and navigating to `#admin` redirects home with a notice. This only hides the door:
+  real enforcement stays server-side (Admins sheet + PIN + one-time code + audited sessions).
 - **Roster-gated data reads** - once the **Employees** or **Roster** sheet has at least one
   row, the `recent`, `week` and `myattendance` actions only return data for emails listed on
   the roster. A random person who finds the web app URL can no longer read anyone's history;

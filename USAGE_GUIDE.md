@@ -134,11 +134,15 @@ Sur l'ecran d'accueil, deux cartes s'affichent si vous avez un profil :
 1. Sur l'ecran d'accueil, appuyez sur **Admin** (en bas de l'ecran)
 2. Le formulaire de connexion s'affiche
 
+> **Note** : Le bouton **Admin** n'apparaît que si votre email est dans la feuille **Admins**.
+> Les employes ne voient pas le bouton, et l'acces direct via l'URL (`#admin`) est redirige
+> vers l'accueil.
+
 ### Connexion par email + OTP (recommande)
 
 1. Saisissez votre **email admin** (doit etre dans la feuille Admins)
 2. Laissez le champ PIN vide
-3. Appuyez sur **Voir le resume du jour**
+3. Appuyez sur **Acceder au tableau de bord**
 4. Un code a usage unique (OTP) est envoye a votre email
 5. Saisissez le code a 6 chiffres dans le champ **Code a usage unique**
 6. Appuyez sur **Verifier le code**
@@ -146,7 +150,7 @@ Sur l'ecran d'accueil, deux cartes s'affichent si vous avez un profil :
 ### Connexion par PIN + OTP (legacy)
 
 1. Saisissez votre **PIN admin** (code PIN de l'entreprise)
-2. Appuyez sur **Voir le resume du jour**
+2. Appuyez sur **Acceder au tableau de bord**
 3. Un code OTP est envoye a l'adresse email configuree
 4. Saisissez le code et validez
 

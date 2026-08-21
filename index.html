@@ -146,17 +146,23 @@
           <input id="admin-otp" type="text" inputmode="numeric" autocomplete="one-time-code"
                  placeholder="Code a 6 chiffres envoye par email" maxlength="6">
         </div>
-        <button id="btn-admin-go" class="primary-btn" type="button">Voir le resume du jour</button>
+        <button id="btn-admin-go" class="primary-btn" type="button">Acceder au tableau de bord</button>
         <p id="admin-otp-note" class="hint hidden"></p>
         <p id="admin-error" class="feedback error hidden"></p>
       </div>
 
       <div id="admin-dash" class="hidden">
-        <div class="card block">
-          <div class="block-head collapsible">
-            <h3>Periode du rapport</h3>
-          </div>
+        <div class="card block dash-toolbar">
           <div class="block-body">
+            <div class="dash-toolbar-head">
+              <span class="kpi-icon lg kpi-violet" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              </span>
+              <div>
+                <h3>Tableau de bord</h3>
+                <p id="dash-range-label" class="hint">Chargement...</p>
+              </div>
+            </div>
             <div class="range-row">
               <label class="range-field">Du
                 <input id="rng-from" type="date">
@@ -164,50 +170,42 @@
               <label class="range-field">Au
                 <input id="rng-to" type="date">
               </label>
-              <button id="btn-load" class="ghost-btn range-btn" type="button">
+              <button id="btn-load" class="primary-btn range-btn" type="button">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                Charger le rapport
+                Charger
               </button>
             </div>
           </div>
         </div>
 
-        <div class="card block collapsed">
-          <div class="block-head collapsible">
-            <h3>Creer un espace</h3>
+        <div class="kpi-grid">
+          <div class="kpi">
+            <span class="kpi-icon kpi-violet" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <b id="kpi-staff">0</b>
+            <span>Effectif</span>
           </div>
-          <div class="block-body">
-            <p class="hint">Cree un nouvel espace d'entreprise avec sa propre feuille de calcul, son effectif et ses rapports. Requiert le code PIN admin utilise pour vous connecter.</p>
-            <div class="range-row">
-              <label class="range-field">Code espace
-                <input id="prov-code" type="text" placeholder="ex. acme" autocomplete="off">
-              </label>
-              <label class="range-field">Nom de l'entreprise
-                <input id="prov-name" type="text" placeholder="Acme Corp" autocomplete="off">
-              </label>
-              <button id="btn-provision" class="ghost-btn range-btn" type="button">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                Creer
-              </button>
-            </div>
-            <p id="prov-error" class="feedback error hidden"></p>
-            <pre id="prov-result" class="prov-result hidden"></pre>
+          <div class="kpi">
+            <span class="kpi-icon kpi-emerald" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            </span>
+            <b id="kpi-onsite">0</b>
+            <span>Sur place</span>
           </div>
-        </div>
-
-        <p class="stat-caption">Aujourd'hui</p>
-        <div class="stat-row">
-          <div class="stat stat-in">
-            <b id="st-in">0</b>
+          <div class="kpi">
+            <span class="kpi-icon kpi-blue" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            </span>
+            <b id="kpi-in">0</b>
             <span>Entrees aujourd'hui</span>
           </div>
-          <div class="stat stat-out">
-            <b id="st-out">0</b>
+          <div class="kpi">
+            <span class="kpi-icon kpi-amber" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </span>
+            <b id="kpi-out">0</b>
             <span>Sorties aujourd'hui</span>
-          </div>
-          <div class="stat stat-on">
-            <b id="st-on">0</b>
-            <span>Sur place</span>
           </div>
         </div>
 
@@ -228,6 +226,17 @@
           <div class="stat stat-in">
             <b id="rp-miss">0</b>
             <span>Pas de sortie</span>
+          </div>
+        </div>
+
+        <div class="card block chart-block">
+          <div class="block-head collapsible">
+            <h3>Heures par jour</h3>
+            <span id="chart-pill" class="pill"></span>
+          </div>
+          <div class="block-body">
+            <div id="hours-chart" class="bar-chart" role="img" aria-label="Heures travaillees par jour sur la periode"></div>
+            <p id="hours-empty" class="hint hidden">Aucune donnee sur cette periode.</p>
           </div>
         </div>
 
@@ -267,6 +276,64 @@
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Exporter l'effectif (CSV)
             </button>
+          </div>
+        </div>
+
+        <div class="card block">
+          <div class="block-head collapsible">
+            <h3>Rapport</h3>
+            <span id="report-count" class="pill"></span>
+          </div>
+          <div class="block-body">
+            <p class="hint">Detail des pointages de la periode.</p>
+            <div class="table-wrap">
+              <table id="report-table">
+                <thead>
+                  <tr><th>Date</th><th>Nom</th><th>Entree</th><th>Sortie</th><th>Heures</th><th>Statut</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button id="btn-csv" class="ghost-btn" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
+          <a id="link-sheet" class="ghost-btn" target="_blank" rel="noopener">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Feuille
+          </a>
+          <button id="btn-refresh" class="ghost-btn" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Actualiser
+          </button>
+        </div>
+
+        <p class="stat-caption">Gestion</p>
+
+        <div class="card block collapsed">
+          <div class="block-head collapsible">
+            <h3>Creer un espace</h3>
+          </div>
+          <div class="block-body">
+            <p class="hint">Cree un nouvel espace d'entreprise avec sa propre feuille de calcul, son effectif et ses rapports. Requiert le code PIN admin utilise pour vous connecter.</p>
+            <div class="range-row">
+              <label class="range-field">Code espace
+                <input id="prov-code" type="text" placeholder="ex. acme" autocomplete="off">
+              </label>
+              <label class="range-field">Nom de l'entreprise
+                <input id="prov-name" type="text" placeholder="Acme Corp" autocomplete="off">
+              </label>
+              <button id="btn-provision" class="ghost-btn range-btn" type="button">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                Creer
+              </button>
+            </div>
+            <p id="prov-error" class="feedback error hidden"></p>
+            <pre id="prov-result" class="prov-result hidden"></pre>
           </div>
         </div>
 
@@ -327,38 +394,6 @@
               </table>
             </div>
           </div>
-        </div>
-
-        <div class="card block">
-          <div class="block-head collapsible">
-            <h3>Rapport</h3>
-            <span id="report-count" class="pill"></span>
-          </div>
-          <div class="block-body">
-            <div class="table-wrap">
-              <table id="report-table">
-                <thead>
-                  <tr><th>Date</th><th>Nom</th><th>Entree</th><th>Sortie</th><th>Heures</th><th>Statut</th></tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div class="btn-row">
-          <button id="btn-csv" class="ghost-btn" type="button">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            CSV
-          </button>
-          <a id="link-sheet" class="ghost-btn" target="_blank" rel="noopener">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            Feuille
-          </a>
-          <button id="btn-refresh" class="ghost-btn" type="button">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            Actualiser
-          </button>
         </div>
       </div>
     </section>

@@ -45,6 +45,32 @@ async function setupProfile(page) {
   );
 }
 
+// Intercept API calls to the Apps Script backend and answer locally.
+async function mockApi(page, responder) {
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    if (req.url().indexOf('script.google.com') === -1) { req.continue(); return; }
+    let body = {};
+    try { body = JSON.parse(req.postData() || '{}'); } catch (e) {}
+    const res = responder(body);
+    if (!res) { req.continue(); return; }
+    req.respond({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(res),
+    });
+  });
+}
+
+async function grantAdminAccess(page) {
+  await mockApi(page, body => {
+    if (body.action === 'admin_check') return { ok: true, isAdmin: true };
+    return null;
+  });
+  await setupProfile(page);
+}
+
 /* ==========================================
    1. APP LOADING
    ========================================== */
@@ -385,32 +411,79 @@ describe('Profile Modal', () => {
    5. ROUTING / NAVIGATION
    ========================================== */
 describe('Routing / Navigation', () => {
-  test('#admin hash shows admin view', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+  test('#admin hash shows admin view for admins', async () => {
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     const adminHidden = await page.$eval('#view-admin', el => el.classList.contains('hidden'));
     expect(adminHidden).toBe(false);
   });
 
-  test('#home hash shows home view', async () => {
+  test('#admin redirects home for employees', async () => {
+    await mockApi(page, body => {
+      if (body.action === 'admin_check') return { ok: true, isAdmin: false };
+      return null;
+    });
+    await setupProfile(page);
+    await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(() => location.hash !== '#admin', { timeout: 10000 });
+    const hash = await page.evaluate(() => location.hash);
+    expect(hash).toBe('#home');
+  });
+
+  test('#admin redirects home without profile', async () => {
     await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(() => location.hash !== '#admin', { timeout: 10000 });
+    const hash = await page.evaluate(() => location.hash);
+    expect(hash).toBe('#home');
+  });
+
+  test('admin button hidden for employees', async () => {
+    await mockApi(page, body => {
+      if (body.action === 'admin_check') return { ok: true, isAdmin: false };
+      return null;
+    });
+    await setupProfile(page);
+    await page.waitForFunction(
+      () => document.getElementById('btn-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
+  });
+
+  test('admin button visible for admins', async () => {
+    await grantAdminAccess(page);
+    await page.waitForFunction(
+      () => !document.getElementById('btn-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
+  });
+
+  test('#home hash shows home view', async () => {
+    await grantAdminAccess(page);
+    await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     await page.click('#btn-back');
     const homeHidden = await page.$eval('#view-home', el => el.classList.contains('hidden'));
     expect(homeHidden).toBe(false);
   });
 
   test('admin button navigates to admin', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
-    await page.reload({ waitUntil: 'networkidle2' });
+    await grantAdminAccess(page);
     await page.evaluate(() => document.getElementById('btn-admin').click());
-    await delay(300);
+    await page.waitForFunction(() => location.hash === '#admin', { timeout: 10000 });
     const hash = await page.evaluate(() => location.hash);
     expect(hash).toBe('#admin');
   });
 
   test('back button navigates to home', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
     await page.click('#btn-back');
     const hash = await page.evaluate(() => location.hash);
@@ -423,23 +496,35 @@ describe('Routing / Navigation', () => {
    ========================================== */
 describe('Admin View', () => {
   test('admin login form is visible', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     const loginHidden = await page.$eval('#admin-login', el => el.classList.contains('hidden'));
     expect(loginHidden).toBe(false);
   });
 
   test('shows error when clicking go without PIN', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     await page.click('#btn-admin-go');
     const errText = await page.$eval('#admin-error', el => el.textContent);
     expect(errText).toContain('PIN');
   });
 
   test('admin PIN input accepts Enter key', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     await page.type('#admin-pin', '1234');
     await page.keyboard.press('Enter');
     const errText = await page.$eval('#admin-error', el => el.textContent);
@@ -447,18 +532,80 @@ describe('Admin View', () => {
   });
 
   test('admin dashboard is hidden initially', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     const dashHidden = await page.$eval('#admin-dash', el => el.classList.contains('hidden'));
     expect(dashHidden).toBe(true);
   });
 
   test('collapsible cards toggle', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
 
     const collapsed = await page.$eval('.card.collapsed', el => el.classList.contains('collapsed'));
     expect(collapsed).toBe(true);
+  });
+
+  test('dashboard renders KPI cards and chart for admins', async () => {
+    await mockApi(page, body => {
+      if (body.action === 'admin_check') return { ok: true, isAdmin: true };
+      if (body.action === 'employees') return { ok: true, employees: [] };
+      if (body.action === 'admins_list') return { ok: true, admins: [] };
+      if (body.action === 'admin_login') return { ok: true, sessionToken: 'tok' };
+      if (body.action === 'admin') {
+        return {
+          ok: true,
+          sessionToken: 'tok',
+          admin: {
+            appName: 'BDJ Consulting',
+            sheetUrl: '',
+            today: '2026-08-21',
+            range: { from: '2026-08-21', to: '2026-08-21' },
+            live: { checkedInToday: 3, checkedOutToday: 1, onSite: 2, onSiteNames: ['A', 'B'], absent: [] },
+            summary: { totalHours: 7.5, daysPresent: 3, lateCount: 1, missingOut: 0, people: 2 },
+            pairs: [
+              { date: '2026-08-21', name: 'A', email: 'a@x.com', in: '08:00', out: '12:00', hours: 4, late: false, missing: false },
+              { date: '2026-08-20', name: 'B', email: 'b@x.com', in: '09:00', out: '12:30', hours: 3.5, late: true, missing: false }
+            ],
+            people: [
+              { email: 'a@x.com', name: 'Alice', department: 'IT', daysPresent: 1, totalHours: 4, avgHours: 4, lateCount: 0, missingOut: 0, statusToday: 'onsite' },
+              { email: 'b@x.com', name: 'Bob', department: '', daysPresent: 1, totalHours: 3.5, avgHours: 3.5, lateCount: 1, missingOut: 0, statusToday: '' }
+            ],
+            admins: []
+          }
+        };
+      }
+      return null;
+    });
+    await setupProfile(page);
+    await page.evaluate(() => document.getElementById('btn-admin').click());
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 15000 }
+    );
+    await page.type('#admin-email', 'test@bdj.com');
+    await page.type('#admin-pin', '1234');
+    await page.click('#btn-admin-go');
+    await page.waitForFunction(
+      () => !document.getElementById('admin-dash').classList.contains('hidden'),
+      { timeout: 15000 }
+    );
+    const kpis = await page.$$eval('.kpi-grid .kpi', els => els.length);
+    expect(kpis).toBe(4);
+    const staffVal = await page.$eval('#kpi-staff', el => el.textContent);
+    expect(staffVal).toBe('2');
+    const bars = await page.$$eval('#hours-chart .bar-col', els => els.length);
+    expect(bars).toBe(2);
+    const avatars = await page.$$eval('#people-table .avatar', els => els.length);
+    expect(avatars).toBe(2);
   });
 });
 
@@ -707,8 +854,12 @@ describe('Setup Banner', () => {
    ========================================== */
 describe('Collapsible Cards', () => {
   test('collapsed cards hide block-body', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     const bodyHidden = await page.evaluate(() => {
       const card = document.querySelector('.card.collapsed');
       if (!card) return null;
@@ -719,8 +870,12 @@ describe('Collapsible Cards', () => {
   });
 
   test('clicking collapsible header toggles card', async () => {
-    await page.evaluate(() => localStorage.setItem('att.onboarded.v1', '1'));
+    await grantAdminAccess(page);
     await page.goto(`${APP_URL}#admin`, { waitUntil: 'networkidle2' });
+    await page.waitForFunction(
+      () => !document.getElementById('view-admin').classList.contains('hidden'),
+      { timeout: 10000 }
+    );
     const result = await page.evaluate(() => {
       const header = document.querySelector('.card.collapsed .block-head.collapsible');
       if (!header) return { clicked: false };
