@@ -9,17 +9,44 @@ A mobile-friendly web app (PWA) for office attendance check-in / check-out:
 - Every rejected attempt is logged to an Audit sheet; a daily email digest can be enabled.
 - Multi-office: give each location its own QR token + geo-fence.
 
-The app also includes: a first-run walkthrough, a recent-activity list and last-7-days hours chart on the home screen, live distance-from-office while checked in, an offline check-in queue that auto-syncs, vibration + shake feedback on scans, a camera-failure retry card, a check-in success overlay, a "not checked in today" roster view for admins, collapsible admin cards, loading skeletons, and a light/dark theme toggle.
+The app also includes: a first-run walkthrough, a recent-activity list and last-7-days hours chart on the home screen, live distance-from-office while checked in, an offline check-in queue that auto-syncs, vibration + shake feedback on scans, a camera-failure retry card, a check-in success overlay, a "not checked in today" roster view for admins, collapsible admin cards, loading skeletons, and a light/dark/auto theme toggle.
+
+## What's new
+
+- **Rotating QR codes** - the entrance screen (`office-screen.html`) shows a QR that re-photographs
+  every 30 seconds (`ROT-xxxxxx`, HMAC-signed time windows). A photo of an old code stops working,
+  so sharing a screenshot no longer lets anyone check in remotely. Admins open the page from the
+  admin dashboard (**Ecran d'entree**) and log in with email + one-time code.
+- **Break tracking** - Check-out is now a small state machine: `Check-in -> Break-out -> Break-in -> Check-out`.
+  Scanning while on break resumes work; dedicated buttons let staff pause/resume without the QR.
+  Total break minutes per day are tracked and shown on home, admin chips and reports.
+- **Selfie at check-in (optional)** - set `selfieMode` in Config to `off` (default), `optional`
+  or `required`. When required, checking in without a camera selfie is refused; photos are stored
+  in a Drive folder next to your sheet and linked from the Attendance row.
+- **Per-person shifts & late rules** - each employee can have their own shift start/end; lateness
+  falls back per person instead of one office-wide `lateAfter`.
+- **Leave & holidays** - admins manage leave requests and public holidays from the dashboard;
+  people on approved leave are excluded from "absent" lists and marked **En conge**, holidays
+  show as non-working days across dashboard, digest and reports.
+- **Audited manual corrections** - admins can fix a day (set a missing check-out, add/remove a
+  pair) without touching formulas; corrections keep an audit trail with who/when.
+- **Check-in / check-out reminders** - optional local notifications when someone hasn't checked
+  in shortly after their shift start, or is still checked in after hours (toggle in Profile).
+- **Monthly summary card** - days present, total hours, break time, late count for the current
+  month, right on the home screen.
+- **CI** - GitHub Actions runs the full Puppeteer test suite on every push/PR.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
 | `index.html`, `styles.css`, `app.js` | The app UI and logic |
+| `utils.js` | Pure shared helpers (dates, formatting), ES module imported by `app.js` |
 | `config.js` | Your Apps Script web app URL (edit me) |
 | `manifest.webmanifest`, `sw.js` | PWA install + offline shell |
 | `icons/` | App icons |
 | `qr-generator.html` | Generates the printable office QR (open it, no server needed) |
+| `office-screen.html` | Entrance display: rotating admin-gated QR |
 | `appsscript/Code.gs` | Google Apps Script backend (paste into your Sheet's script editor) |
 
 ## Setup
@@ -51,7 +78,10 @@ The app also includes: a first-run walkthrough, a recent-activity list and last-
     - `maxAccuracyM` - maximum allowed GPS fix error in metres (default `200`, blocks weak/spoofed fixes).
     - `maxMoveKmh` - maximum implied travel speed between your check-ins (default `300` km/h).
     - `retentionDays` - how many days of Attendance rows to keep (default `0` = keep everything; >0 enables purging).
-    - `lateAfter` - time (HH:MM) after which a check-in counts as late, e.g. `09:00` (leave empty to disable).
+    - `lateAfter` - time (HH:MM) after which a check-in counts as late, e.g. `09:00` (leave empty to disable). Per-person shifts override this.
+    - `selfieMode` - `off`, `optional` or `required`; requires a camera selfie on Check-in when `required`.
+    - `reminderCheckInAfter` / `reminderCheckOutAfter` - minutes after shift start / end for local reminders (client-side, opt-in in Profile).
+    - `totpSecret` - secret used by the rotating entrance QR (`office-screen.html`). Rotate it like `qrSecret`.
 
    The **Roster** sheet (created automatically) holds one allowed email per row, used when `rosterMode` is `roster`.
 
@@ -187,7 +217,7 @@ Camera and geolocation **require HTTPS**. Any static host works:
 
 ### Attendance sheet columns
 
-`Date`, `Time`, `Name`, `Email`, `Action` (Check-in/Check-out), `Status` (On-site), `Latitude`, `Longitude`, `Distance(m)`, `QR Token`, `Office`
+`Date`, `Time`, `Name`, `Email`, `Action` (Check-in/Check-out/Break-out/Break-in), `Status` (On-site/Corrected/Manual), `Latitude`, `Longitude`, `Distance(m)`, `QR Token`, `Office`, `Selfie link`
 
 ### Audit sheet
 
@@ -199,8 +229,10 @@ Camera and geolocation **require HTTPS**. Any static host works:
 
 1. Set `adminEmail` in the Config sheet.
 2. In the spreadsheet, use the **Attendance** menu (App Scripts `onOpen` creates it):
-   - **Enable daily digest (17:00)** - schedules a daily 5pm email with who was present and hours.
+   - **Enable daily digest (17:00)** - schedules a daily 5pm email with who was present and hours,
+     who is still checked in, who is on leave, and today's holidays.
    - **Send digest now** - sends immediately for the current day.
+   - **Enable check-out reminders (hourly)** - hourly email nudge for people still checked in.
    - **Rotate admin PIN** / **Rotate QR secret** - rotate credentials (stored in Script Properties).
    - **Enable auto-purge** / **Run retention purge now** - retention cleanup using `retentionDays`.
 

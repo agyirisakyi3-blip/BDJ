@@ -21,6 +21,12 @@
     <div class="grain"></div>
   </div>
 
+  <!-- ============ OFFLINE PILL ============ -->
+  <div id="offline-pill" class="offline-pill hidden" role="status" aria-live="polite">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+    <span data-i18n="nav.offline">Hors ligne</span>
+  </div>
+
   <main class="app">
 
     <!-- ============ HOME ============ -->
@@ -36,13 +42,17 @@
           </div>
         </div>
         <div class="topbar-right">
+          <button id="btn-install" class="icon-btn hidden" type="button" title="Installer l'application" aria-label="Installer l'application">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 15 21 19 3 19 3 15"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
           <div class="live-clock" role="timer" aria-label="Heure actuelle">
             <span class="live-dot" aria-hidden="true"></span>
             <span id="live-time">--:--:--</span>
           </div>
-          <button id="btn-theme" class="icon-btn" type="button" title="Basculer clair/sombre" aria-label="Basculer clair/sombre">
-            <svg id="ic-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <button id="btn-theme" class="icon-btn" type="button" title="Theme : automatique" aria-label="Changer le theme (automatique, clair, sombre)">
+            <svg id="ic-sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             <svg id="ic-moon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg id="ic-auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor" stroke="none"/></svg>
           </button>
           <button id="btn-profile" class="icon-btn" type="button" title="Vos coordonnees" aria-label="Vos coordonnees">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -53,16 +63,28 @@
       <div id="setup-banner" class="banner warn hidden"></div>
 
       <div id="status-card" class="card status-card">
-        <div id="status-avatar" class="status-avatar">?</div>
+        <div class="status-avatar-ring" id="avatar-ring">
+          <svg class="ring-svg" viewBox="0 0 76 76" aria-hidden="true">
+            <circle class="ring-track" cx="38" cy="38" r="35"/>
+            <circle class="ring-fill" id="ring-fill" cx="38" cy="38" r="35"/>
+          </svg>
+          <div id="status-avatar" class="status-avatar">?</div>
+        </div>
         <div class="status-info">
-          <div id="status-label" class="status-label">Bienvenue</div>
+          <div class="status-label-row">
+            <div id="status-label" class="status-label">Bienvenue</div>
+            <span id="streak-badge" class="streak-badge hidden" title="Jours de presence consecutifs">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
+              <span id="streak-count">0</span>&nbsp;j
+            </span>
+          </div>
           <div id="status-sub" class="status-sub"></div>
         </div>
         <div class="status-clock">
           <span id="status-time" class="status-time">--:--</span>
           <span class="status-dot" aria-hidden="true"></span>
           <div id="elapsed-wrap" class="elapsed-wrap hidden">
-            <span class="elapsed-label">Duree</span>
+            <span class="elapsed-label" data-i18n="status.duration">Duree</span>
             <span id="elapsed-timer" class="elapsed-timer">0h 0m</span>
           </div>
         </div>
@@ -70,42 +92,62 @@
 
       <button id="btn-scan" class="primary-btn big-btn" type="button">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        <span class="btn-label" id="btn-scan-label">Scanner QR pour pointer</span>
+        <span class="btn-label" id="btn-scan-label" data-i18n="scan.btnDefault">Scanner QR pour pointer</span>
       </button>
-      <p class="hint">Scannez le QR code a l'entree du bureau</p>
+
+      <div id="break-row" class="break-row hidden">
+        <button id="btn-break" class="ghost-btn break-btn" type="button" title="Marquer une pause">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+          <span id="btn-break-label">Pause</span>
+        </button>
+        <span id="break-info" class="hint"></span>
+      </div>
+
+      <p class="hint" data-i18n="home.hint">Scannez le QR code a l'entree du bureau</p>
 
       <section id="recent-card" class="card block hidden">
         <div class="block-head">
-          <h3>Activite recente</h3>
+          <h3 data-i18n="home.recent">Activite recente</h3>
         </div>
         <ul id="recent-list" class="recent-list"></ul>
-        <p id="recent-empty" class="hint hidden">Aucun pointage pour l'instant.</p>
+        <p id="recent-empty" class="hint hidden" data-i18n="home.recentEmpty">Aucun pointage pour l'instant.</p>
       </section>
 
       <section id="week-card" class="card block hidden">
         <div class="block-head">
-          <h3>7 derniers jours</h3>
+          <h3 data-i18n="home.week">7 derniers jours</h3>
         </div>
         <div id="week-chart" class="week-chart" role="img" aria-label="Heures par jour sur les 7 derniers jours"></div>
-        <p id="week-empty" class="hint hidden">Aucun pointage sur les 7 derniers jours.</p>
+        <p id="week-empty" class="hint hidden" data-i18n="home.weekEmpty">Aucun pointage sur les 7 derniers jours.</p>
+      </section>
+
+      <section id="month-card" class="card block hidden">
+        <div class="block-head collapsible">
+          <h3>Ce mois-ci</h3>
+        </div>
+        <div class="report-summary stat-row">
+          <div class="stat stat-in">
+            <b id="mo-days">0</b>
+            <span>Jours</span>
+          </div>
+          <div class="stat stat-on">
+            <b id="mo-hours">0h</b>
+            <span>Heures</span>
+          </div>
+          <div class="stat stat-out">
+            <b id="mo-break">0h</b>
+            <span>Pause</span>
+          </div>
+          <div class="stat stat-in">
+            <b id="mo-late">0</b>
+            <span>Retards</span>
+          </div>
+        </div>
+        <p id="mo-note" class="hint"></p>
       </section>
 
       <div id="feedback" class="feedback hidden" role="status" aria-live="polite"></div>
 
-      <footer class="footer">
-        <button id="btn-history" class="link" type="button">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Mon historique
-        </button>
-        <button id="btn-admin" class="link" type="button">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Admin
-        </button>
-        <button id="btn-help" class="link" type="button">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Aide
-        </button>
-      </footer>
     </section>
 
     <!-- ============ ADMIN ============ -->
@@ -131,22 +173,35 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </span>
           <div>
-            <h3>Acces admin</h3>
-            <p class="muted">Connectez-vous avec votre email admin et votre code PIN.</p>
+            <h3 data-i18n="login.title">Acces admin</h3>
+            <p class="muted" data-i18n="login.sub">Connectez-vous avec votre email admin et votre code PIN.</p>
           </div>
         </div>
-        <label for="admin-email">Email</label>
+        <label for="admin-email" data-i18n="label.email">Email</label>
         <input id="admin-email" type="email" inputmode="email" autocomplete="email"
                placeholder="vous@entreprise.com">
         <label for="admin-pin">PIN</label>
-        <input id="admin-pin" type="password" inputmode="numeric" autocomplete="off"
-               placeholder="Saisissez le code PIN">
-        <div id="otp-row" class="hidden">
-          <label for="admin-otp">Code a usage unique</label>
-          <input id="admin-otp" type="text" inputmode="numeric" autocomplete="one-time-code"
-                 placeholder="Code a 6 chiffres envoye par email" maxlength="6">
+        <div class="pin-wrap">
+          <input id="admin-pin" type="password" autocomplete="off"
+                 placeholder="Saisissez le code PIN">
+          <button id="pin-toggle" class="pin-toggle" type="button" aria-label="Afficher ou masquer le code PIN" title="Afficher ou masquer le code PIN">
+            <svg class="i-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="i-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
         </div>
-        <button id="btn-admin-go" class="primary-btn" type="button">Acceder au tableau de bord</button>
+        <div id="otp-row" class="hidden">
+          <label for="admin-otp" data-i18n="login.otp">Code a usage unique</label>
+          <div id="otp-seg" class="otp-seg" role="group" aria-label="Code a 6 chiffres envoye par email">
+            <input class="otp-box" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Chiffre 1">
+            <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 2">
+            <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 3">
+            <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
+            <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 5">
+            <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 6">
+          </div>
+          <input id="admin-otp" type="text" class="sr-only" tabindex="-1" aria-hidden="true">
+        </div>
+        <button id="btn-admin-go" class="primary-btn" type="button" data-i18n="login.go">Acceder au tableau de bord</button>
         <p id="admin-otp-note" class="hint hidden"></p>
         <p id="admin-error" class="feedback error hidden"></p>
       </div>
@@ -159,20 +214,26 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               </span>
               <div>
-                <h3>Tableau de bord</h3>
-                <p id="dash-range-label" class="hint">Chargement...</p>
+                <h3 data-i18n="dash.title">Tableau de bord</h3>
+                <p id="dash-range-label" class="hint" data-i18n="dash.loading">Chargement...</p>
               </div>
             </div>
+            <div class="quick-ranges" role="group" aria-label="Periodes rapides">
+              <button class="qr-chip" type="button" data-range="today" data-i18n="qr.today">Aujourd'hui</button>
+              <button class="qr-chip" type="button" data-range="7d" data-i18n="qr.7d">7 jours</button>
+              <button class="qr-chip" type="button" data-range="30d" data-i18n="qr.30d">30 jours</button>
+              <button class="qr-chip" type="button" data-range="month" data-i18n="qr.month">Ce mois</button>
+            </div>
             <div class="range-row">
-              <label class="range-field">Du
+              <label class="range-field"><span data-i18n="range.from">Du</span>
                 <input id="rng-from" type="date">
               </label>
-              <label class="range-field">Au
+              <label class="range-field"><span data-i18n="range.to">Au</span>
                 <input id="rng-to" type="date">
               </label>
               <button id="btn-load" class="primary-btn range-btn" type="button">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                Charger
+                <span data-i18n="btn.load">Charger</span>
               </button>
             </div>
           </div>
@@ -184,72 +245,72 @@
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </span>
             <b id="kpi-staff">0</b>
-            <span>Effectif</span>
+            <span data-i18n="kpi.staff">Effectif</span>
           </div>
           <div class="kpi">
             <span class="kpi-icon kpi-emerald" aria-hidden="true">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
             </span>
             <b id="kpi-onsite">0</b>
-            <span>Sur place</span>
+            <span data-i18n="kpi.onsite">Sur place</span>
           </div>
           <div class="kpi">
             <span class="kpi-icon kpi-blue" aria-hidden="true">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
             </span>
             <b id="kpi-in">0</b>
-            <span>Entrees aujourd'hui</span>
+            <span data-i18n="kpi.in">Entrees aujourd'hui</span>
           </div>
           <div class="kpi">
             <span class="kpi-icon kpi-amber" aria-hidden="true">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </span>
             <b id="kpi-out">0</b>
-            <span>Sorties aujourd'hui</span>
+            <span data-i18n="kpi.out">Sorties aujourd'hui</span>
           </div>
         </div>
 
-        <p class="stat-caption">Periode selectionnee</p>
+        <p class="stat-caption" data-i18n="stats.period">Periode selectionnee</p>
         <div class="report-summary stat-row">
           <div class="stat stat-in">
             <b id="rp-hours">0h</b>
-            <span>Total heures</span>
+            <span data-i18n="stats.hours">Total heures</span>
           </div>
           <div class="stat stat-on">
             <b id="rp-days">0</b>
-            <span>Jours presents</span>
+            <span data-i18n="stats.days">Jours presents</span>
           </div>
           <div class="stat stat-out">
             <b id="rp-late">0</b>
-            <span>Retards</span>
+            <span data-i18n="stats.late">Retards</span>
           </div>
           <div class="stat stat-in">
             <b id="rp-miss">0</b>
-            <span>Pas de sortie</span>
+            <span data-i18n="stats.missingOut">Pas de sortie</span>
           </div>
         </div>
 
         <div class="card block chart-block">
           <div class="block-head collapsible">
-            <h3>Heures par jour</h3>
+            <h3 data-i18n="chart.hoursDay">Heures par jour</h3>
             <span id="chart-pill" class="pill"></span>
           </div>
           <div class="block-body">
             <div id="hours-chart" class="bar-chart" role="img" aria-label="Heures travaillees par jour sur la periode"></div>
-            <p id="hours-empty" class="hint hidden">Aucune donnee sur cette periode.</p>
+            <p id="hours-empty" class="hint hidden" data-i18n="chart.empty">Aucune donnee sur cette periode.</p>
           </div>
         </div>
 
         <div class="card block">
           <div class="block-head collapsible">
-            <h3>Present maintenant</h3>
+            <h3 data-i18n="live.present">Present maintenant</h3>
             <span id="on-site-count" class="pill"></span>
           </div>
           <div class="block-body">
             <div id="on-site-list" class="chips"></div>
             <div class="absent-block">
               <div class="block-head">
-                <h3>Pas encore pointe</h3>
+                <h3 data-i18n="live.notYet">Pas encore pointe</h3>
                 <span id="absent-count" class="pill"></span>
               </div>
               <div id="absent-list" class="chips"></div>
@@ -259,22 +320,35 @@
 
         <div class="card block">
           <div class="block-head collapsible">
-            <h3>Effectif complet</h3>
+            <h3 data-i18n="people.title">Effectif complet</h3>
             <span id="people-count" class="pill"></span>
           </div>
           <div class="block-body">
-            <p class="hint">Rapport de tout le monde sur la periode : chaque membre de l'effectif apparait, meme sans pointage.</p>
+            <p class="hint" data-i18n="people.hint">Rapport de tout le monde sur la periode : chaque membre de l'effectif apparait, meme sans pointage.</p>
+            <div class="table-tools">
+              <div class="search-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input id="people-search" type="search" data-i18n-ph="people.searchPh" placeholder="Rechercher nom, email, departement..." autocomplete="off">
+              </div>
+            </div>
             <div class="table-wrap people-table">
               <table id="people-table">
                 <thead>
-                  <tr><th>Nom</th><th>Jours</th><th>Heures</th><th>Moy./jour</th><th>Retards</th><th>Aujourd'hui</th></tr>
+                  <tr>
+                    <th class="sortable" data-key="name" data-i18n="th.name">Nom</th>
+                    <th class="sortable" data-key="daysPresent" data-i18n="th.days">Jours</th>
+                    <th class="sortable" data-key="totalHours" data-i18n="th.hours">Heures</th>
+                    <th class="sortable" data-key="avgHours" data-i18n="th.avg">Moy./jour</th>
+                    <th class="sortable" data-key="lateCount" data-i18n="stats.late">Retards</th>
+                    <th class="sortable" data-key="statusToday" data-i18n="th.today">Aujourd'hui</th>
+                  </tr>
                 </thead>
                 <tbody></tbody>
               </table>
             </div>
             <button id="btn-people-csv" class="ghost-btn sm" type="button">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Exporter l'effectif (CSV)
+              <span data-i18n="btn.peopleCsv">Exporter l'effectif (CSV)</span>
             </button>
           </div>
         </div>
@@ -286,10 +360,23 @@
           </div>
           <div class="block-body">
             <p class="hint">Detail des pointages de la periode.</p>
+            <div class="table-tools">
+              <div class="search-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input id="report-search" type="search" placeholder="Rechercher un nom..." autocomplete="off">
+              </div>
+            </div>
             <div class="table-wrap">
               <table id="report-table">
                 <thead>
-                  <tr><th>Date</th><th>Nom</th><th>Entree</th><th>Sortie</th><th>Heures</th><th>Statut</th></tr>
+                  <tr>
+                    <th class="sortable" data-key="date">Date</th>
+                    <th class="sortable" data-key="name">Nom</th>
+                    <th class="sortable" data-key="in">Entree</th>
+                    <th class="sortable" data-key="out">Sortie</th>
+                    <th class="sortable" data-key="hours">Heures</th>
+                    <th class="sortable" data-key="status">Statut</th>
+                  </tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -354,13 +441,19 @@
               <label class="range-field">Departement <span class="opt">(facultatif)</span>
                 <input id="emp-dept" type="text" placeholder="Informatique" autocomplete="off">
               </label>
+              <label class="range-field">Debut de journee <span class="opt">(HH:MM, facultatif)</span>
+                <input id="emp-shift-start" type="time" autocomplete="off">
+              </label>
+              <label class="range-field">Fin de journee <span class="opt">(HH:MM, facultatif)</span>
+                <input id="emp-shift-end" type="time" autocomplete="off">
+              </label>
               <button id="btn-emp-add" class="ghost-btn range-btn" type="button">Ajouter</button>
             </div>
             <p id="emp-error" class="feedback error hidden"></p>
             <div class="table-wrap emp-table">
               <table id="emp-table">
                 <thead>
-                  <tr><th>Nom</th><th>Email</th><th>Departement</th><th></th></tr>
+                  <tr><th>Nom</th><th>Email</th><th>Departement</th><th>Horaires</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -395,10 +488,138 @@
             </div>
           </div>
         </div>
+
+        <div class="card block collapsed">
+          <div class="block-head collapsible">
+            <h3>Conges</h3>
+            <span id="lv-count" class="pill"></span>
+          </div>
+          <div class="block-body">
+            <p class="hint">Conges approuves : les personnes concernees ne sont plus comptees comme absentes pendant cette periode.</p>
+            <div class="emp-form">
+              <label class="range-field">Email
+                <input id="lv-email" type="email" placeholder="vous@entreprise.com" autocomplete="off">
+              </label>
+              <label class="range-field">Du
+                <input id="lv-start" type="date">
+              </label>
+              <label class="range-field">Au
+                <input id="lv-end" type="date">
+              </label>
+              <label class="range-field">Motif <span class="opt">(facultatif)</span>
+                <input id="lv-reason" type="text" placeholder="Conge annuel, maladie..." autocomplete="off">
+              </label>
+              <button id="btn-lv-add" class="ghost-btn range-btn" type="button">Ajouter</button>
+            </div>
+            <p id="lv-error" class="feedback error hidden"></p>
+            <div class="table-wrap emp-table">
+              <table id="lv-table">
+                <thead>
+                  <tr><th>Email</th><th>Du</th><th>Au</th><th>Motif</th><th></th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card block collapsed">
+          <div class="block-head collapsible">
+            <h3>Jours feries</h3>
+            <span id="hf-count" class="pill"></span>
+          </div>
+          <div class="block-body">
+            <p class="hint">Un jour ferie n'est pas compte comme absence pour personne.</p>
+            <div class="emp-form">
+              <label class="range-field">Date
+                <input id="hf-date" type="date">
+              </label>
+              <label class="range-field">Nom
+                <input id="hf-name" type="text" placeholder="Fete du travail" autocomplete="off">
+              </label>
+              <button id="btn-hf-add" class="ghost-btn range-btn" type="button">Ajouter</button>
+            </div>
+            <p id="hf-error" class="feedback error hidden"></p>
+            <div class="table-wrap emp-table">
+              <table id="hf-table">
+                <thead>
+                  <tr><th>Date</th><th>Nom</th><th></th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card block collapsed">
+          <div class="block-head collapsible">
+            <h3>Corrections de pointage</h3>
+          </div>
+          <div class="block-body">
+            <p class="hint">Corrigez un pointage oublie ou errone. Chaque modification est journalisee avec son auteur.</p>
+            <div class="emp-form">
+              <label class="range-field">Email
+                <input id="co-email" type="email" placeholder="vous@entreprise.com" autocomplete="off">
+              </label>
+              <label class="range-field">Date
+                <input id="co-date" type="date">
+              </label>
+              <label class="range-field">Correction
+                <select id="co-mode">
+                  <option value="set_out">Sortie oubliee (ajouter une sortie)</option>
+                  <option value="add_pair">Paire complete (entree + sortie)</option>
+                  <option value="remove_last">Supprimer le dernier pointage</option>
+                </select>
+              </label>
+              <label class="range-field co-in-field">Entree (HH:MM)
+                <input id="co-in" type="time">
+              </label>
+              <label class="range-field">Sortie (HH:MM)
+                <input id="co-out" type="time">
+              </label>
+              <button id="btn-co-apply" class="ghost-btn range-btn" type="button">Appliquer</button>
+            </div>
+            <p id="co-error" class="feedback error hidden"></p>
+            <p id="co-result" class="hint hidden"></p>
+          </div>
+        </div>
+
+        <div class="card block collapsed">
+          <div class="block-head collapsible">
+            <h3>Ecran d'entree (QR rotatif)</h3>
+          </div>
+          <div class="block-body">
+            <p class="hint">Ouvrez cette page sur la tablette ou l'ecran a l'entree du bureau : elle affiche un QR code qui se renouvelle toutes les 30 secondes. L'ancien QR statique reste valable en secours.</p>
+            <a id="link-screen" class="ghost-btn range-btn" href="office-screen.html" target="_blank" rel="noopener">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Ouvrir l'ecran d'entree
+            </a>
+          </div>
+        </div>
       </div>
     </section>
 
   </main>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <nav class="bottom-nav" role="navigation" aria-label="Navigation principale">
+    <button id="nav-home" class="nav-item active" type="button">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span data-i18n="nav.home">Accueil</span>
+    </button>
+    <button id="btn-history" class="nav-item" type="button">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span data-i18n="nav.history">Historique</span>
+    </button>
+    <button id="btn-admin" class="nav-item" type="button">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span data-i18n="nav.admin">Admin</span>
+    </button>
+    <button id="btn-help" class="nav-item" type="button">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span data-i18n="nav.help">Aide</span>
+    </button>
+  </nav>
 
   <!-- ============ PROFILE ============ -->
   <div id="modal-profile" class="modal hidden" role="dialog" aria-modal="true" aria-label="Vos coordonnees">
@@ -420,6 +641,10 @@
       <input id="pf-tenant" type="text" placeholder="ex. acme" autocomplete="off"
              aria-describedby="pf-tenant-hint">
       <p id="pf-tenant-hint" class="hint">Laissez vide pour l'espace par defaut.</p>
+      <label class="check-row" for="pf-remind">
+        <input id="pf-remind" type="checkbox">
+        <span>M'avertir sur cet appareil si j'oublie de pointer ma sortie</span>
+      </label>
       <p id="pf-privacy" class="hint">Votre nom, email et historique de pointage sont enregistres dans la feuille Google de l'entreprise. Seuls vous (avec cet email) et les admins peuvent les consulter. Effacez les donnees de ce site si vous partagez cet appareil.</p>
       <p id="profile-error" class="feedback error hidden"></p>
       <button id="btn-profile-save" class="primary-btn" type="button">Enregistrer</button>
@@ -475,6 +700,32 @@
     </div>
   </div>
 
+  <!-- ============ SELFIE ============ -->
+  <div id="modal-selfie" class="modal hidden" role="dialog" aria-modal="true" aria-label="Photo de validation">
+    <div class="modal-card card scan-card">
+      <div class="modal-head">
+        <span class="brand-mark sm" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </span>
+        <div>
+          <h3 id="selfie-title">Photo de validation</h3>
+          <p class="muted">Cette photo sera jointe a votre pointage.</p>
+        </div>
+      </div>
+      <div class="scan-frame selfie-frame">
+        <video id="selfie-video" playsinline muted></video>
+        <img id="selfie-preview" class="hidden" alt="Apercu de la photo">
+      </div>
+      <p id="selfie-error" class="feedback error hidden"></p>
+      <button id="btn-selfie-capture" class="primary-btn" type="button">Prendre la photo</button>
+      <div class="btn-row hidden" id="selfie-confirm-row">
+        <button id="btn-selfie-retake" class="ghost-btn" type="button">Reprendre</button>
+        <button id="btn-selfie-use" class="primary-btn" type="button">Utiliser cette photo</button>
+      </div>
+      <button id="btn-selfie-cancel" class="ghost-btn" type="button">Annuler</button>
+    </div>
+  </div>
+
   <!-- ============ HISTORY ============ -->
   <div id="modal-history" class="modal hidden" role="dialog" aria-modal="true" aria-label="Mon historique de presence">
     <div class="modal-card card">
@@ -485,6 +736,24 @@
         <div>
           <h3>Votre presence</h3>
           <p id="hist-range" class="muted"></p>
+        </div>
+      </div>
+      <div class="heatmap-block">
+        <div class="block-head">
+          <h4 id="heat-month-label" class="heat-month-label">Mois</h4>
+        </div>
+        <div class="heatmap-weekdays" aria-hidden="true">
+          <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+        </div>
+        <div id="history-heatmap" class="heatmap-grid" role="img" aria-label="Calendrier de presence du mois"></div>
+        <div class="heatmap-legend" aria-hidden="true">
+          <span>Moins</span>
+          <span class="hm-cell lvl-0"></span>
+          <span class="hm-cell lvl-1"></span>
+          <span class="hm-cell lvl-2"></span>
+          <span class="hm-cell lvl-3"></span>
+          <span class="hm-cell lvl-4"></span>
+          <span>Plus</span>
         </div>
       </div>
       <div class="report-summary stat-row">
@@ -591,6 +860,6 @@
 
   <script src="config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

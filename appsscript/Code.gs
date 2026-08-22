@@ -27,6 +27,14 @@ var SHEET_AUDIT = 'Audit';
 var SHEET_OFFICES = 'Offices';
 var SHEET_EMPLOYEES = 'Employees';
 var SHEET_ADMINS = 'Admins';
+var SHEET_LEAVE = 'Leave';
+var SHEET_HOLIDAYS = 'Holidays';
+
+/* Break state machine: OUT -> Check-in -> Break-out -> Break-in -> Check-out.
+   A scan while on break resumes work (Break-in); a second button press while
+   checked in starts a break. */
+var ROT_INTERVAL_SEC = 30;
+var SELFIE_MAX_BYTES = 400000;
 
 function setup() {
   var master = SpreadsheetApp.getActiveSpreadsheet();
@@ -45,6 +53,7 @@ function onOpen() {
       .createMenu('Attendance')
       .addItem('Enable daily digest (17:00)', 'enableDailyDigest')
       .addItem('Send digest now', 'sendDailyDigestNow')
+      .addItem('Enable check-out reminders', 'enableCheckoutReminders')
       .addItem('Rotate admin PIN', 'rotateAdminPin')
       .addItem('Rotate QR secret', 'rotateQrSecret')
       .addItem('Enable auto-purge (retentionDays)', 'enableAutoPurge')
@@ -187,6 +196,30 @@ function handleRequest_(e) {
     }
     if (action === 'admin_remove') {
       return json_(adminRemove_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'office_screen') {
+      return json_(officeScreen_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'leave_list') {
+      return json_(leaveList_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'leave_add') {
+      return json_(leaveAdd_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'leave_delete') {
+      return json_(leaveDelete_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'holiday_list') {
+      return json_(holidayList_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'holiday_add') {
+      return json_(holidayAdd_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'holiday_delete') {
+      return json_(holidayDelete_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'correction_apply') {
+      return json_(correctionApply_(payload, cfg, now, tz, ss));
     }
     return json_(error_('Unknown action: ' + action));
   } catch (err) {
@@ -345,6 +378,9 @@ function ensureSheets_(ss) {
     c.appendRow(['writeQuotaTenant', '600']);
     c.appendRow(['retentionDays', '0']);
     c.appendRow(['lateAfter', '']);
+    c.appendRow(['selfieMode', 'off']);
+    c.appendRow(['reminderCheckInAfter', '']);
+    c.appendRow(['reminderCheckOutAfter', '']);
   }
   if (!ss.getSheetByName(SHEET_ATT)) {
     var a = ss.insertSheet(SHEET_ATT);
@@ -381,6 +417,49 @@ function ensureSheets_(ss) {
     ad.appendRow(['Email', 'Name', 'Added On', 'Added By']);
     ad.getRange('A1:D1').setFontWeight('bold');
   }
+  if (!ss.getSheetByName(SHEET_LEAVE)) {
+    var lv = ss.insertSheet(SHEET_LEAVE);
+    lv.appendRow(['Email', 'StartDate', 'EndDate', 'Reason', 'Created', 'CreatedBy']);
+    lv.getRange('A1:F1').setFontWeight('bold');
+  }
+  if (!ss.getSheetByName(SHEET_HOLIDAYS)) {
+    var ho = ss.insertSheet(SHEET_HOLIDAYS);
+    ho.appendRow(['Date', 'Name']);
+    ho.getRange('A1:B1').setFontWeight('bold');
+  }
+  migrateAttendanceSheet_(ss);
+  migrateEmployeesSheet_(ss);
+}
+
+/**
+ * Add the Selfie column (L) to older Attendance sheets that predate selfies.
+ */
+function migrateAttendanceSheet_(ss) {
+  var att = ss.getSheetByName(SHEET_ATT);
+  if (!att) return;
+  var lastCol = att.getLastColumn();
+  if (lastCol >= 12) return;
+  if (String(att.getRange(1, lastCol).getValue()).trim() !== 'Selfie') {
+    att.insertColumnsAfter(lastCol, 12 - lastCol);
+    att.getRange(1, 12).setValue('Selfie');
+    att.getRange(1, 12).setFontWeight('bold');
+  }
+}
+
+/**
+ * Older Employees sheets have Name, Email, Department, Created. Append the
+ * ShiftStart / ShiftEnd columns (E, F) used for per-person shift times.
+ */
+function migrateEmployeesSheet_(ss) {
+  var emp = ss.getSheetByName(SHEET_EMPLOYEES);
+  if (!emp) return;
+  var lastCol = emp.getLastColumn();
+  if (lastCol >= 6) return;
+  if (lastCol === 4) {
+    emp.getRange(1, 5).setValue('ShiftStart');
+    emp.getRange(1, 6).setValue('ShiftEnd');
+    emp.getRange('E1:F1').setFontWeight('bold');
+  }
 }
 
 function getConfig_(ss) {
@@ -416,6 +495,10 @@ function getConfig_(ss) {
   cfg.writeQuotaPerEmail = Number(cfg.writeQuotaPerEmail || 60);
   cfg.writeQuotaTenant = Number(cfg.writeQuotaTenant || 600);
   cfg.retentionDays = Number(cfg.retentionDays || 0);
+  cfg.selfieMode = String(cfg.selfieMode || 'off').toLowerCase();
+  if (['off', 'optional', 'required'].indexOf(cfg.selfieMode) === -1) cfg.selfieMode = 'off';
+  cfg.reminderCheckInAfter = timeToSec_(cfg.reminderCheckInAfter || '') >= 0 ? cfg.reminderCheckInAfter : '';
+  cfg.reminderCheckOutAfter = timeToSec_(cfg.reminderCheckOutAfter || '') >= 0 ? cfg.reminderCheckOutAfter : '';
 
   var secPin = getSecret_(ss, 'adminPin');
   if (secPin) cfg.adminPin = secPin;
@@ -436,7 +519,77 @@ function publicConfig_(cfg, ss) {
     officeLat: cfg.officeLat,
     officeLng: cfg.officeLng,
     radiusMeters: cfg.radiusMeters,
-    offices: offices
+    offices: offices,
+    selfieMode: cfg.selfieMode,
+    reminderCheckInAfter: cfg.reminderCheckInAfter,
+    reminderCheckOutAfter: cfg.reminderCheckOutAfter
+  };
+}
+
+/* ================= Rotating QR (TOTP-style) ================= */
+
+/**
+ * Secret used to derive rotating entrance codes. Stored in Script Properties
+ * per tenant; derived deterministically from qrSecret for legacy installs so
+ * nothing breaks on upgrade.
+ */
+function rotatingSecret_(ss) {
+  var s = getSecret_(ss, 'totpSecret');
+  if (s) return s;
+  var seed = String(getSecret_(ss, 'qrSecret') || ss.getId());
+  var raw = Utilities.computeHmacSha256Signature('rotating:' + ss.getId(), seed);
+  var derived = Utilities.base64Encode(raw).replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+  setSecret_('totpSecret', derived, ss.getId());
+  return derived;
+}
+
+function rotatingWindow_(ms) {
+  return Math.floor(ms / (ROT_INTERVAL_SEC * 1000));
+}
+
+/**
+ * HOTP-style truncation: HMAC-SHA256(secret, windowIndex) -> 6-digit code.
+ */
+function rotatingCode_(ss, win) {
+  var sig = Utilities.computeHmacSha256Signature('ROT' + win, rotatingSecret_(ss));
+  var b = [];
+  for (var i = 0; i < 4; i++) b.push(sig[i] & 0xff);
+  var v = ((b[0] & 0x7f) << 24) | (b[1] << 16) | (b[2] << 8) | b[3];
+  var code = ((v % 1000000) + 1000000) % 1000000;
+  var s = String(code);
+  while (s.length < 6) s = '0' + s;
+  return 'ROT-' + s;
+}
+
+/** Accept the current or previous window (30s clock skew tolerance). */
+function matchRotating_(ss, qr, nowMs) {
+  if (String(qr).indexOf('ROT-') !== 0) return false;
+  var w = rotatingWindow_(nowMs);
+  for (var i = 1; i >= -1; i--) {
+    if (String(qr) === rotatingCode_(ss, w + i)) return true;
+  }
+  return false;
+}
+
+/**
+ * Feed for the office display screen (office-screen.html). Admin-gated so a
+ * random visitor cannot fetch live entrance codes from outside the office.
+ */
+function officeScreen_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  var ms = now.getTime();
+  var win = rotatingWindow_(ms);
+  return {
+    ok: true,
+    screen: {
+      token: rotatingCode_(ss, win),
+      nextToken: rotatingCode_(ss, win + 1),
+      intervalSec: ROT_INTERVAL_SEC,
+      secondsLeft: Math.ceil((win + 1) * ROT_INTERVAL_SEC * 1000 - ms),
+      appName: cfg.appName,
+      serverTime: Utilities.formatDate(now, tz, 'HH:mm:ss')
+    }
   };
 }
 
@@ -480,6 +633,7 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
   var qr = String(payload.qr || '').trim();
   var name = String(payload.name || '').trim();
   var email = String(payload.email || '').trim().toLowerCase();
+  var mode = String(payload.mode || 'scan').toLowerCase();
 
   if (!name || !email) return error_('Name and email are required');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Invalid email address');
@@ -490,14 +644,22 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
     return error_('Request expired. Please scan again.');
   }
 
+  /* Resolve which office this scan belongs to. Button-driven breaks skip
+     QR validation entirely - no need to walk to the poster. */
   var offices = getOffices_(ss, cfg);
   var office = null;
-  for (var o = 0; o < offices.length; o++) {
-    if (String(offices[o].token) === qr) { office = offices[o]; break; }
-  }
-  if (!office) {
-    logAudit_(ss, email, 'Invalid QR token', 'INVALID_QR', now, tz);
-    return error_('Invalid QR code. This does not match an office code.');
+  if (mode !== 'break' && mode !== 'resume') {
+    for (var o = 0; o < offices.length; o++) {
+      if (String(offices[o].token) === qr) { office = offices[o]; break; }
+    }
+    if (!office && matchRotating_(ss, qr, now.getTime())) {
+      // Rotating entrance code: resolves to the first/default office.
+      office = offices[0] || { name: cfg.officeName };
+    }
+    if (!office) {
+      logAudit_(ss, email, 'Invalid QR token', 'INVALID_QR', now, tz);
+      return error_('Invalid QR code. This does not match an office code.');
+    }
   }
 
   if (!isEmailAllowed_(ss, email, cfg)) {
@@ -508,32 +670,88 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
   var employee = findEmployee_(ss, email);
   if (employee && employee.name) name = employee.name;
 
-  var status = 'On-site';
   var att = ss.getSheetByName(SHEET_ATT);
   var data = att.getDataRange().getValues();
   var dateStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
   var timeStr = Utilities.formatDate(now, tz, 'HH:mm:ss');
 
-  var lastAction = null;
-  var lastTimeSec = -1;
+  var todayRows = [];
   for (var i = data.length - 1; i > 0; i--) {
     var row = data[i];
-    var rowDate = cellDateStr_(row[0], tz);
-    if (row[3] && String(row[3]).toLowerCase() === email && rowDate === dateStr) {
-      lastAction = String(row[4]);
-      lastTimeSec = timeToSec_(row[1]);
-      break;
+    if (row[3] && String(row[3]).toLowerCase() === email && cellDateStr_(row[0], tz) === dateStr) {
+      todayRows.push({ action: String(row[4]), sec: timeToSec_(String(row[1])), office: String(row[10] || '') });
     }
   }
 
+  var lastAction = todayRows.length ? todayRows[0].action : null;
+  var lastTimeSec = todayRows.length ? todayRows[0].sec : -1;
+
   var nowSec = timeToSec_(Utilities.formatDate(now, tz, 'HH:mm:ss'));
-  if (lastTimeSec >= 0 && (nowSec - lastTimeSec) < cfg.minScanIntervalSec) {
+  var sinceLast = lastTimeSec >= 0 ? Math.abs(nowSec - lastTimeSec) : -1;
+  if (sinceLast >= 0 && sinceLast < cfg.minScanIntervalSec) {
     logAudit_(ss, email, 'Scan too soon after previous', 'TOO_QUICK', now, tz);
     return {
       ok: false,
       code: 'TOO_QUICK',
-      message: 'Please wait ' + (cfg.minScanIntervalSec - (nowSec - lastTimeSec)) + 's before scanning again.'
+      message: 'Please wait ' + Math.ceil(cfg.minScanIntervalSec - sinceLast) + 's before scanning again.'
     };
+  }
+
+  /* State machine: OUT -> Check-in -> Break-out -> Break-in -> Check-out.
+     A scan while on break resumes work; the Pause button starts a break
+     without needing the QR again. */
+  var stateOut = !lastAction || lastAction === 'Check-out';
+  var stateBreak = lastAction === 'Break-out';
+  var stateIn = lastAction === 'Check-in' || lastAction === 'Break-in';
+
+  var mode = String(payload.mode || 'scan').toLowerCase();
+  var action;
+  var status;
+
+  if (mode === 'break' || mode === 'resume') {
+    if (mode === 'break') {
+      if (!stateIn) {
+        return error_(stateOut ? 'You are not checked in yet.' : 'You are already on a break.');
+      }
+      action = 'Break-out';
+      status = 'On-break';
+    } else {
+      if (!stateBreak) return error_('There is no break to resume.');
+      action = 'Break-in';
+      status = 'On-site';
+    }
+  } else {
+    if (stateOut) {
+      action = 'Check-in';
+      status = 'On-site';
+    } else if (stateBreak) {
+      action = 'Break-in';
+      status = 'On-site';
+    } else {
+      action = 'Check-out';
+      status = 'On-site';
+    }
+  }
+
+  /* Button-driven breaks have no scanned office - reuse the last one. */
+  if (!office) {
+    office = { name: (todayRows[0] && todayRows[0].office) || cfg.officeName || '' };
+  }
+
+  /* Selfie proof at check-in (config selfieMode: off | optional | required). */
+  var selfieFileId = '';
+  var photo = String(payload.photoDataUrl || '');
+  if (action === 'Check-in' && photo) {
+    selfieFileId = saveSelfie_(ss, cfg, email, name, dateStr, timeStr, photo);
+    if (!selfieFileId) {
+      logAudit_(ss, email, 'Selfie rejected (invalid or too large)', 'SELFIE_INVALID', now, tz);
+    }
+  }
+  if (action === 'Check-in' && cfg.selfieMode === 'required' && !selfieFileId) {
+    if (!photo) {
+      return { ok: false, code: 'SELFIE_REQUIRED', message: 'Un selfie est requis pour pointer l\'entree.' };
+    }
+    return error_('Impossible d\'enregistrer le selfie. Reessayez.');
   }
 
   if (!writeBudget_('attq:' + ss.getId() + ':' + email, cfg.writeQuotaPerEmail, 3600000)) {
@@ -545,8 +763,7 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
     return error_('Office is very busy right now. Try again in a few minutes.');
   }
 
-  var action = (lastAction === 'Check-in') ? 'Check-out' : 'Check-in';
-  att.appendRow([dateStr, timeStr, safeCell_(name), email, action, status, '', '', 0, qr, office.name]);
+  att.appendRow([dateStr, timeStr, safeCell_(name), email, action, status, '', '', 0, qr, office.name, selfieFileId]);
 
   return {
     ok: true,
@@ -554,8 +771,55 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
     date: dateStr,
     time: timeStr,
     status: status,
-    office: office.name
+    office: office.name || '',
+    selfieSaved: !!selfieFileId,
+    breakMinToday: computeBreakMinutes_(todayRows.concat([{ action: action, sec: nowSec }]))
   };
+}
+
+/**
+ * Total minutes spent on completed breaks (Break-out -> Break-in pairs) from
+ * a list of {action, sec} rows.
+ */
+function computeBreakMinutes_(rows) {
+  var sorted = [];
+  for (var i = 0; i < rows.length; i++) sorted.push(rows[i]);
+  sorted.sort(function (a, b) { return a.sec - b.sec; });
+  var open = -1;
+  var total = 0;
+  for (var j = 0; j < sorted.length; j++) {
+    if (sorted[j].action === 'Break-out') open = sorted[j].sec;
+    else if (sorted[j].action === 'Break-in' && open >= 0) {
+      total += Math.max(0, sorted[j].sec - open);
+      open = -1;
+    }
+  }
+  return Math.round(total / 60);
+}
+
+/**
+ * Save a base64 JPEG selfie into the "Attendance Selfies" Drive folder of the
+ * account that owns the script. Returns the Drive file id, or '' when the
+ * payload is not a valid small JPEG.
+ */
+function saveSelfie_(ss, cfg, email, name, dateStr, timeStr, photo) {
+  try {
+    var prefix = 'data:image/jpeg;base64,';
+    if (String(photo).indexOf(prefix) !== 0) return '';
+    var b64 = photo.slice(prefix.length).split(',').join('');
+    if (!b64 || b64.length > SELFIE_MAX_BYTES) return '';
+    var bytes = Utilities.base64Decode(b64);
+    if (!bytes || bytes.length < 1000) return '';
+    var folderName = (cfg.appName ? String(cfg.appName).replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 40) + ' ' : '') + 'Attendance Selfies';
+    var it = DriveApp.getRootFolder().getFoldersByName(folderName);
+    var folder = it.hasNext() ? it.next() : DriveApp.getRootFolder().createFolder(folderName);
+    var safeName = String(email).replace(/[^a-zA-Z0-9._@-]/g, '_').slice(0, 60);
+    var fname = dateStr + '_' + timeStr.replace(/:/g, '-') + '_' + safeName + '.jpg';
+    var file = folder.createFile(Utilities.newBlob(bytes, 'image/jpeg', fname));
+    return file.getId();
+  } catch (e) {
+    return '';
+  }
 }
 
 function isEmailAllowed_(ss, email, cfg) {
@@ -620,6 +884,7 @@ function adminData_(payload, cfg, now, tz, ss) {
   logAudit_(ss, '', 'Admin report viewed (' + from + ' to ' + to + ')', 'ADMIN_OK', now, tz);
 
   var onSite = {};
+  var onBreakSet = {};
   var checkedInToday = 0;
   var checkedOutToday = 0;
   var checkedInSet = {};
@@ -638,25 +903,66 @@ function adminData_(payload, cfg, now, tz, ss) {
       } else if (action === 'Check-out') {
         checkedOutToday++;
         delete onSite[email];
+        delete onBreakSet[email];
+      } else if (action === 'Break-out') {
+        onBreakSet[email] = String(r[2] || '');
+      } else if (action === 'Break-in') {
+        delete onBreakSet[email];
       }
     }
     if (d >= from && d <= to) rangeRows.push(r);
   }
 
   var onSiteNames = [];
+  var onBreakNames = [];
   for (var k in onSite) onSiteNames.push(onSite[k]);
   onSiteNames.sort();
+  for (var kb in onBreakSet) onBreakNames.push(onBreakSet[kb]);
+  onBreakNames.sort();
 
-  var absent = [];
-  var staff = expectedStaff_(ss);
-  for (var s = 0; s < staff.length; s++) {
-    if (!checkedInSet[staff[s].email]) absent.push(staff[s]);
+  /* Leave & holidays: approved leave and public holidays are not absences. */
+  var leaves = getLeavesInRange_(ss, from, to);
+  var holidays = getHolidaysInRange_(ss, from, to);
+  var holidayDates = {};
+  for (var h = 0; h < holidays.length; h++) holidayDates[holidays[h].date] = holidays[h].name;
+
+  function leaveCoversDay_(email, dateStr) {
+    for (var li = 0; li < leaves.length; li++) {
+      if (leaves[li].email !== email) continue;
+      if (dateStr >= leaves[li].start && dateStr <= leaves[li].end) return true;
+    }
+    return false;
   }
 
-  var lateSec = timeToSec_(cfg.lateAfter || '');
-  var report = computeReport_(rangeRows, from, to, lateSec, tz);
+  var isHolidayToday = !!holidayDates[today];
+  var absent = [];
+  var staff = expectedStaff_(ss);
+  if (!isHolidayToday) {
+    for (var s = 0; s < staff.length; s++) {
+      if (checkedInSet[staff[s].email]) continue;
+      if (leaveCoversDay_(staff[s].email, today)) continue;
+      absent.push(staff[s]);
+    }
+  }
 
-  var people = aggregatePeople_(report.pairs, staff, onSite, checkedInSet);
+  var report = computeReport_(rangeRows, from, to, lateResolver_(ss, cfg), tz);
+
+  var people = aggregatePeople_(report.pairs, staff, onSite, checkedInSet, onBreakSet);
+
+  /* Count approved-leave days per person inside the selected range. */
+  for (var p = 0; p < people.length; p++) {
+    var person = people[p];
+    person.leaveDays = 0;
+    for (var lv = 0; lv < leaves.length; lv++) {
+      if (leaves[lv].email !== person.email) continue;
+      person.leaveDays += daysOverlapCount_(from, to, leaves[lv].start, leaves[lv].end);
+    }
+    if (!person.statusToday && leaveCoversDay_(person.email, today)) {
+      person.statusToday = 'leave';
+    } else if (person.statusToday === 'absent' && leaveCoversDay_(person.email, today)) {
+      person.statusToday = 'leave';
+    }
+  }
 
   var adminSheet = ss.getSheetByName(SHEET_ADMINS);
   var admins = [];
@@ -687,12 +993,17 @@ function adminData_(payload, cfg, now, tz, ss) {
         checkedOutToday: checkedOutToday,
         onSite: onSiteNames.length,
         onSiteNames: onSiteNames,
+        onBreakNames: onBreakNames,
+        isHolidayToday: isHolidayToday,
+        holidayToday: holidayDates[today] || '',
         absent: absent
       },
       summary: report.summary,
       pairs: report.pairs,
       people: people,
-      admins: admins
+      admins: admins,
+      leaves: leaves,
+      holidays: holidays
     }
   };
 }
@@ -728,7 +1039,7 @@ function expectedStaff_(ss) {
  * (even with zero activity in the range) plus any email found in the attendance
  * data for the range. Aggregates days, hours, lates and missing check-outs.
  */
-function aggregatePeople_(pairs, staff, onSite, checkedInSet) {
+function aggregatePeople_(pairs, staff, onSite, checkedInSet, onBreakSet) {
   var byEmail = {};
   var order = [];
 
@@ -787,7 +1098,7 @@ function aggregatePeople_(pairs, staff, onSite, checkedInSet) {
     var key2 = order[i];
     person = byEmail[key2];
     if (onSite[key2]) {
-      person.statusToday = 'onsite';
+      person.statusToday = (onBreakSet && onBreakSet[key2]) ? 'break' : 'onsite';
     } else if (checkedInSet[key2]) {
       person.statusToday = 'out';
     } else if (!person.statusToday) {
@@ -829,8 +1140,7 @@ function myAttendance_(payload, cfg, now, tz, ss) {
     if (String(r[3] || '').toLowerCase() === email) rows.push(r);
   }
 
-  var lateSec = timeToSec_(cfg.lateAfter || '');
-  var report = computeReport_(rows, from, to, lateSec, tz);
+  var report = computeReport_(rows, from, to, lateResolver_(ss, cfg), tz);
 
   return {
     ok: true,
@@ -955,8 +1265,7 @@ function weekData_(payload, cfg, now, tz, ss) {
     if (d >= from && d <= to) rows.push(r);
   }
 
-  var lateSec = timeToSec_(cfg.lateAfter || '');
-  var report = computeReport_(rows, from, to, lateSec, tz);
+  var report = computeReport_(rows, from, to, lateResolver_(ss, cfg), tz);
 
   var byDate = {};
   for (var j = 0; j < report.pairs.length; j++) {
@@ -982,10 +1291,38 @@ function findEmployee_(ss, email) {
   email = String(email || '').trim().toLowerCase();
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][1] || '').trim().toLowerCase() === email) {
-      return { name: String(rows[i][0] || ''), department: String(rows[i][2] || '') };
+      return {
+        name: String(rows[i][0] || ''),
+        department: String(rows[i][2] || ''),
+        shiftStart: String(rows[i][4] || ''),
+        shiftEnd: String(rows[i][5] || '')
+      };
     }
   }
   return null;
+}
+
+/**
+ * Per-person "late after" threshold: an employee with ShiftStart set gets
+ * their own cutoff; everyone else falls back to the global lateAfter config.
+ */
+function lateResolver_(ss, cfg) {
+  var defSec = timeToSec_(cfg.lateAfter || '');
+  var map = {};
+  var emp = ss.getSheetByName(SHEET_EMPLOYEES);
+  if (emp) {
+    var rows = emp.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      var e = String(rows[i][1] || '').trim().toLowerCase();
+      var s = timeToSec_(String(rows[i][4] || ''));
+      if (e && s >= 0) map[e] = s;
+    }
+  }
+  return function (email) {
+    var k = String(email || '').toLowerCase();
+    if (map.hasOwnProperty(k)) return map[k];
+    return defSec;
+  };
 }
 
 function employeesData_(payload, cfg, now, tz, ss) {
@@ -1003,7 +1340,9 @@ function employeesData_(payload, cfg, now, tz, ss) {
         name: String(rows[i][0] || ''),
         email: email,
         department: String(rows[i][2] || ''),
-        created: String(rows[i][3] || '')
+        created: String(rows[i][3] || ''),
+        shiftStart: String(rows[i][4] || ''),
+        shiftEnd: String(rows[i][5] || '')
       });
     }
   }
@@ -1022,18 +1361,33 @@ function employeeAdd_(payload, cfg, now, tz, ss) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Invalid email address');
   name = safeCell_(name);
   department = safeCell_(department);
+  var shiftStart = normShiftTime_(payload.shiftStart);
+  var shiftEnd = normShiftTime_(payload.shiftEnd);
+  if (String(payload.shiftStart || '').trim() && !shiftStart) return error_('ShiftStart must be HH:MM.');
+  if (String(payload.shiftEnd || '').trim() && !shiftEnd) return error_('ShiftEnd must be HH:MM.');
 
   var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
   var rows = sheet.getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][1] || '').trim().toLowerCase() === email) {
       var created = String(rows[i][3] || Utilities.formatDate(now, tz, 'yyyy-MM-dd'));
-      sheet.getRange(i + 1, 1, 1, 4).setValues([[name, email, department, created]]);
+      sheet.getRange(i + 1, 1, 1, 6).setValues([[name, email, department, created, shiftStart, shiftEnd]]);
       return { ok: true, employee: { name: name, email: email, department: department } };
     }
   }
-  sheet.appendRow([name, email, department, Utilities.formatDate(now, tz, 'yyyy-MM-dd')]);
+  sheet.appendRow([name, email, department, Utilities.formatDate(now, tz, 'yyyy-MM-dd'), shiftStart, shiftEnd]);
   return { ok: true, employee: { name: name, email: email, department: department } };
+}
+
+/** Normalize an HH:MM (or H:MM) string; returns '' when invalid. */
+function normShiftTime_(v) {
+  var s = String(v || '').trim();
+  var m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!m) return '';
+  var h = Number(m[1]);
+  var mm = Number(m[2]);
+  if (isNaN(h) || isNaN(mm) || h > 23 || mm > 59) return '';
+  return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm;
 }
 
 function employeeDelete_(payload, cfg, now, tz, ss) {
@@ -1052,6 +1406,197 @@ function employeeDelete_(payload, cfg, now, tz, ss) {
     }
   }
   return error_('Employee not found: ' + email);
+}
+
+/* ================= Leave & holidays ================= */
+
+/** Approved leave entries overlapping [from, to]. */
+function getLeavesInRange_(ss, from, to) {
+  var sheet = ss.getSheetByName(SHEET_LEAVE);
+  var out = [];
+  if (!sheet) return out;
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    var start = sanitizeDate_(rows[i][1], '');
+    var end = sanitizeDate_(rows[i][2], '');
+    var email = String(rows[i][0] || '').trim().toLowerCase();
+    if (!email || !start || !end) continue;
+    if (end < from || start > to) continue;
+    out.push({ email: email, start: start, end: end, reason: String(rows[i][3] || '') });
+  }
+  return out;
+}
+
+/** Public holidays within [from, to]. */
+function getHolidaysInRange_(ss, from, to) {
+  var sheet = ss.getSheetByName(SHEET_HOLIDAYS);
+  var out = [];
+  if (!sheet) return out;
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    var d = sanitizeDate_(rows[i][0], '');
+    if (!d || d < from || d > to) continue;
+    out.push({ date: d, name: String(rows[i][1] || 'Holiday') });
+  }
+  out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  return out;
+}
+
+/** Number of calendar days in the intersection of two inclusive ranges. */
+function daysOverlapCount_(aFrom, aTo, bFrom, bTo) {
+  var s = aFrom > bFrom ? aFrom : bFrom;
+  var e = aTo < bTo ? aTo : bTo;
+  if (e < s) return 0;
+  var ms = new Date(e + 'T00:00:00Z') - new Date(s + 'T00:00:00Z');
+  return Math.floor(ms / 86400000) + 1;
+}
+
+function leaveList_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  return { ok: true, leaves: getLeavesInRange_(ss, '0000-01-01', '9999-12-31') };
+}
+
+function leaveAdd_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var email = String(payload.email || '').trim().toLowerCase();
+  var start = sanitizeDate_(payload.start, '');
+  var end = sanitizeDate_(payload.end, start);
+  var reason = safeCell_(String(payload.reason || '').trim());
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Email invalide.');
+  if (!start || !end) return error_('Dates invalides (AAAA-MM-JJ requis).');
+  if (end < start) return error_('La fin doit etre apres le debut.');
+
+  ss.getSheetByName(SHEET_LEAVE).appendRow([
+    email, start, end, reason,
+    Utilities.formatDate(now, tz, 'yyyy-MM-dd'),
+    safeCell_(String(payload.adminEmail || 'admin'))
+  ]);
+  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Leave added: ' + email + ' ' + start + '..' + end, 'LEAVE_ADDED', now, tz);
+  return { ok: true };
+}
+
+function leaveDelete_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  var idx = Number(payload.index);
+  var sheet = ss.getSheetByName(SHEET_LEAVE);
+  var rows = sheet.getDataRange().getValues();
+  if (!isFinite(idx) || idx < 1 || idx >= rows.length) return error_('Entree introuvable.');
+  var removed = rows[idx];
+  sheet.deleteRow(idx + 1);
+  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Leave removed: ' + removed[0] + ' ' + removed[1] + '..' + removed[2], 'LEAVE_REMOVED', now, tz);
+  return { ok: true };
+}
+
+function holidayList_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  return { ok: true, holidays: getHolidaysInRange_(ss, '0000-01-01', '9999-12-31') };
+}
+
+function holidayAdd_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var d = sanitizeDate_(payload.date, '');
+  var name = safeCell_(String(payload.name || '').trim() || 'Jour ferie');
+  if (!d) return error_('Date invalide (AAAA-MM-JJ requis).');
+
+  var sheet = ss.getSheetByName(SHEET_HOLIDAYS);
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (sanitizeDate_(rows[i][0], '') === d) return error_('Ce jour est deja enregistre.');
+  }
+  sheet.appendRow([d, name]);
+  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Holiday added: ' + d + ' ' + name, 'HOLIDAY_ADDED', now, tz);
+  return { ok: true };
+}
+
+function holidayDelete_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  var idx = Number(payload.index);
+  var sheet = ss.getSheetByName(SHEET_HOLIDAYS);
+  var rows = sheet.getDataRange().getValues();
+  if (!isFinite(idx) || idx < 1 || idx >= rows.length) return error_('Entree introuvable.');
+  var removed = rows[idx];
+  sheet.deleteRow(idx + 1);
+  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Holiday removed: ' + removed[0] + ' ' + removed[1], 'HOLIDAY_REMOVED', now, tz);
+  return { ok: true };
+}
+
+/* ================= Manual corrections ================= */
+
+/**
+ * Admin fix-ups for missed or wrong scans. Modes:
+ *   set_out     - append a corrected Check-out for an open day
+ *   add_pair    - append a manual Check-in + Check-out pair
+ *   remove_last - delete the most recent row of that person that day
+ * Every change is audited with the acting admin.
+ */
+function correctionApply_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var mode = String(payload.fixMode || '').trim();
+  var email = String(payload.email || '').trim().toLowerCase();
+  var date = sanitizeDate_(payload.date, '');
+  var by = String(payload.adminEmail || 'admin');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Email invalide.');
+  if (!date) return error_('Date invalide.');
+
+  var att = ss.getSheetByName(SHEET_ATT);
+  var data = att.getDataRange().getValues();
+
+  // Find the day's rows for this person (chronological).
+  var dayRows = [];
+  for (var i = 1; i < data.length; i++) {
+    if (cellDateStr_(data[i][0], tz) !== date) continue;
+    if (String(data[i][3] || '').toLowerCase() !== email) continue;
+    dayRows.push({ rowIdx: i + 1, action: String(data[i][4]), sec: timeToSec_(String(data[i][1])), time: String(data[i][1]), name: String(data[i][2] || ''), office: String(data[i][10] || ''), token: String(data[i][9] || '') });
+  }
+
+  if (mode === 'set_out' || mode === 'add_pair') {
+    var outT = normShiftTime_(payload.out);
+    var inT = normShiftTime_(payload.inTime);
+    if (!outT) return error_("Heure de sortie invalide (HH:MM).");
+    if (mode === 'add_pair' && !inT) return error_("Heure d'entree invalide (HH:MM).");
+
+    if (mode === 'set_out') {
+      if (!dayRows.length) return error_('Aucun pointage ce jour pour cette personne.');
+      var lastRow = dayRows[dayRows.length - 1];
+      if (lastRow.action === 'Check-out') return error_('Cette journee est deja cloturee par une sortie.');
+      var openSec = lastRow.sec;
+      var outSec = timeToSec_(outT);
+      if (outSec <= openSec) return error_('La sortie doit etre apres l\'entree (' + lastRow.time.slice(0, 5) + ').');
+      att.appendRow([date, outT + ':00', safeCell_(lastRow.name || email), email, 'Check-out', 'Corrected', '', '', 0, lastRow.token, lastRow.office, '']);
+      logAudit_(ss, by, 'Correction set_out ' + email + ' ' + date + ' -> ' + outT, 'CORRECTION', now, tz);
+      return { ok: true, applied: 'sortie ' + outT + ' ajoutee' };
+    }
+
+    // add_pair
+    var inSec = timeToSec_(inT);
+    var outSec2 = timeToSec_(outT);
+    if (outSec2 <= inSec) return error_('La sortie doit etre apres l\'entree.');
+    var officeName = dayRows.length ? dayRows[dayRows.length - 1].office : '';
+    att.appendRow([date, inT + ':00', safeCell_(email), email, 'Check-in', 'Manual', '', '', 0, '', officeName, '']);
+    att.appendRow([date, outT + ':00', safeCell_(email), email, 'Check-out', 'Manual', '', '', 0, '', officeName, '']);
+    logAudit_(ss, by, 'Correction add_pair ' + email + ' ' + date + ' ' + inT + '-' + outT, 'CORRECTION', now, tz);
+    return { ok: true, applied: 'paire manuelle ' + inT + '-' + outT + ' ajoutee' };
+  }
+
+  if (mode === 'remove_last') {
+    if (!dayRows.length) return error_('Aucun pointage ce jour pour cette personne.');
+    var victim = dayRows[dayRows.length - 1];
+    att.deleteRow(victim.rowIdx);
+    logAudit_(ss, by, 'Correction remove_last ' + email + ' ' + date + ' [' + victim.action + ' ' + victim.time + ']', 'CORRECTION', now, tz);
+    return { ok: true, applied: 'dernier pointage supprime (' + victim.action + ' ' + victim.time.slice(0, 5) + ')' };
+  }
+
+  return error_('Mode de correction inconnu.');
 }
 
 /* ================= Admin Users ================= */
@@ -1235,9 +1780,18 @@ function adminRemove_(payload, cfg, now, tz, ss) {
 
 /* ================= Reports ================= */
 
+/**
+ * Build per-day in/out pairs from attendance rows. Break-aware: worked hours
+ * exclude completed break intervals (Break-out -> Break-in). lateAfterSec may
+ * be a number of seconds-of-day (-1 disables) or a resolver function
+ * (email -> seconds) used for per-person shift start times.
+ */
 function computeReport_(rows, from, to, lateAfterSec, tz) {
+  var lateFor = typeof lateAfterSec === 'function' ? lateAfterSec : function () { return lateAfterSec; };
+
   var byKey = {};
-  var order = [];  for (var i = 0; i < rows.length; i++) {
+  var order = [];
+  for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
     var d = cellDateStr_(r[0], tz);
     if (d < from || d > to) continue;
@@ -1256,6 +1810,7 @@ function computeReport_(rows, from, to, lateAfterSec, tz) {
 
   var pairs = [];
   var totalHours = 0;
+  var totalBreakMin = 0;
   var lateCount = 0;
   var missingOut = 0;
   var daySet = {};
@@ -1268,21 +1823,32 @@ function computeReport_(rows, from, to, lateAfterSec, tz) {
 
     for (var j = 0; j < rec.rows.length; j++) {
       var row = rec.rows[j];
+      var lateLimit = lateFor(rec.email);
+
       if (row.action === 'Check-in') {
         if (open) {
           missingOut++;
           if (open.late) lateCount++;
-          pairs.push({ date: rec.date, name: rec.name, email: rec.email, in: open.time, out: null, hours: null, late: open.late, missing: true });
+          pairs.push({ date: rec.date, name: rec.name, email: rec.email, in: open.time, out: null, hours: null, late: open.late, missing: true, breakMin: Math.round(open.breakSec / 60) });
         }
-        open = { time: row.time, sec: row.sec, late: lateAfterSec >= 0 && row.sec > lateAfterSec };
+        open = { time: row.time, sec: row.sec, late: lateLimit >= 0 && row.sec > lateLimit, breakSec: 0, breakOpen: -1 };
         daySet[rec.email + '|' + rec.date] = 1;
         emailSet[rec.email] = 1;
+      } else if (row.action === 'Break-out' && open && open.breakOpen < 0) {
+        open.breakOpen = row.sec;
+      } else if (row.action === 'Break-in') {
+        if (open && open.breakOpen >= 0) {
+          open.breakSec += Math.max(0, row.sec - open.breakOpen);
+          open.breakOpen = -1;
+        }
       } else if (row.action === 'Check-out' && open) {
-        var hours = Math.max(0, (row.sec - open.sec) / 3600);
-        hours = Math.round(hours * 100) / 100;
+        var netSec = Math.max(0, row.sec - open.sec - open.breakSec);
+        var hours = Math.round((netSec / 3600) * 100) / 100;
+        var breakMin = Math.round(open.breakSec / 60);
         if (open.late) lateCount++;
         totalHours += hours;
-        pairs.push({ date: rec.date, name: rec.name, email: rec.email, in: open.time, out: row.time, hours: hours, late: open.late, missing: false });
+        totalBreakMin += breakMin;
+        pairs.push({ date: rec.date, name: rec.name, email: rec.email, in: open.time, out: row.time, hours: hours, late: open.late, missing: false, breakMin: breakMin });
         open = null;
       }
     }
@@ -1290,7 +1856,7 @@ function computeReport_(rows, from, to, lateAfterSec, tz) {
     if (open) {
       missingOut++;
       if (open.late) lateCount++;
-      pairs.push({ date: rec.date, name: rec.name, email: rec.email, in: open.time, out: null, hours: null, late: open.late, missing: true });
+      pairs.push({ date: rec.date, name: rec.name, email: rec.email, in: open.time, out: null, hours: null, late: open.late, missing: true, breakMin: Math.round(open.breakSec / 60) });
     }
   }
 
@@ -1298,6 +1864,7 @@ function computeReport_(rows, from, to, lateAfterSec, tz) {
     pairs: pairs,
     summary: {
       totalHours: Math.round(totalHours * 100) / 100,
+      totalBreakMin: totalBreakMin,
       daysPresent: count_(daySet),
       lateCount: lateCount,
       missingOut: missingOut,
@@ -1338,6 +1905,72 @@ function enableDailyDigest() {
   return 'Daily digest enabled (17:00).';
 }
 
+/**
+ * Hourly trigger that emails admins about people still checked in after
+ * reminderCheckOutAfter (HH:MM in Config). Enable once via the menu.
+ */
+function enableCheckoutReminders() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'sendCheckoutReminders') {
+      return 'Check-out reminders already enabled.';
+    }
+  }
+  ScriptApp.newTrigger('sendCheckoutReminders').timeBased().everyHours(1).create();
+  return 'Check-out reminders enabled. Set reminderCheckOutAfter (HH:MM) in Config.';
+}
+
+function sendCheckoutReminders() {
+  var tz = Session.getScriptTimeZone();
+  var now = new Date();
+  var today = dateStr_(now, tz);
+  var nowMin = Number(Utilities.formatDate(now, tz, 'H')) * 60 + Number(Utilities.formatDate(now, tz, 'm'));
+  var master = SpreadsheetApp.getActiveSpreadsheet();
+
+  var targets = [{ code: '', ss: master }];
+  var map = allTenants_();
+  for (var code in map) {
+    try { targets.push({ code: code, ss: SpreadsheetApp.openById(map[code]) }); } catch (e) {}
+  }
+
+  var sent = [];
+  for (var i = 0; i < targets.length; i++) {
+    try {
+      var ss = targets[i].ss;
+      var cfg = getConfig_(ss);
+      if (!cfg.adminEmail || !cfg.reminderCheckOutAfter) continue;
+      // Fire within an hour of the configured time.
+      if (Math.abs(timeToSec_(cfg.reminderCheckOutAfter) / 60 - nowMin) > 59) continue;
+
+      var att = ss.getSheetByName(SHEET_ATT);
+      if (!att) continue;
+      var data = att.getDataRange().getValues();
+      var lastIn = {};   // email -> name of latest Check-in
+      var closedOut = {}; // email -> has Check-out after that
+      for (var j = 1; j < data.length; j++) {
+        if (cellDateStr_(data[j][0], tz) !== today) continue;
+        var email = String(data[j][3] || '').toLowerCase();
+        if (!email) continue;
+        if (data[j][4] === 'Check-in') { lastIn[email] = String(data[j][2] || email); delete closedOut[email]; }
+        else if (data[j][4] === 'Check-out' && lastIn[email]) closedOut[email] = 1;
+      }
+      var stillIn = [];
+      for (var e in lastIn) if (!closedOut[e]) stillIn.push(lastIn[e] + ' <' + e + '>');
+      if (!stillIn.length) continue;
+
+      MailApp.sendEmail({
+        to: cfg.adminEmail,
+        subject: 'Check-out reminder \u2014 ' + today,
+        body: cfg.appName + ': ' + stillIn.length + ' person(s) are still checked in at ' +
+          Utilities.formatDate(now, tz, 'HH:mm') + ':\n\n  ' + stillIn.join('\n  ') +
+          '\n\n(reminderCheckOutAfter = ' + cfg.reminderCheckOutAfter + ')'
+      });
+      sent.push({ code: targets[i].code, to: cfg.adminEmail });
+    } catch (e) {}
+  }
+  return { ok: true, sent: sent };
+}
+
 function sendDailyDigest_() {
   var tz = Session.getScriptTimeZone();
   var now = new Date();
@@ -1365,9 +1998,20 @@ function sendDailyDigest_() {
       for (var j = 1; j < data.length; j++) {
         if (String(data[j][0]) === today) rows.push(data[j]);
       }
-      var lateSec = timeToSec_(cfg.lateAfter || '');
-      var report = computeReport_(rows, today, today, lateSec, tz);
-      var body = buildDigestBody_(today, cfg, report);
+      var report = computeReport_(rows, today, today, lateResolver_(target.ss, cfg), tz);
+      var missingOutNames = [];
+      var seenMissing = {};
+      for (var m = 0; m < report.pairs.length; m++) {
+        if (report.pairs[m].missing && !seenMissing[report.pairs[m].email]) {
+          seenMissing[report.pairs[m].email] = 1;
+          missingOutNames.push(report.pairs[m].name || report.pairs[m].email);
+        }
+      }
+      var leaves = getLeavesInRange_(target.ss, today, today);
+      var onLeaveSet = {};
+      for (var lv = 0; lv < leaves.length; lv++) onLeaveSet[leaves[lv].email] = 1;
+      var holidays = getHolidaysInRange_(target.ss, today, today);
+      var body = buildDigestBody_(today, cfg, report, expectedStaff_(target.ss), missingOutNames, onLeaveSet, holidays);
       MailApp.sendEmail({ to: cfg.adminEmail, subject: 'Attendance summary \u2014 ' + today, body: body });
       sent.push({ code: target.code, to: cfg.adminEmail });
     } catch (e) {}
@@ -1377,9 +2021,13 @@ function sendDailyDigest_() {
   return { ok: true, sent: sent };
 }
 
-function buildDigestBody_(today, cfg, report) {
+function buildDigestBody_(today, cfg, report, staff, missingOutNames, onLeaveSet, holidays) {
   var lines = [];
+  var i;
   lines.push('Attendance summary for ' + today + ' \u2014 ' + cfg.appName);
+  if (holidays && holidays.length) {
+    lines.push('Public holiday: ' + holidays[0].name);
+  }
   lines.push('');
 
   var pairs = report.pairs;
@@ -1388,13 +2036,13 @@ function buildDigestBody_(today, cfg, report) {
   } else {
     var byEmail = {};
     var order = [];
-    for (var i = 0; i < pairs.length; i++) {
+    for (i = 0; i < pairs.length; i++) {
       var p = pairs[i];
       if (!byEmail[p.email]) { byEmail[p.email] = { name: p.name, lines: [] }; order.push(p.email); }
       var inT = p.in || '--';
       var outT = p.out || '--';
       var hrs = p.hours != null ? formatHours_(p.hours) : 'no check-out';
-      byEmail[p.email].lines.push('  ' + inT + ' \u2013 ' + outT + '  (' + hrs + (p.late ? ', late' : '') + ')');
+      byEmail[p.email].lines.push('  ' + inT + ' \u2013 ' + outT + '  (' + hrs + (p.late ? ', late' : '') + (p.breakMin ? ', pause ' + formatHours_(p.breakMin / 60) : '') + ')');
     }
     for (i = 0; i < order.length; i++) {
       var e = order[i];
@@ -1404,9 +2052,33 @@ function buildDigestBody_(today, cfg, report) {
     }
   }
 
+  // Roster cross-check: who never checked in today (excluding leave).
+  if (staff && staff.length) {
+    var presentSet = {};
+    for (i = 0; i < pairs.length; i++) presentSet[pairs[i].email] = 1;
+    var absentList = [];
+    for (i = 0; i < staff.length; i++) {
+      if (presentSet[staff[i].email] || onLeaveSet[staff[i].email]) continue;
+      absentList.push(staff[i].name ? staff[i].name + ' <' + staff[i].email + '>' : staff[i].email);
+    }
+    if (absentList.length) {
+      lines.push('Not checked in (' + absentList.length + '):');
+      for (i = 0; i < absentList.length; i++) lines.push('  ' + absentList[i]);
+    } else {
+      lines.push('Everyone expected is checked in.');
+    }
+  }
+
+  if (missingOutNames && missingOutNames.length) {
+    lines.push('');
+    lines.push('Still no check-out (' + missingOutNames.length + '): ' + missingOutNames.join(', '));
+  }
+
   var s = report.summary;
+  lines.push('');
   lines.push('Present: ' + s.people + ' \u00b7 Total hours: ' + formatHours_(s.totalHours) +
-    ' \u00b7 Late: ' + s.lateCount + ' \u00b7 Missing check-out: ' + s.missingOut);
+    ' \u00b7 Late: ' + s.lateCount + ' \u00b7 Missing check-out: ' + s.missingOut +
+    (s.totalBreakMin ? ' \u00b7 Pause: ' + formatHours_(s.totalBreakMin / 60) : ''));
   return lines.join('\n');
 }
 

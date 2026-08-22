@@ -1,3 +1,17 @@
+import {
+  todayStr,
+  shiftDateStr,
+  parseQr,
+  fmtDateLabel,
+  dayLabel,
+  fmtHours,
+  timeToMinutes,
+  escapeHtml,
+  cmpVals,
+  avatarInitials,
+  avatarHue
+} from './utils.js';
+
 (function () {
   'use strict';
 
@@ -9,6 +23,7 @@
   var LS_ONBOARDED = 'att.onboarded.v1';
   var LS_THEME = 'att.theme.v1';
   var LS_CONSENT = 'att.consent.v1';
+  var LS_REMIND = 'att.remind.v1';
 
   var state = {
     profile: null,
@@ -27,37 +42,26 @@
     recentLoading: false,
     week: [],
     weekLoading: false,
-    privacyNoticeShown: false
+    monthSummary: null,
+    monthLoading: false,
+    privacyNoticeShown: false,
+    peopleView: { query: '', sortKey: '', sortDir: 1 },
+    reportView: { query: '', sortKey: '', sortDir: 1 },
+    leaves: [],
+    holidays: [],
+    selfieStream: null,
+    selfieDeferred: null
   };
 
   function $(id) { return document.getElementById(id); }
-
-  function todayStr() {
-    var d = new Date();
-    var m = String(d.getMonth() + 1).padStart(2, '0');
-    var day = String(d.getDate()).padStart(2, '0');
-    return d.getFullYear() + '-' + m + '-' + day;
-  }
 
   function tenantFromProfile() {
     var t = state.profile && state.profile.tenant ? String(state.profile.tenant).trim() : '';
     return t || String(DEFAULTS.DEFAULT_TENANT || '').trim();
   }
 
-  function parseQr(text) {
-    var idx = String(text).indexOf('|');
-    if (idx === -1) return { tenant: '', token: String(text).trim() };
-    return { tenant: String(text).slice(0, idx).trim(), token: String(text).slice(idx + 1).trim() };
-  }
-
   function vibrate(pattern) {
     if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch (e) {} }
-  }
-
-  function fmtDateLabel(d) {
-    var months = ['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
-    var wd = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
-    return wd[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
   }
 
   function startClock() {
@@ -140,6 +144,8 @@
         flushQueue();
         loadRecent();
         loadWeek();
+        loadMonth();
+        initReminders();
         if (!state.profile && !localStorage.getItem(LS_ONBOARDED)) openOnboarding();
       }, 800);
     });
@@ -147,12 +153,24 @@
 
   function bindEvents() {
     $('btn-scan').addEventListener('click', onScanClick);
+    $('btn-break').addEventListener('click', onBreakToggle);
+    $('btn-selfie-capture').addEventListener('click', captureSelfie);
+    $('btn-selfie-retake').addEventListener('click', retakeSelfie);
+    $('btn-selfie-use').addEventListener('click', useSelfie);
+    $('btn-selfie-cancel').addEventListener('click', cancelSelfie);
     $('btn-profile').addEventListener('click', function () { showProfileModal(); });
     $('btn-profile-save').addEventListener('click', onProfileSave);
     $('btn-scan-cancel').addEventListener('click', closeScanner);
     $('btn-manual-ok').addEventListener('click', onManualQr);
     $('btn-admin').addEventListener('click', function () { location.hash = '#admin'; });
     $('btn-back').addEventListener('click', function () { location.hash = '#home'; });
+    $('nav-home').addEventListener('click', function () {
+      if (location.hash.indexOf('admin') !== -1) {
+        location.hash = '#home';
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
     $('btn-history').addEventListener('click', onHistoryClick);
     $('btn-hist-close').addEventListener('click', function () { hideModal('modal-history'); });
     $('btn-hist-export').addEventListener('click', onHistoryExport);
@@ -160,17 +178,45 @@
     $('btn-admin-go').addEventListener('click', onAdminGo);
     $('btn-load').addEventListener('click', onAdminGo);
     $('btn-refresh').addEventListener('click', onAdminGo);
+    var qrChips = document.querySelectorAll('.qr-chip');
+    for (var qi = 0; qi < qrChips.length; qi++) {
+      qrChips[qi].addEventListener('click', onQuickRange);
+    }
     $('btn-csv').addEventListener('click', downloadCsv);
     $('btn-people-csv').addEventListener('click', downloadPeopleCsv);
+    var peopleSearch = $('people-search');
+    if (peopleSearch) peopleSearch.addEventListener('input', function () {
+      state.peopleView.query = this.value;
+      renderPeople();
+    });
+    var reportSearch = $('report-search');
+    if (reportSearch) reportSearch.addEventListener('input', function () {
+      state.reportView.query = this.value;
+      renderReportTable();
+    });
+    setupSortable('people-table', 'peopleView', renderPeople);
+    setupSortable('report-table', 'reportView', renderReportTable);
     $('btn-provision').addEventListener('click', onProvision);
     $('btn-emp-add').addEventListener('click', onEmployeeAdd);
     $('btn-adm-add').addEventListener('click', onAdminAdd);
+    $('btn-lv-add').addEventListener('click', onLeaveAdd);
+    $('btn-hf-add').addEventListener('click', onHolidayAdd);
+    $('btn-co-apply').addEventListener('click', onCorrectionApply);
+    $('co-mode').addEventListener('change', syncCorrectionFields);
     $('btn-help').addEventListener('click', function () { showModal('modal-help'); });
     $('btn-help-close').addEventListener('click', function () { hideModal('modal-help'); });
     $('ob-next').addEventListener('click', onOnboardNext);
     $('ob-skip').addEventListener('click', dismissOnboarding);
     $('admin-pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
     $('admin-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
+    var pinToggle = $('pin-toggle');
+    if (pinToggle) pinToggle.addEventListener('click', function () {
+      var inp = $('admin-pin');
+      var show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      pinToggle.classList.toggle('on', show);
+    });
+    initOtpSegments();
     var consentAccept = $('consent-accept');
     var consentDecline = $('consent-decline');
     if (consentAccept) consentAccept.addEventListener('click', function () {
@@ -182,31 +228,108 @@
       setConsent(false);
       $('consent-banner').classList.add('hidden');
     });
+    window.addEventListener('online', updateOfflinePill);
+    window.addEventListener('offline', updateOfflinePill);
+    updateOfflinePill();
+    initInstallPrompt();
     var themeBtn = $('btn-theme');
     if (themeBtn) themeBtn.addEventListener('click', function () {
-      var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-      applyTheme(cur === 'light' ? 'dark' : 'light');
+      var cur = getThemeMode();
+      var next = cur === 'auto' ? 'light' : (cur === 'light' ? 'dark' : 'auto');
+      applyThemeMode(next, true);
+      vibrate(12);
     });
+  }
+
+  /* ---------------- PWA install ---------------- */
+
+  var deferredInstall = null;
+
+  function initInstallPrompt() {
+    var btn = $('btn-install');
+    if (!btn) return;
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      deferredInstall = e;
+      btn.classList.remove('hidden');
+    });
+    btn.addEventListener('click', function () {
+      if (!deferredInstall) return;
+      deferredInstall.prompt();
+      deferredInstall.userChoice.then(function () {
+        deferredInstall = null;
+        btn.classList.add('hidden');
+      }).catch(function () {});
+    });
+    window.addEventListener('appinstalled', function () {
+      deferredInstall = null;
+      btn.classList.add('hidden');
+      showFeedback('success', 'Application installee.');
+    });
+  }
+
+  /* ---------------- Offline indicator ---------------- */
+
+  function updateOfflinePill() {
+    var pill = $('offline-pill');
+    if (!pill) return;
+    pill.classList.toggle('hidden', !!(navigator.onLine));
   }
 
   /* ---------------- Theme ---------------- */
 
-  function initTheme() {
-    var t = localStorage.getItem(LS_THEME);
-    if (t !== 'light' && t !== 'dark' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      t = 'light';
-    }
-    applyTheme(t === 'light' ? 'light' : 'dark');
+  function getThemeMode() {
+    return document.documentElement.getAttribute('data-theme-mode') || 'auto';
   }
 
-  function applyTheme(t) {
-    var light = t === 'light';
-    document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
-    if (hasConsent()) { try { localStorage.setItem(LS_THEME, light ? 'light' : 'dark'); } catch (e) {} }
+  function systemPrefersLight() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+  }
+
+  function resolveTheme(mode) {
+    if (mode === 'light' || mode === 'dark') return mode;
+    return systemPrefersLight() ? 'light' : 'dark';
+  }
+
+  function withThemeTransition(fn) {
+    var root = document.documentElement;
+    root.classList.add('theme-switching');
+    fn();
+    setTimeout(function () { root.classList.remove('theme-switching'); }, 450);
+  }
+
+  function applyThemeMode(mode, animate) {
+    var resolved = resolveTheme(mode);
+    document.documentElement.setAttribute('data-theme-mode', mode);
+    if (hasConsent()) { try { localStorage.setItem(LS_THEME, mode); } catch (e) {} }
+    var setAttr = function () { document.documentElement.setAttribute('data-theme', resolved); };
+    if (animate) withThemeTransition(setAttr); else setAttr();
     var sun = $('ic-sun');
     var moon = $('ic-moon');
-    if (sun) sun.style.display = light ? 'none' : '';
-    if (moon) moon.style.display = light ? '' : 'none';
+    var auto = $('ic-auto');
+    // Show the icons for the modes you can switch TO; hide the active one.
+    if (sun) sun.style.display = mode === 'light' ? 'none' : '';
+    if (moon) moon.style.display = mode === 'dark' ? 'none' : '';
+    if (auto) auto.style.display = mode === 'auto' ? 'none' : '';
+    var btn = $('btn-theme');
+    if (btn) btn.title = 'Theme : ' + (mode === 'auto' ? 'automatique' : (mode === 'light' ? 'clair' : 'sombre'));
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', resolved === 'light' ? '#059669' : '#0c1222');
+  }
+
+  function initTheme() {
+    var t = null;
+    try { t = localStorage.getItem(LS_THEME); } catch (e) {}
+    applyThemeMode(t === 'light' || t === 'dark' ? t : 'auto', false);
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: light)');
+      var handler = function () {
+        if (getThemeMode() === 'auto') applyThemeMode('auto', true);
+      };
+      if (mq.addEventListener) mq.addEventListener('change', handler);
+      else if (mq.addListener) mq.addListener(handler);
+    }
   }
 
   /* ---------------- Collapsible cards ---------------- */
@@ -219,10 +342,6 @@
         if (card) card.classList.toggle('collapsed');
       });
     }
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   /* ---------------- Encrypted local storage ---------------- */
@@ -331,6 +450,7 @@
     } else {
       $('pf-tenant').value = DEFAULTS.DEFAULT_TENANT || '';
     }
+    $('pf-remind').checked = remindersEnabled();
     hideError('profile-error');
     showModal('modal-profile');
   }
@@ -344,6 +464,11 @@
     if (tenant && !/^[a-z0-9][a-z0-9\-]{1,23}$/.test(tenant)) {
       showError('profile-error', 'Code espace : 2-24 caracteres, lettres/chiffres/tirets.');
       return;
+    }
+    var wantReminders = $('pf-remind').checked;
+    setRemindersEnabled(wantReminders);
+    if (wantReminders && 'Notification' in window && Notification.permission === 'default') {
+      try { Notification.requestPermission().catch(function () {}); } catch (e) {}
     }
     var prevTenant = tenantFromProfile();
     state.profile = { name: name, email: email, tenant: tenant };
@@ -364,6 +489,7 @@
     refreshAdminAccess();
     loadRecent();
     loadWeek();
+    loadMonth();
   }
 
   /* ---------------- API ---------------- */
@@ -536,6 +662,7 @@
       showFeedback('error', 'Aucun QR code detecte.');
       return;
     }
+    vibrate(18);
     setTimeout(function () {
       var chain = processAttendance(text);
       if (chain && chain.then) {
@@ -581,9 +708,6 @@
       return;
     }
 
-    setBusy(true);
-    showFeedback('info', 'Traitement de votre scan...');
-
     var parsed = parseQr(qrText);
     var tenant = parsed.tenant || tenantFromProfile();
     var token = parsed.token || qrText;
@@ -597,37 +721,212 @@
       ts: Date.now()
     };
 
+    // Selfie proof at check-in when the office requires it.
+    var willCheckIn = !state.status || state.status.action !== 'Check-in';
+    if (willCheckIn && state.config.selfieMode === 'required') {
+      openSelfieModal(payload);
+      return;
+    }
+
+    return postAttendance(payload);
+  }
+
+  function postAttendance(payload) {
+    setBusy(true);
+    showFeedback('info', 'Traitement de votre scan...');
+
     return api(payload).then(function (res) {
       setBusy(false);
       if (!res.ok) {
+        if (res.code === 'SELFIE_REQUIRED') { openSelfieModal(payload); return; }
         showFeedback('error', res.message || 'Echec du pointage.');
         return;
       }
+      var prev = state.status;
       state.status = {
         date: res.date || todayStr(),
         action: res.action,
         time: res.time,
         office: res.office,
-        tenant: tenant
+        tenant: payload.tenant || tenantFromProfile(),
+        breakMinToday: res.breakMinToday || 0
       };
+      if (res.action === 'Check-in') state.status.checkinTime = res.time;
+      else state.status.checkinTime = (prev && prev.checkinTime) || null;
       saveStatus();
       renderHome();
       loadRecent();
       loadWeek();
-      vibrate(40);
+      loadMonth();
       showScanSuccess(res.action, res.time, state.profile.name);
-      var verb = res.action === 'Check-in' ? 'passe' : 'sorti';
       var loc = res.office ? ' a ' + res.office : '';
-      showFeedback('success', 'Vous etes ' + verb + loc + ' a ' + res.time + '.');
+      var msg;
+      if (res.action === 'Check-in') msg = 'Vous etes passe' + (loc || '') + ' a ' + res.time + '.';
+      else if (res.action === 'Check-out') msg = 'Vous etes sorti' + loc + ' a ' + res.time + '.';
+      else if (res.action === 'Break-out') msg = 'Pause demarree a ' + res.time + '. Bonne pause !';
+      else msg = 'On reprend le travail a ' + res.time + '.';
+      showFeedback('success', msg, res.action === 'Check-in' ? [25, 70, 25] : [60]);
     }, function (err) {
       setBusy(false);
       if (err && err.offline) {
-        queueAttendance(payload);
+        queueAttendance(stripPhotoDataUrl(payload));
         showFeedback('info', 'Vous etes hors ligne. Votre pointage a ete enregistre et se synchronisera automatiquement lorsque vous serez en ligne.');
       } else {
         showFeedback('error', 'Impossible de joindre le serveur : ' + err.message + '. Verifiez votre connexion et reessayez.');
       }
     });
+  }
+
+  function stripPhotoDataUrl(payload) {
+    var clone = {};
+    for (var k in payload) {
+      if (k !== 'photoDataUrl') clone[k] = payload[k];
+    }
+    return clone;
+  }
+
+  /* ---------------- Selfie capture ---------------- */
+
+  function openSelfieModal(pendingPayload) {
+    state.selfieDeferred = pendingPayload || null;
+    $('selfie-error').classList.add('hidden');
+    $('selfie-preview').classList.add('hidden');
+    $('selfie-confirm-row').classList.add('hidden');
+    $('btn-selfie-capture').classList.remove('hidden');
+    showModal('modal-selfie');
+    startSelfieCamera();
+  }
+
+  function startSelfieCamera() {
+    var video = $('selfie-video');
+    video.classList.remove('hidden');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      selfieCameraFail("L'appareil photo n'est pas disponible.");
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false
+    }).then(function (stream) {
+      state.selfieStream = stream;
+      video.srcObject = stream;
+      var p = video.play();
+      if (p && p.catch) p.catch(function () {});
+    }).catch(function () {
+      selfieCameraFail('Acces camera refuse. Autorisez la camera dans votre navigateur, puis reprenez la photo.');
+    });
+  }
+
+  function selfieCameraFail(msg) {
+    var el = $('selfie-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    // If the office only suggests a photo, let the user continue without one.
+    if (state.config.selfieMode !== 'required') {
+      el.textContent += ' Vous pouvez annuler pour pointer sans photo.';
+    }
+  }
+
+  function stopSelfieCamera() {
+    if (state.selfieStream) {
+      try {
+        state.selfieStream.getTracks().forEach(function (t) { t.stop(); });
+      } catch (e) {}
+      state.selfieStream = null;
+    }
+    var video = $('selfie-video');
+    if (video) video.srcObject = null;
+  }
+
+  function captureSelfie() {
+    var video = $('selfie-video');
+    if (!state.selfieStream || !video.videoWidth) {
+      selfieCameraFail('La camera n\'est pas prete. Reessayez.');
+      return;
+    }
+    var side = Math.min(video.videoWidth, video.videoHeight);
+    var out = 480;
+    var canvas = document.createElement('canvas');
+    canvas.width = out;
+    canvas.height = out;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(
+      video,
+      (video.videoWidth - side) / 2, (video.videoHeight - side) / 2, side, side,
+      0, 0, out, out
+    );
+    var dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+    stopSelfieCamera();
+    video.classList.add('hidden');
+    var preview = $('selfie-preview');
+    preview.src = dataUrl;
+    preview.classList.remove('hidden');
+    $('btn-selfie-capture').classList.add('hidden');
+    $('selfie-confirm-row').classList.remove('hidden');
+  }
+
+  function retakeSelfie() {
+    $('selfie-preview').classList.add('hidden');
+    $('selfie-confirm-row').classList.add('hidden');
+    $('btn-selfie-capture').classList.remove('hidden');
+    $('selfie-video').classList.remove('hidden');
+    startSelfieCamera();
+  }
+
+  function useSelfie() {
+    var dataUrl = $('selfie-preview').src;
+    cleanupSelfieModal();
+    var payload = state.selfieDeferred;
+    state.selfieDeferred = null;
+    if (payload && dataUrl) {
+      payload.photoDataUrl = dataUrl;
+      postAttendance(payload);
+    }
+  }
+
+  function cancelSelfie() {
+    cleanupSelfieModal();
+    var wasRequired = !!state.selfieDeferred;
+    state.selfieDeferred = null;
+    if (wasRequired) {
+      showFeedback('warn', 'Pointage annule : un selfie est requis pour pointer l\'entree.');
+    }
+  }
+
+  function cleanupSelfieModal() {
+    stopSelfieCamera();
+    hideModal('modal-selfie');
+  }
+
+  /* ---------------- Dynamic favicon ---------------- */
+
+  function updateFavicon() {
+    var link = document.querySelector('link[rel="icon"]');
+    if (!link || typeof document.createElement('canvas').getContext !== 'function') return;
+    var status = state.status && state.status.action === 'Check-in' ? 'in' : 'out';
+    if (updateFavicon._last === status && updateFavicon._done) return;
+    updateFavicon._last = status;
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var c = document.createElement('canvas');
+        c.width = 64; c.height = 64;
+        var ctx = c.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, 64, 64);
+        ctx.beginPath();
+        ctx.arc(51, 51, 13, 0, Math.PI * 2);
+        ctx.fillStyle = '#0c1222';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(51, 51, 10, 0, Math.PI * 2);
+        ctx.fillStyle = status === 'in' ? '#10b981' : '#64748b';
+        ctx.fill();
+        link.href = c.toDataURL('image/png');
+        updateFavicon._done = true;
+      } catch (e) {}
+    };
+    img.src = 'icons/icon-192.png';
   }
 
   /* ---------------- Home render ---------------- */
@@ -639,35 +938,50 @@
     var sub = $('status-sub');
     var time = $('status-time');
     var btnLabel = $('btn-scan-label');
+    var breakRow = $('break-row');
 
     card.classList.remove('checked-in');
     var recentCard = $('recent-card');
     if (recentCard) recentCard.classList.toggle('hidden', !state.profile);
     var weekCard = $('week-card');
     if (weekCard) weekCard.classList.toggle('hidden', !state.profile);
+    var monthCard = $('month-card');
+    if (monthCard) monthCard.classList.toggle('hidden', !state.profile);
 
     if (!state.profile) {
       avatar.className = 'status-avatar';
+      clearAvatarGradient(avatar);
       avatar.textContent = '?';
       label.textContent = 'Bienvenue';
       sub.textContent = 'Definissez votre nom et email pour commencer.';
       time.textContent = '--:--';
       btnLabel.textContent = 'Scanner QR pour pointer';
+      if (breakRow) breakRow.classList.add('hidden');
       stopElapsedTimer();
+      renderStreak();
+      updateFavicon();
       return;
     }
 
-    if (state.status && state.status.action === 'Check-in') {
+    var seed = state.profile.name || state.profile.email || '?';
+    var act = state.status ? String(state.status.action || '') : '';
+    var onBreakNow = act === 'Break-out';
+
+    if (act === 'Check-in' || act === 'Break-in' || onBreakNow) {
       card.classList.add('checked-in');
       avatar.className = 'status-avatar in';
-      avatar.textContent = 'ENTREE';
-      label.textContent = 'Pointe';
-      sub.textContent = state.status.office ? 'A ' + state.status.office + '. Passez une bonne journee.' : 'Passez une bonne journee au bureau.';
+      clearAvatarGradient(avatar);
+      avatar.textContent = onBreakNow ? 'PAUSE' : 'ENTREE';
+      label.textContent = onBreakNow ? 'En pause' : 'Pointe';
+      sub.textContent = onBreakNow
+        ? 'Profitez de votre pause. Scannez le QR (ou appuyez sur Reprendre) pour reprendre.'
+        : (state.status.office ? 'A ' + state.status.office + '. Passez une bonne journee.' : 'Passez une bonne journee au bureau.');
       time.textContent = state.status.time;
-      btnLabel.textContent = 'Scanner QR pour la sortie';
+      btnLabel.textContent = onBreakNow ? 'Scanner QR pour reprendre' : 'Scanner QR pour la sortie';
       startElapsedTimer();
     } else if (state.status) {
       avatar.className = 'status-avatar out';
+      applyAvatarHueGradient(avatar, seed);
       avatar.textContent = 'SORTIE';
       label.textContent = 'Sorti';
       sub.textContent = state.status.office ? 'De ' + state.status.office + '. Vous pouvez pointer a nouveau plus tard.' : 'Vous pouvez pointer a nouveau plus tard aujourd\'hui.';
@@ -676,6 +990,7 @@
       stopElapsedTimer();
     } else {
       avatar.className = 'status-avatar out';
+      applyAvatarHueGradient(avatar, seed);
       avatar.textContent = 'SORTIE';
       label.textContent = 'Non pointe';
       sub.textContent = 'Scannez le QR du bureau a l\'entree.';
@@ -683,6 +998,31 @@
       btnLabel.textContent = 'Scanner QR pour pointer';
       stopElapsedTimer();
     }
+
+    if (breakRow) {
+      var showBreak = act === 'Check-in' || act === 'Break-in' || onBreakNow;
+      breakRow.classList.toggle('hidden', !showBreak);
+      $('btn-break-label').textContent = onBreakNow ? 'Reprendre' : 'Pause';
+      var info = $('break-info');
+      var mins = state.status && state.status.breakMinToday;
+      info.textContent = showBreak && mins ? 'Pause cumulee aujourd\'hui : ' + fmtHours(mins / 60) : '';
+    }
+    renderStreak();
+    updateFavicon();
+  }
+
+  function onBreakToggle() {
+    if (!state.profile) return;
+    var onBreak = state.status && state.status.action === 'Break-out';
+    postAttendance({
+      action: 'attendance',
+      tenant: tenantFromProfile(),
+      qr: '',
+      mode: onBreak ? 'resume' : 'break',
+      name: state.profile.name,
+      email: state.profile.email,
+      ts: Date.now()
+    });
   }
 
   /* ---------------- Recent activity ---------------- */
@@ -780,11 +1120,33 @@
     });
   }
 
-  function dayLabel(dateStr) {
-    var p = dateStr.split('-');
-    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
-    var names = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
-    return names[d.getDay()];
+  /* ---------------- Streak badge ---------------- */
+
+  function computeStreak() {
+    var map = {};
+    (state.week || []).forEach(function (d) { map[d.date] = d.hours || 0; });
+    var today = todayStr();
+    if (!(map[today] > 0) && !(map[shiftDateStr(-1)] > 0)) return 0;
+    var cursor = map[today] > 0 ? 0 : -1;
+    var streak = 0;
+    while (streak < 7) {
+      var day = shiftDateStr(cursor - streak);
+      if (map[day] > 0) streak++;
+      else break;
+    }
+    return streak;
+  }
+
+  function renderStreak() {
+    var badge = $('streak-badge');
+    if (!badge) return;
+    var streak = computeStreak();
+    if (streak >= 2) {
+      $('streak-count').textContent = String(streak);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
   }
 
   function renderWeek() {
@@ -832,11 +1194,134 @@
       col.appendChild(label);
       chart.appendChild(col);
     });
+    renderStreak();
+  }
+
+  /* ---------------- Monthly summary ---------------- */
+
+  function loadMonth() {
+    if (!state.profile || !isConfigured()) return;
+    if (state.monthLoading) return;
+    state.monthLoading = true;
+    api({ action: 'myattendance', email: state.profile.email }).then(function (res) {
+      state.monthLoading = false;
+      state.monthSummary = null;
+      if (res.ok) {
+        var prefix = todayStr().slice(0, 7);
+        var days = 0, hours = 0, breakMin = 0, late = 0;
+        (res.attendance.pairs || []).forEach(function (p) {
+          if (!p.date || String(p.date).slice(0, 7) !== prefix) return;
+          days++;
+          if (p.hours != null && !isNaN(p.hours)) hours += p.hours;
+          if (p.breakMin) breakMin += p.breakMin;
+          if (p.late) late++;
+        });
+        state.monthSummary = { days: days, hours: hours, breakMin: breakMin, late: late };
+      }
+      renderMonthCard();
+    }).catch(function () {
+      state.monthLoading = false;
+      state.monthSummary = null;
+      renderMonthCard();
+    });
+  }
+
+  function renderMonthCard() {
+    var card = $('month-card');
+    if (!card) return;
+    var s = state.monthSummary;
+    if (!s) return;
+    $('mo-days').textContent = String(s.days);
+    $('mo-hours').textContent = fmtHours(s.hours);
+    $('mo-break').textContent = s.breakMin ? fmtHours(s.breakMin / 60) : '0h 0m';
+    $('mo-late').textContent = String(s.late);
+    var note = $('mo-note');
+    if (note) note.textContent = s.days >= 15
+      ? 'Excellent rythme ce mois-ci — continuez comme ca !'
+      : 'Vos jours et heures de presence cumules depuis le 1er du mois.';
+  }
+
+  /* ---------------- Check-out reminders ---------------- */
+
+  function remindersEnabled() {
+    try { return localStorage.getItem(LS_REMIND) === '1'; } catch (e) { return false; }
+  }
+
+  function setRemindersEnabled(val) {
+    try { localStorage.setItem(LS_REMIND, val ? '1' : '0'); } catch (e) {}
+  }
+
+  function initReminders() {
+    setInterval(checkReminders, 60000);
+    checkReminders();
+  }
+
+  function alreadyNotified(key) {
+    try { return localStorage.getItem(key) === todayStr(); } catch (e) { return true; }
+  }
+
+  function markNotified(key) {
+    try { localStorage.setItem(key, todayStr()); } catch (e) {}
+  }
+
+  function pushLocalNotification(title, body) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    try { new Notification(title, { body: body }); } catch (e) {}
+  }
+
+  function checkReminders() {
+    if (!remindersEnabled()) return;
+    var cfg = state.config;
+    if (!cfg) return;
+
+    var now = new Date();
+    var nowMin = now.getHours() * 60 + now.getMinutes();
+
+    // Morning nudge: not checked in yet after reminderCheckInAfter.
+    var inAt = timeToMinutes(cfg.reminderCheckInAfter);
+    if (inAt >= 0 && nowMin >= inAt && nowMin < inAt + 120 &&
+        (!state.status || state.status.date !== todayStr() ||
+         (state.status.action !== 'Check-in' && state.status.action !== 'Break-in')) &&
+        !alreadyNotified('att.remind.in')) {
+      markNotified('att.remind.in');
+      pushLocalNotification(cfg.appName || 'Presence',
+        'Vous n\'avez pas encore pointe votre arrivee. Pensez a scanner le QR !');
+    }
+
+    // Evening nudge: still checked in after reminderCheckOutAfter.
+    var outAt = timeToMinutes(cfg.reminderCheckOutAfter);
+    if (outAt >= 0 && nowMin >= outAt && nowMin < outAt + 180 &&
+        state.status && state.status.date === todayStr() &&
+        (state.status.action === 'Check-in' || state.status.action === 'Break-in') &&
+        !alreadyNotified('att.remind.out')) {
+      markNotified('att.remind.out');
+      pushLocalNotification(cfg.appName || 'Presence',
+        'Vous n\'avez pas pointe votre sortie. Si vous quittez le bureau, scannez le QR !');
+    }
   }
 
   /* ---------------- Scan success overlay ---------------- */
 
   var elapsedInterval = null;
+  var RING_CIRC = 2 * Math.PI * 35;
+  var WORKDAY_HOURS = 8;
+
+  function updateProgressRing(fraction) {
+    var ring = $('avatar-ring');
+    var fill = $('ring-fill');
+    if (!ring || !fill) return;
+    var f = Math.min(1, Math.max(0, fraction || 0));
+    if (f > 0) ring.classList.add('on');
+    fill.style.strokeDashoffset = String(RING_CIRC * (1 - f));
+  }
+
+  function hideProgressRing() {
+    var ring = $('avatar-ring');
+    var fill = $('ring-fill');
+    if (ring) ring.classList.remove('on');
+    if (fill) fill.style.strokeDashoffset = String(RING_CIRC);
+  }
 
   function startElapsedTimer() {
     stopElapsedTimer();
@@ -844,10 +1329,11 @@
     var timer = $('elapsed-timer');
     if (!el || !timer || !state.status || state.status.action !== 'Check-in' || !state.status.time) {
       if (el) el.classList.add('hidden');
+      updateProgressRing(0);
       return;
     }
     el.classList.remove('hidden');
-    var parts = state.status.time.split(':');
+    var parts = String(state.status.checkinTime || state.status.time).split(':');
     var checkInSec = Number(parts[0]) * 3600 + Number(parts[1]) * 60 + Number(parts[2] || 0);
     function tick() {
       var now = new Date();
@@ -857,6 +1343,7 @@
       var m = Math.floor((diff % 3600) / 60);
       var s = diff % 60;
       timer.textContent = h + 'h ' + m + 'm ' + s + 's';
+      updateProgressRing(diff / (WORKDAY_HOURS * 3600));
     }
     tick();
     elapsedInterval = setInterval(tick, 1000);
@@ -866,9 +1353,34 @@
     if (elapsedInterval) { clearInterval(elapsedInterval); elapsedInterval = null; }
     var el = $('elapsed-wrap');
     if (el) el.classList.add('hidden');
+    hideProgressRing();
   }
 
   var ssTimer = null;
+
+  var CONFETTI_COLORS = ['#10b981', '#34d399', '#f59e0b', '#38bdf8', '#a78bfa', '#f472b6'];
+
+  function burstConfetti(container) {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'confetti-wrap';
+    for (var i = 0; i < 26; i++) {
+      var c = document.createElement('span');
+      c.className = 'confetti';
+      var angle = Math.random() * Math.PI * 2;
+      var dist = 60 + Math.random() * 130;
+      c.style.setProperty('--cx', (Math.cos(angle) * dist).toFixed(0) + 'px');
+      c.style.setProperty('--cy', (Math.sin(angle) * dist * 0.55 + 110).toFixed(0) + 'px');
+      c.style.setProperty('--crot', (Math.random() * 540 - 270).toFixed(0) + 'deg');
+      c.style.setProperty('--cdur', (0.9 + Math.random() * 0.7).toFixed(2) + 's');
+      c.style.setProperty('--cdelay', (Math.random() * 0.15).toFixed(2) + 's');
+      c.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      if (Math.random() > 0.5) { c.style.borderRadius = '50%'; c.style.width = '7px'; c.style.height = '7px'; }
+      wrap.appendChild(c);
+    }
+    container.appendChild(wrap);
+    setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 2200);
+  }
 
   function showScanSuccess(action, time, name) {
     var el = $('scan-success');
@@ -876,10 +1388,14 @@
     clearTimeout(ssTimer);
     el.classList.remove('hidden', 'fade');
     var first = String(name || '').trim().split(/\s+/)[0] || '';
-    $('ss-title').textContent = action === 'Check-in'
-      ? (first ? 'Bon retour, ' + first + '!' : 'Pointe')
-      : (first ? 'Au revoir, ' + first + '!' : 'Sorti');
+    var title;
+    if (action === 'Check-in') title = first ? 'Bon retour, ' + first + '!' : 'Pointe';
+    else if (action === 'Check-out') title = first ? 'Au revoir, ' + first + '!' : 'Sorti';
+    else if (action === 'Break-out') title = 'Bonne pause !';
+    else title = 'On reprend !';
+    $('ss-title').textContent = title;
     $('ss-time').textContent = time || '';
+    burstConfetti(el);
     ssTimer = setTimeout(function () {
       el.classList.add('fade');
       setTimeout(function () { el.classList.add('hidden'); }, 500);
@@ -890,11 +1406,12 @@
 
   var feedbackTimer = null;
 
-  function showFeedback(type, msg) {
+  function showFeedback(type, msg, hapticPattern) {
     var el = $('feedback');
     el.className = 'feedback ' + type;
     el.textContent = msg;
-    if (type === 'success') vibrate(40);
+    if (hapticPattern) vibrate(hapticPattern);
+    else if (type === 'success') vibrate([18, 50, 28]);
     if (type === 'error') {
       vibrate([60, 50, 60]);
       el.classList.add('shake');
@@ -992,6 +1509,8 @@
 
     $('view-home').classList.toggle('hidden', wantsAdmin);
     $('view-admin').classList.toggle('hidden', !wantsAdmin);
+    var navHome = $('nav-home');
+    if (navHome) navHome.classList.toggle('active', !wantsAdmin);
     if (!wantsAdmin && state.qrScanner) closeScanner();
   }
 
@@ -1031,6 +1550,38 @@
   }
 
   /* ---------------- Admin ---------------- */
+
+  function syncQuickRangeActive(from, to) {
+    var chips = document.querySelectorAll('.qr-chip');
+    var today = todayStr();
+    var match = '';
+    if (from === today && to === today) match = 'today';
+    else if (to === today && from === shiftDateStr(-6)) match = '7d';
+    else if (to === today && from === shiftDateStr(-29)) match = '30d';
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].classList.toggle('active', chips[i].dataset.range === match);
+    }
+  }
+
+  function onQuickRange(e) {
+    var range = e.currentTarget.dataset.range;
+    var today = todayStr();
+    if (range === 'today') {
+      $('rng-from').value = today;
+      $('rng-to').value = today;
+    } else if (range === '7d') {
+      $('rng-from').value = shiftDateStr(-6);
+      $('rng-to').value = today;
+    } else if (range === '30d') {
+      $('rng-from').value = shiftDateStr(-29);
+      $('rng-to').value = today;
+    } else if (range === 'month') {
+      var n = new Date();
+      $('rng-from').value = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-01';
+      $('rng-to').value = today;
+    }
+    onAdminGo();
+  }
 
   function onAdminGo() {
     var from = $('rng-from').value || todayStr();
@@ -1100,6 +1651,52 @@
     });
   }
 
+  /* ---------------- Segmented OTP input ---------------- */
+
+  function initOtpSegments() {
+    var seg = $('otp-seg');
+    if (!seg) return;
+    var hidden = $('admin-otp');
+    var boxes = seg.querySelectorAll('.otp-box');
+
+    function syncToHidden() {
+      var v = '';
+      for (var i = 0; i < boxes.length; i++) v += boxes[i].value;
+      hidden.value = v;
+      if (v.length === boxes.length) onAdminGo();
+    }
+
+    for (var i = 0; i < boxes.length; i++) {
+      (function (idx) {
+        var box = boxes[idx];
+        box.addEventListener('input', function () {
+          box.value = box.value.replace(/\D/g, '').slice(-1);
+          if (box.value && idx < boxes.length - 1) boxes[idx + 1].focus();
+          syncToHidden();
+        });
+        box.addEventListener('keydown', function (e) {
+          if (e.key === 'Backspace' && !box.value && idx > 0) {
+            e.preventDefault();
+            boxes[idx - 1].value = '';
+            boxes[idx - 1].focus();
+            syncToHidden();
+          }
+        });
+        box.addEventListener('paste', function (e) {
+          var txt = '';
+          try { txt = (e.clipboardData || window.clipboardData).getData('text') || ''; } catch (err) {}
+          var digits = txt.replace(/\D/g, '').slice(0, boxes.length);
+          if (!digits) return;
+          e.preventDefault();
+          for (var j = 0; j < boxes.length; j++) boxes[j].value = digits.charAt(j) || '';
+          boxes[Math.min(digits.length, boxes.length - 1)].focus();
+          syncToHidden();
+        });
+        box.addEventListener('focus', function () { box.select(); });
+      })(i);
+    }
+  }
+
   function showOtpStep(res) {
     $('otp-row').classList.remove('hidden');
     $('admin-otp-note').textContent = res.message || '';
@@ -1108,7 +1705,9 @@
       $('admin-otp-note').textContent = res.message + ' Code de developpement : ' + res.otpDev;
     }
     $('btn-admin-go').textContent = 'Verifier le code';
-    $('admin-otp').focus();
+    var firstBox = document.querySelector('#otp-seg .otp-box');
+    if (firstBox) firstBox.focus();
+    else $('admin-otp').focus();
   }
 
   function showReportSkeleton() {
@@ -1132,24 +1731,34 @@
     if (tbody) tbody.innerHTML = '';
   }
 
-  function fmtHours(h) {
-    if (h === null || h === undefined || isNaN(h)) return '\u2014';
-    var total = Math.round(h * 60);
-    var hours = Math.floor(total / 60);
-    var mins = total % 60;
-    return hours + 'h ' + mins + 'm';
+  function countUp(el, target) {
+    if (!el) return;
+    var val = Number(target) || 0;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !window.requestAnimationFrame) { el.textContent = String(val); return; }
+    var dur = Math.min(700, 300 + val * 40);
+    var start = null;
+    function frame(now) {
+      if (start === null) start = now;
+      var t = Math.min(1, (now - start) / dur);
+      var eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = String(Math.round(val * eased));
+      if (t < 1) window.requestAnimationFrame(frame);
+    }
+    window.requestAnimationFrame(frame);
   }
 
   function renderAdmin(a) {
     $('admin-sub').textContent = a.range.from + ' \u2192 ' + a.range.to + ' \u00b7 ' + a.appName;
     $('rng-from').value = a.range.from;
     $('rng-to').value = a.range.to;
+    syncQuickRangeActive(a.range.from, a.range.to);
     $('dash-range-label').textContent = 'Periode : ' + a.range.from + ' \u2192 ' + a.range.to;
 
-    $('kpi-staff').textContent = (a.people || []).length;
-    $('kpi-onsite').textContent = a.live.onSite;
-    $('kpi-in').textContent = a.live.checkedInToday;
-    $('kpi-out').textContent = a.live.checkedOutToday;
+    $('kpi-staff').textContent = String((a.people || []).length);
+    $('kpi-onsite').textContent = String(a.live.onSite || 0);
+    $('kpi-in').textContent = String(a.live.checkedInToday || 0);
+    $('kpi-out').textContent = String(a.live.checkedOutToday || 0);
 
     $('rp-hours').textContent = fmtHours(a.summary.totalHours);
     $('rp-days').textContent = a.summary.daysPresent;
@@ -1159,16 +1768,20 @@
     $('on-site-count').textContent = a.live.onSite + ' sur place';
     var chips = $('on-site-list');
     chips.innerHTML = '';
+    var onBreakSet = {};
+    (a.live.onBreakNames || []).forEach(function (n) { onBreakSet[n] = 1; });
     if (!a.live.onSiteNames || a.live.onSiteNames.length === 0) {
       var empty = document.createElement('span');
       empty.className = 'empty';
-      empty.textContent = 'Personne n\'est sur place actuellement.';
+      empty.textContent = a.live.isHolidayToday
+        ? 'Jour ferie : ' + (a.live.holidayToday || 'ferie') + '. Personne n\'est attendu.'
+        : 'Personne n\'est sur place actuellement.';
       chips.appendChild(empty);
     } else {
       a.live.onSiteNames.forEach(function (n) {
         var c = document.createElement('span');
-        c.className = 'chip';
-        c.textContent = n;
+        c.className = 'chip' + (onBreakSet[n] ? ' chip-pause' : '');
+        c.textContent = onBreakSet[n] ? n + ' · pause' : n;
         chips.appendChild(c);
       });
     }
@@ -1177,7 +1790,12 @@
     $('absent-count').textContent = absent.length + ' non pointe' + (absent.length > 1 ? 's' : '');
     var absentList = $('absent-list');
     absentList.innerHTML = '';
-    if (absent.length === 0) {
+    if (a.live.isHolidayToday && absent.length === 0) {
+      var he = document.createElement('span');
+      he.className = 'empty';
+      he.textContent = 'Jour ferie : ' + (a.live.holidayToday || '') + '.';
+      absentList.appendChild(he);
+    } else if (absent.length === 0) {
       var ae = document.createElement('span');
       ae.className = 'empty';
       ae.textContent = 'Tout le personnel a deja pointe aujourd\'hui.';
@@ -1191,50 +1809,28 @@
         absentList.appendChild(c);
       });
     }
-
-    var pairs = (a.pairs || []).slice().sort(function (x, y) {
-      return (y.date + y.in).localeCompare(x.date + x.in);
-    });
-    $('report-count').textContent = pairs.length + ' entree' + (pairs.length > 1 ? 's' : '');
-    var tbody = $('report-table').querySelector('tbody');
-    tbody.innerHTML = '';
-    if (pairs.length === 0) {
-      var tr0 = document.createElement('tr');
-      var td0 = document.createElement('td');
-      td0.colSpan = 6;
-      td0.className = 'empty';
-      td0.textContent = 'Aucune presence dans cette periode.';
-      tr0.appendChild(td0);
-      tbody.appendChild(tr0);
-      $('rp-hours').textContent = '0h 0m';
+    if (!a.live.isHolidayToday && (a.leaves || []).some(function (l) {
+      return todayStr() >= l.start && todayStr() <= l.end;
+    })) {
+      var lc = document.createElement('span');
+      lc.className = 'chip chip-leave';
+      lc.textContent = ((a.people || []).filter(function (p) { return p.statusToday === 'leave'; }).length) + ' en conge';
+      absentList.appendChild(lc);
     }
-    pairs.forEach(function (p) {
-      var tr = document.createElement('tr');
-      var cells = [p.date, p.name, p.in || '\u2014', p.out || '\u2014', fmtHours(p.hours)];
-      cells.forEach(function (txt) {
-        var td = document.createElement('td');
-        td.textContent = txt;
-        tr.appendChild(td);
-      });
-      var tdStatus = document.createElement('td');
-      var status = p.missing ? 'Pas de sortie' : (p.late ? 'Retard' : 'OK');
-      var tag = document.createElement('span');
-      tag.className = 'tag ' + (p.late ? 'out' : 'in');
-      tag.textContent = status;
-      tdStatus.appendChild(tag);
-      tr.appendChild(tdStatus);
-      tbody.appendChild(tr);
-    });
 
     $('link-sheet').href = a.sheetUrl || '#';
     $('admin-login').classList.add('hidden');
     $('admin-dash').classList.remove('hidden');
 
-    renderPeople(a.people || []);
+    renderPeople();
+    renderReportTable();
     renderHoursChart(a.pairs || []);
 
     loadEmployees();
     loadAdmins();
+    loadLeaves();
+    loadHolidays();
+    syncCorrectionFields();
   }
 
   function renderHoursChart(pairs) {
@@ -1291,32 +1887,88 @@
     });
   }
 
-  function avatarInitials(name, email) {
-    var src = String(name || email || '?').trim();
-    var parts = src.split(/[\s._@-]+/).filter(Boolean);
-    var initials = '';
-    if (parts.length >= 2) initials = parts[0].charAt(0) + parts[1].charAt(0);
-    else if (parts.length === 1) initials = parts[0].slice(0, 2);
-    return initials.toUpperCase();
+  function applyAvatarHueGradient(el, seed) {
+    var hue = avatarHue(seed);
+    el.style.background = 'linear-gradient(135deg, hsl(' + hue + ', 48%, 40%), hsl(' + ((hue + 40) % 360) + ', 52%, 28%))';
   }
 
-  var AVATAR_HUES = [258, 160, 199, 24, 340, 42, 120, 286];
-
-  function avatarHue(email) {
-    var h = 0;
-    var s = String(email || '');
-    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    return AVATAR_HUES[h % AVATAR_HUES.length];
+  function clearAvatarGradient(el) {
+    el.style.background = '';
   }
 
   var PEOPLE_STATUS = {
     onsite: { label: 'Sur place', cls: 'in' },
+    break: { label: 'En pause', cls: 'pause' },
+    leave: { label: 'En conge', cls: 'leave' },
     out: { label: 'Sorti', cls: 'out' },
     absent: { label: 'Absent', cls: 'neutral' }
   };
 
-  function renderPeople(people) {
-    $('people-count').textContent = people.length + (people.length > 1 ? ' personnes' : ' personne');
+  /* ---------------- Table search & sort ---------------- */
+
+  function tableViewProcess(list, view, searchFn, keyFns) {
+    var q = String(view.query || '').trim().toLowerCase();
+    var rows = q
+      ? list.filter(function (item) { return String(searchFn(item)).toLowerCase().indexOf(q) !== -1; })
+      : list.slice();
+    if (view.sortKey && keyFns[view.sortKey]) {
+      var fn = keyFns[view.sortKey];
+      rows.sort(function (x, y) { return cmpVals(fn(x), fn(y)) * view.sortDir; });
+    }
+    return rows;
+  }
+
+  function setupSortable(tableId, viewName, rerender) {
+    var table = $(tableId);
+    if (!table) return;
+    var ths = table.querySelectorAll('th.sortable');
+    function onClick() {
+      var view = state[viewName];
+      var key = this.dataset.key;
+      if (view.sortKey === key) view.sortDir = -view.sortDir;
+      else { view.sortKey = key; view.sortDir = 1; }
+      updateSortIndicators(table, view);
+      rerender();
+    }
+    for (var i = 0; i < ths.length; i++) ths[i].addEventListener('click', onClick);
+  }
+
+  function updateSortIndicators(table, view) {
+    var ths = table.querySelectorAll('th.sortable');
+    for (var i = 0; i < ths.length; i++) {
+      ths[i].classList.toggle('asc', ths[i].dataset.key === view.sortKey && view.sortDir === 1);
+      ths[i].classList.toggle('desc', ths[i].dataset.key === view.sortKey && view.sortDir === -1);
+    }
+  }
+
+  var PEOPLE_SORT_KEYS = {
+    name: function (p) { return p.name || p.email || ''; },
+    daysPresent: function (p) { return Number(p.daysPresent || 0); },
+    totalHours: function (p) { return p.totalHours == null ? -1 : Number(p.totalHours); },
+    avgHours: function (p) { return p.avgHours == null ? -1 : Number(p.avgHours); },
+    lateCount: function (p) { return Number(p.lateCount || 0); },
+    statusToday: function (p) { return PEOPLE_STATUS[p.statusToday] ? PEOPLE_STATUS[p.statusToday].label : ''; }
+  };
+
+  var REPORT_SORT_KEYS = {
+    date: function (p) { return p.date || ''; },
+    name: function (p) { return p.name || ''; },
+    in: function (p) { return p.in || ''; },
+    out: function (p) { return p.out || ''; },
+    hours: function (p) { return p.hours == null ? -1 : Number(p.hours); },
+    status: function (p) { return p.missing ? 2 : (p.late ? 1 : 0); }
+  };
+
+  function renderPeople() {
+    if (!state.admin) return;
+    var all = state.admin.people || [];
+    var people = tableViewProcess(all, state.peopleView,
+      function (p) { return [p.name, p.email, p.department].filter(Boolean).join(' '); },
+      PEOPLE_SORT_KEYS
+    );
+    $('people-count').textContent = (people.length === all.length)
+      ? all.length + (all.length > 1 ? ' personnes' : ' personne')
+      : people.length + ' / ' + all.length;
     var tbody = $('people-table').querySelector('tbody');
     tbody.innerHTML = '';
     if (people.length === 0) {
@@ -1324,7 +1976,7 @@
       var td0 = document.createElement('td');
       td0.colSpan = 6;
       td0.className = 'empty';
-      td0.textContent = 'Aucun membre d\'effectif configure.';
+      td0.textContent = all.length === 0 ? 'Aucun membre d\'effectif configure.' : 'Aucun resultat pour cette recherche.';
       tr0.appendChild(td0);
       tbody.appendChild(tr0);
       return;
@@ -1336,8 +1988,9 @@
       cell.className = 'person-cell';
       var av = document.createElement('span');
       av.className = 'avatar';
-      av.style.background = 'hsl(' + avatarHue(p.email) + ', 62%, 88%)';
-      av.style.color = 'hsl(' + avatarHue(p.email) + ', 55%, 32%)';
+      var hue = avatarHue(p.email || p.name);
+      av.style.background = 'linear-gradient(135deg, hsl(' + hue + ', 70%, 84%), hsl(' + ((hue + 40) % 360) + ', 62%, 68%))';
+      av.style.color = 'hsl(' + hue + ', 58%, 28%)';
       av.textContent = avatarInitials(p.name, p.email);
       var nm = document.createElement('span');
       nm.className = 'person-name';
@@ -1369,6 +2022,54 @@
       }
       tr.appendChild(tdStatus);
       tr.title = p.email + (p.department ? ' \u00b7 ' + p.department : '');
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderReportTable() {
+    if (!state.admin) return;
+    var all = state.admin.pairs || [];
+    var pairs = tableViewProcess(all, state.reportView,
+      function (p) { return p.name || ''; },
+      REPORT_SORT_KEYS
+    );
+    if (!state.reportView.sortKey) {
+      pairs.sort(function (x, y) {
+        return (y.date + y.in).localeCompare(x.date + x.in);
+      });
+    }
+    $('report-count').textContent = (pairs.length === all.length)
+      ? all.length + ' entree' + (all.length > 1 ? 's' : '')
+      : pairs.length + ' / ' + all.length;
+    var tbody = $('report-table').querySelector('tbody');
+    tbody.innerHTML = '';
+    if (pairs.length === 0) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.colSpan = 6;
+      td0.className = 'empty';
+      td0.textContent = all.length === 0 ? 'Aucune presence dans cette periode.' : 'Aucun resultat pour cette recherche.';
+      tr0.appendChild(td0);
+      tbody.appendChild(tr0);
+      return;
+    }
+    pairs.forEach(function (p) {
+      var tr = document.createElement('tr');
+      if (p.missing) tr.className = 'row-missing';
+      else if (p.late) tr.className = 'row-late';
+      var cells = [p.date, p.name, p.in || '\u2014', p.out || '\u2014', fmtHours(p.hours)];
+      cells.forEach(function (txt) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        tr.appendChild(td);
+      });
+      var tdStatus = document.createElement('td');
+      var status = p.missing ? 'Pas de sortie' : (p.late ? 'Retard' : 'OK');
+      var tag = document.createElement('span');
+      tag.className = 'tag ' + (p.missing ? 'neutral' : (p.late ? 'out' : 'in'));
+      tag.textContent = status;
+      tdStatus.appendChild(tag);
+      tr.appendChild(tdStatus);
       tbody.appendChild(tr);
     });
   }
@@ -1437,7 +2138,7 @@
     if (state.employees.length === 0) {
       var tr0 = document.createElement('tr');
       var td0 = document.createElement('td');
-      td0.colSpan = 4;
+      td0.colSpan = 5;
       td0.className = 'empty';
       td0.textContent = 'Aucun employe ajoute pour l\'instant.';
       tr0.appendChild(td0);
@@ -1446,7 +2147,10 @@
     }
     state.employees.forEach(function (e) {
       var tr = document.createElement('tr');
-      [e.name, e.email, e.department || '\u2014'].forEach(function (txt) {
+      var shift = (e.shiftStart || e.shiftEnd)
+        ? ((e.shiftStart || '--:--') + ' - ' + (e.shiftEnd || '--:--'))
+        : '\u2014';
+      [e.name, e.email, e.department || '\u2014', shift].forEach(function (txt) {
         var td = document.createElement('td');
         td.textContent = txt;
         tr.appendChild(td);
@@ -1468,17 +2172,25 @@
     var name = $('emp-name').value.trim();
     var email = $('emp-email').value.trim();
     var dept = $('emp-dept').value.trim();
+    var shiftStart = $('emp-shift-start').value;
+    var shiftEnd = $('emp-shift-end').value;
     if (!name) { showError('emp-error', 'Saisissez le nom de l\'employe.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('emp-error', 'Saisissez un email valide.'); return; }
     if (!state.adminToken) { showError('emp-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
     hideError('emp-error');
     $('btn-emp-add').textContent = 'Ajout...';
-    api({ action: 'employee_add', token: state.adminToken, name: name, email: email, department: dept }).then(function (res) {
+    api({
+      action: 'employee_add', token: state.adminToken,
+      name: name, email: email, department: dept,
+      shiftStart: shiftStart, shiftEnd: shiftEnd
+    }).then(function (res) {
       $('btn-emp-add').textContent = 'Ajouter';
       if (!res.ok) throw new Error(res.message || 'Impossible d\'ajouter l\'employe');
       $('emp-name').value = '';
       $('emp-email').value = '';
       $('emp-dept').value = '';
+      $('emp-shift-start').value = '';
+      $('emp-shift-end').value = '';
       loadEmployees();
       showFeedback('success', 'Employe "' + res.employee.name + '" enregistre.');
     }).catch(function (err) {
@@ -1584,6 +2296,225 @@
     }).catch(function (err) {
       handleAdminAuthFail(err);
       showError('adm-error', err.message);
+    });
+  }
+
+  /* ---------------- Leaves ---------------- */
+
+  function loadLeaves() {
+    if (!state.adminToken) return;
+    api({ action: 'leave_list', token: state.adminToken }).then(function (res) {
+      if (!res.ok) { handleAdminAuthFail(res); showError('lv-error', res.message || 'Impossible de charger les conges.'); return; }
+      hideError('lv-error');
+      state.leaves = res.leaves || [];
+      renderLeaves();
+    }).catch(function (err) {
+      handleAdminAuthFail(err);
+      showError('lv-error', err.message);
+    });
+  }
+
+  function renderLeaves() {
+    var tbody = $('lv-table').querySelector('tbody');
+    $('lv-count').textContent = state.leaves.length + (state.leaves.length === 1 ? ' periode' : ' periodes');
+    tbody.innerHTML = '';
+    if (state.leaves.length === 0) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.colSpan = 5;
+      td0.className = 'empty';
+      td0.textContent = 'Aucun conge enregistre.';
+      tr0.appendChild(td0);
+      tbody.appendChild(tr0);
+      return;
+    }
+    state.leaves.forEach(function (l, idx) {
+      var tr = document.createElement('tr');
+      [l.email, l.start, l.end, l.reason || '\u2014'].forEach(function (txt) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        tr.appendChild(td);
+      });
+      var tdBtn = document.createElement('td');
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ghost-btn sm';
+      btn.textContent = 'Supprimer';
+      btn.dataset.index = idx + 1; // server-side sheet row index
+      btn.addEventListener('click', onLeaveDelete);
+      tdBtn.appendChild(btn);
+      tr.appendChild(tdBtn);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function onLeaveAdd() {
+    var email = $('lv-email').value.trim();
+    var start = $('lv-start').value;
+    var end = $('lv-end').value || start;
+    var reason = $('lv-reason').value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('lv-error', 'Saisissez un email valide.'); return; }
+    if (!start || !end) { showError('lv-error', 'Saisissez les dates du conge.'); return; }
+    if (!state.adminToken) { showError('lv-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
+    hideError('lv-error');
+    $('btn-lv-add').textContent = 'Ajout...';
+    api({
+      action: 'leave_add', token: state.adminToken,
+      email: email, start: start, end: end, reason: reason,
+      adminEmail: state.adminEmail || ''
+    }).then(function (res) {
+      $('btn-lv-add').textContent = 'Ajouter';
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'ajouter le conge');
+      $('lv-email').value = '';
+      $('lv-reason').value = '';
+      loadLeaves();
+      showFeedback('success', 'Conge enregistre pour ' + email + '.');
+    }).catch(function (err) {
+      $('btn-lv-add').textContent = 'Ajouter';
+      handleAdminAuthFail(err);
+      showError('lv-error', err.message);
+    });
+  }
+
+  function onLeaveDelete(e) {
+    var index = Number(e.target && e.target.dataset.index);
+    if (!index) return;
+    if (!window.confirm('Supprimer cette periode de conge ?')) return;
+    api({ action: 'leave_delete', token: state.adminToken, index: index, adminEmail: state.adminEmail || '' }).then(function (res) {
+      if (!res.ok) throw new Error(res.message || 'Impossible de supprimer le conge');
+      loadLeaves();
+      showFeedback('success', 'Conge supprime.');
+    }).catch(function (err) {
+      handleAdminAuthFail(err);
+      showError('lv-error', err.message);
+    });
+  }
+
+  /* ---------------- Holidays ---------------- */
+
+  function loadHolidays() {
+    if (!state.adminToken) return;
+    api({ action: 'holiday_list', token: state.adminToken }).then(function (res) {
+      if (!res.ok) { handleAdminAuthFail(res); showError('hf-error', res.message || 'Impossible de charger les jours feries.'); return; }
+      hideError('hf-error');
+      state.holidays = res.holidays || [];
+      renderHolidays();
+    }).catch(function (err) {
+      handleAdminAuthFail(err);
+      showError('hf-error', err.message);
+    });
+  }
+
+  function renderHolidays() {
+    var tbody = $('hf-table').querySelector('tbody');
+    $('hf-count').textContent = state.holidays.length + (state.holidays.length === 1 ? ' jour' : ' jours');
+    tbody.innerHTML = '';
+    if (state.holidays.length === 0) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.colSpan = 3;
+      td0.className = 'empty';
+      td0.textContent = 'Aucun jour ferie enregistre.';
+      tr0.appendChild(td0);
+      tbody.appendChild(tr0);
+      return;
+    }
+    state.holidays.forEach(function (h, idx) {
+      var tr = document.createElement('tr');
+      [h.date, h.name].forEach(function (txt) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        tr.appendChild(td);
+      });
+      var tdBtn = document.createElement('td');
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ghost-btn sm';
+      btn.textContent = 'Supprimer';
+      btn.dataset.index = idx + 1;
+      btn.addEventListener('click', onHolidayDelete);
+      tdBtn.appendChild(btn);
+      tr.appendChild(tdBtn);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function onHolidayAdd() {
+    var date = $('hf-date').value;
+    var name = $('hf-name').value.trim();
+    if (!date) { showError('hf-error', 'Saisissez la date du jour ferie.'); return; }
+    if (!state.adminToken) { showError('hf-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
+    hideError('hf-error');
+    $('btn-hf-add').textContent = 'Ajout...';
+    api({ action: 'holiday_add', token: state.adminToken, date: date, name: name, adminEmail: state.adminEmail || '' }).then(function (res) {
+      $('btn-hf-add').textContent = 'Ajouter';
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'ajouter le jour ferie');
+      $('hf-date').value = '';
+      $('hf-name').value = '';
+      loadHolidays();
+      showFeedback('success', 'Jour ferie enregistre.');
+    }).catch(function (err) {
+      $('btn-hf-add').textContent = 'Ajouter';
+      handleAdminAuthFail(err);
+      showError('hf-error', err.message);
+    });
+  }
+
+  function onHolidayDelete(e) {
+    var index = Number(e.target && e.target.dataset.index);
+    if (!index) return;
+    if (!window.confirm('Supprimer ce jour ferie ?')) return;
+    api({ action: 'holiday_delete', token: state.adminToken, index: index, adminEmail: state.adminEmail || '' }).then(function (res) {
+      if (!res.ok) throw new Error(res.message || 'Impossible de supprimer le jour ferie');
+      loadHolidays();
+      showFeedback('success', 'Jour ferie supprime.');
+    }).catch(function (err) {
+      handleAdminAuthFail(err);
+      showError('hf-error', err.message);
+    });
+  }
+
+  /* ---------------- Manual corrections ---------------- */
+
+  function syncCorrectionFields() {
+    var mode = $('co-mode').value;
+    $('.co-in-field').classList.toggle('hidden', mode !== 'add_pair');
+    // remove_last needs no times at all
+    $('co-out').parentElement.classList.toggle('hidden', mode === 'remove_last');
+  }
+
+  function onCorrectionApply() {
+    var email = $('co-email').value.trim();
+    var date = $('co-date').value;
+    var fixMode = $('co-mode').value;
+    var inTime = $('co-in').value;
+    var out = $('co-out').value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('co-error', 'Saisissez un email valide.'); return; }
+    if (!date) { showError('co-error', 'Saisissez la date a corriger.'); return; }
+    if (!state.adminToken) { showError('co-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
+    if (fixMode !== 'remove_last') {
+      if (!out) { showError('co-error', 'Saisissez l\'heure de sortie (HH:MM).'); return; }
+      if (fixMode === 'add_pair' && !inTime) { showError('co-error', 'Saisissez l\'heure d\'entree (HH:MM).'); return; }
+    }
+    hideError('co-error');
+    $('co-result').classList.add('hidden');
+    $('btn-co-apply').textContent = 'Application...';
+    api({
+      action: 'correction_apply', token: state.adminToken,
+      email: email, date: date, fixMode: fixMode,
+      inTime: inTime, out: out,
+      adminEmail: state.adminEmail || ''
+    }).then(function (res) {
+      $('btn-co-apply').textContent = 'Appliquer';
+      if (!res.ok) throw new Error(res.message || 'Correction refusee.');
+      $('co-result').textContent = 'Fait : ' + (res.applied || 'correction appliquee.') + ' Pensez a recharger le rapport.';
+      $('co-result').classList.remove('hidden');
+      showFeedback('success', 'Correction appliquee.');
+      onAdminGo(); // refresh the dashboard data
+    }).catch(function (err) {
+      $('btn-co-apply').textContent = 'Appliquer';
+      handleAdminAuthFail(err);
+      showError('co-error', err.message);
     });
   }
 
@@ -1697,11 +2628,63 @@
     });
   }
 
+  var HEAT_MONTHS = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'];
+
+  function renderHeatmap(pairs, rangeFrom) {
+    var grid = $('history-heatmap');
+    if (!grid) return;
+    var present = {};
+    var hoursMap = {};
+    (pairs || []).forEach(function (p) {
+      if (!p.date) return;
+      present[p.date] = true;
+      if (p.hours != null && !isNaN(p.hours)) {
+        hoursMap[p.date] = Math.max(hoursMap[p.date] || 0, p.hours);
+      }
+    });
+    var base = String(rangeFrom || todayStr()).split('-');
+    var y = Number(base[0]);
+    var m = Number(base[1]);
+    var label = $('heat-month-label');
+    if (label && y && m) label.textContent = HEAT_MONTHS[m - 1] + ' ' + y;
+    if (!y || !m || m < 1 || m > 12) { grid.innerHTML = ''; return; }
+    var first = new Date(y, m - 1, 1);
+    var daysInMonth = new Date(y, m, 0).getDate();
+    var lead = (first.getDay() + 6) % 7;
+    var today = todayStr();
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < lead; i++) {
+      var blank = document.createElement('span');
+      blank.className = 'hm-cell blank';
+      frag.appendChild(blank);
+    }
+    for (var d = 1; d <= daysInMonth; d++) {
+      var ds = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      var cell = document.createElement('span');
+      cell.className = 'hm-cell';
+      if (ds > today) {
+        cell.classList.add('future');
+      } else {
+        var lvl = 0;
+        if (present[ds]) {
+          var h = hoursMap[ds];
+          lvl = h == null ? 1 : (h < 2 ? 1 : h < 4 ? 2 : h < 6 ? 3 : 4);
+        }
+        cell.classList.add('lvl-' + lvl);
+        cell.title = ds + ' \u00b7 ' + (present[ds] ? fmtHours(hoursMap[ds]) : 'Pas de pointage');
+      }
+      frag.appendChild(cell);
+    }
+    grid.innerHTML = '';
+    grid.appendChild(frag);
+  }
+
   function renderHistory(h) {
     $('hist-range').textContent = h.range.from + ' \u2192 ' + h.range.to;
     $('hist-days').textContent = h.summary.daysPresent;
     $('hist-hours').textContent = fmtHours(h.summary.totalHours);
     $('hist-late').textContent = h.summary.lateCount;
+    renderHeatmap(h.pairs, h.range.from);
 
     var tbody = $('hist-table').querySelector('tbody');
     tbody.innerHTML = '';
@@ -1719,6 +2702,8 @@
     }
     pairs.forEach(function (p) {
       var tr = document.createElement('tr');
+      if (p.missing) tr.className = 'row-missing';
+      else if (p.late) tr.className = 'row-late';
       [p.date, p.in || '\u2014', p.out || '\u2014', fmtHours(p.hours)].forEach(function (txt) {
         var td = document.createElement('td');
         td.textContent = txt;
