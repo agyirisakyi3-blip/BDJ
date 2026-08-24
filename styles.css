@@ -1246,3 +1246,55 @@ th.sortable.desc::after { content: "\2193"; opacity: 1; }
 /* Correction form field toggling */
 .co-in-field.hidden,
 .range-field.hidden { display: none; }
+
+/* ============ Admin desktop layout ============ */
+@media (min-width: 1024px) {
+  body.admin-view .app {
+    max-width: 1240px;
+    padding-left: 40px;
+    padding-right: 40px;
+    padding-bottom: 56px;
+  }
+
+  body.admin-view .topbar { margin-bottom: 28px; }
+  body.admin-view .brand-text h1 { font-size: 24px; }
+
+  /* The floating mobile nav is replaced by the back arrow in the admin top bar */
+  body.admin-view .bottom-nav { display: none; }
+
+  /* Centered login card */
+  body.admin-view #admin-login {
+    max-width: 560px;
+    margin: 9vh auto 0;
+  }
+
+  /* Dashboard becomes a 2-column grid */
+  #admin-dash {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  #admin-dash > * { margin: 0; }
+  #admin-dash > .card:last-of-type { margin-bottom: 0; }
+
+  /* Full-width rows: toolbar, KPIs, period stats, export actions */
+  #admin-dash > .dash-toolbar,
+  #admin-dash > .kpi-grid,
+  #admin-dash > .stat-caption,
+  #admin-dash > .report-summary,
+  #admin-dash > .btn-row { grid-column: 1 / -1; }
+
+  #admin-dash > .btn-row { justify-content: flex-end; }
+  #admin-dash > .btn-row .ghost-btn { flex: 0 0 auto; min-width: 150px; }
+
+  #admin-dash .dash-toolbar-head h3 { font-size: 20px; }
+  #admin-dash .range-row { max-width: 680px; }
+  #admin-dash .bar-chart { height: 210px; }
+
+  #view-admin .kpi { padding: 18px; }
+  #view-admin .kpi b { font-size: 30px; }
+
+  #view-admin table { font-size: 13.5px; }
+  #view-admin th, #view-admin td { padding: 11px 12px; }
+}

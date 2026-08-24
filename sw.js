@@ -1,8 +1,9 @@
-var CACHE = 'att-v19';
+var CACHE = 'att-v21';
 var ASSETS = [
   './',
   './index.html',
   './office-screen.html',
+  './office-screen.js',
   './styles.css',
   './app.js',
   './utils.js',

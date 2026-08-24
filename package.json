@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "jest --runInBand --forceExit --detectOpenHandles"
+    "test": "jest --forceExit --maxWorkers=50%"
   },
   "devDependencies": {
     "express": "^4.19.2",

@@ -77,8 +77,10 @@ import {
   }
 
   function isConfigured() {
-    return /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(API_URL) &&
-           API_URL.indexOf('YOUR_SCRIPT_ID') === -1;
+    if (/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(API_URL) &&
+        API_URL.indexOf('YOUR_SCRIPT_ID') === -1) return true;
+    /* Local dev / test harness: same-origin mock endpoint (e.g. tests/server.js /exec). */
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/exec(\?|$)/.test(API_URL);
   }
 
   function defaultsConfig() {
@@ -434,7 +436,14 @@ import {
 
   function loadStatus() {
     return lsGet(LS_STATUS).then(function (raw) {
-      try { state.status = raw ? JSON.parse(raw) : null; } catch (e) { state.status = null; }
+      var parsed = null;
+      try { parsed = raw ? JSON.parse(raw) : null; } catch (e) { parsed = null; }
+      if (parsed && parsed.date !== todayStr()) {
+        // Status from a previous day: start fresh.
+        try { localStorage.removeItem(LS_STATUS); } catch (e) {}
+        parsed = null;
+      }
+      state.status = parsed;
     });
   }
 
@@ -1495,6 +1504,8 @@ import {
     var wantsAdmin = hash.indexOf('admin') !== -1;
     var allowed = !!state.isAdmin || !!state.adminToken;
 
+    document.body.classList.toggle('admin-view', wantsAdmin);
+
     if (wantsAdmin && !allowed && state.adminChecking) {
       $('view-home').classList.add('hidden');
       $('view-admin').classList.add('hidden');
@@ -2478,7 +2489,7 @@ import {
 
   function syncCorrectionFields() {
     var mode = $('co-mode').value;
-    $('.co-in-field').classList.toggle('hidden', mode !== 'add_pair');
+    document.querySelector('.co-in-field').classList.toggle('hidden', mode !== 'add_pair');
     // remove_last needs no times at all
     $('co-out').parentElement.classList.toggle('hidden', mode === 'remove_last');
   }
