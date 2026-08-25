@@ -26,29 +26,41 @@ var FMT_MONTHS = ['Jan', 'Fev', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aou', 'Sep',
 var FMT_DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 export function fmtDateLabel(d) {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
   return FMT_DAYS[d.getDay()] + ', ' + d.getDate() + ' ' + FMT_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
 }
 
 var DAY_ABBR = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
 
 export function dayLabel(dateStr) {
-  var p = dateStr.split('-');
-  var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  if (dateStr === null || dateStr === undefined || String(dateStr).trim() === '') return '';
+  var p = String(dateStr).split('-');
+  if (p.length !== 3) return '';
+  var year = Number(p[0]);
+  var month = Number(p[1]);
+  var day = Number(p[2]);
+  if (!isFinite(year) || !isFinite(month) || !isFinite(day)) return '';
+  var d = new Date(year, month - 1, day);
+  if (isNaN(d.getTime())) return '';
   return DAY_ABBR[d.getDay()];
 }
 
 export function fmtHours(h) {
-  if (h === null || h === undefined || isNaN(h)) return '\u2014';
-  var total = Math.round(h * 60);
+  if (h === null || h === undefined || !isFinite(Number(h))) return '\u2014';
+  var total = Math.round(Number(h) * 60);
   var hours = Math.floor(total / 60);
   var mins = total % 60;
   return hours + 'h ' + mins + 'm';
 }
 
 export function timeToMinutes(hhmm) {
-  var m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+  var s = String(hhmm || '').trim();
+  var m = s.match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return -1;
-  return Number(m[1]) * 60 + Number(m[2]);
+  var hour = Number(m[1]);
+  var minute = Number(m[2]);
+  if (!isFinite(hour) || !isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return -1;
+  return hour * 60 + minute;
 }
 
 export function escapeHtml(s) {
