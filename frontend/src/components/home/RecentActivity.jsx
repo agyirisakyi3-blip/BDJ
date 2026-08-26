@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 
-export default function RecentActivity() {
+export default memo(function RecentActivity() {
   const { profile, recent, recentLoading } = useApp();
   if (!profile) return null;
 
@@ -40,4 +41,4 @@ export default function RecentActivity() {
       )}
     </section>
   );
-}
+});

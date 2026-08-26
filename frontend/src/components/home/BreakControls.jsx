@@ -1,9 +1,8 @@
 import { useApp } from '../../contexts/AppContext';
-import { api } from '../../api';
 import { todayStr, fmtHours } from '../../utils';
 
 export default function BreakControls({ onFeedback }) {
-  const { profile, status, setStatus, config, apiCall, tenantFromProfile } = useApp();
+  const { profile, status, setStatus, apiCall, tenantFromProfile } = useApp();
   if (!profile) return null;
   const act = status ? String(status.action || '') : '';
   const showBreak = act === 'Check-in' || act === 'Break-in' || act === 'Break-out';

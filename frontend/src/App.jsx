@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './contexts/AppContext';
 import HomePage from './pages/HomePage';
-import AdminPage from './pages/AdminPage';
 import BottomNav from './components/layout/BottomNav';
 import OfflinePill from './components/layout/OfflinePill';
 import Feedback from './components/shared/Feedback';
 import ConsentBanner from './components/shared/ConsentBanner';
-import HelpModal from './components/modals/HelpModal';
-import HistoryModal from './components/modals/HistoryModal';
+
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const HelpModal = lazy(() => import('./components/modals/HelpModal'));
+const HistoryModal = lazy(() => import('./components/modals/HistoryModal'));
 
 function AppContent() {
   const { consent } = useApp();
@@ -45,18 +46,22 @@ function AppContent() {
       </div>
       <OfflinePill />
       <main className="app">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/admin" element={<AdminPage />} />
-        </Routes>
+        <Suspense fallback={null}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/admin" element={<AdminPage />} />
+          </Routes>
+        </Suspense>
       </main>
       <BottomNav
         onShowHistory={() => setShowHistory(true)}
         onShowHelp={() => setShowHelp(true)}
       />
       <Feedback />
-      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
-      <HistoryModal isOpen={showHistory} onClose={() => setShowHistory(false)} />
+      <Suspense fallback={null}>
+        {showHelp && <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />}
+        {showHistory && <HistoryModal isOpen={showHistory} onClose={() => setShowHistory(false)} />}
+      </Suspense>
     </>
   );
 }

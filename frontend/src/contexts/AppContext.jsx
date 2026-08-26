@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useEncryptedStorage, lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import CONFIG from '../config';
 import { api, isConfigured } from '../api';
@@ -221,7 +221,7 @@ export function AppProvider({ children }) {
     }).catch(() => setIsAdmin(false));
   }, [profile, apiCall]);
 
-  const value = {
+  const value = useMemo(() => ({
     profile, setProfile, profileLoaded,
     status, setStatus, statusLoaded,
     config, setConfig,
@@ -243,7 +243,15 @@ export function AppProvider({ children }) {
     apiCall, tenantFromProfile,
     refreshAdminAccess,
     privacyNoticeShown,
-  };
+  }), [
+    profile, profileLoaded, status, statusLoaded, config, consent, onboarded, themeMode,
+    isAdmin, adminToken, adminEmail, feedback, recent, recentLoading, week, weekLoading,
+    monthSummary, employees, admins, leaves, holidays, adminData, privacyNoticeShown,
+    setProfile, setStatus, setConfig, setConsent, setOnboarded, cycleTheme, setIsAdmin,
+    setAdminToken, setAdminEmail, showFeedback, loadRecent, loadWeek, loadMonth,
+    setEmployees, setAdmins, setLeaves, setHolidays, setAdminData,
+    apiCall, tenantFromProfile, refreshAdminAccess,
+  ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { fmtHours, dayLabel, todayStr } from '../../utils';
 
-export default function WeekChart() {
+export default memo(function WeekChart() {
   const { profile, week, weekLoading } = useApp();
   if (!profile) return null;
 
@@ -43,4 +44,4 @@ export default function WeekChart() {
       {!hasData && <p className="hint">Aucun pointage sur les 7 derniers jours.</p>}
     </section>
   );
-}
+});

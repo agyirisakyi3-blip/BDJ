@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 
-export default function OfflinePill() {
+export default memo(function OfflinePill() {
   const [online, setOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -22,4 +22,4 @@ export default function OfflinePill() {
       <span>Hors ligne</span>
     </div>
   );
-}
+});

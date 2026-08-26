@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 
-export default function Feedback() {
+export default memo(function Feedback() {
   const { feedback } = useApp();
   if (!feedback) return null;
   return (
@@ -8,4 +9,4 @@ export default function Feedback() {
       {feedback.msg}
     </div>
   );
-}
+});

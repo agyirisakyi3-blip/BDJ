@@ -1,29 +1,8 @@
-var CACHE = 'att-v21';
-var ASSETS = [
-  './',
-  './index.html',
-  './office-screen.html',
-  './office-screen.js',
-  './styles.css',
-  './app.js',
-  './utils.js',
-  './config.js',
-  './manifest.webmanifest',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-512-maskable.png',
-  'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
-];
+var CACHE = 'att-v30';
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(function (c) {
-        return Promise.allSettled(ASSETS.map(function (url) {
-          return c.add(url);
-        }));
-      })
-      .then(function () { return self.skipWaiting(); })
+    caches.open(CACHE).then(function () { return self.skipWaiting(); })
   );
 });
 
@@ -40,21 +19,43 @@ self.addEventListener('activate', function (e) {
 
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
-  if (e.request.url.indexOf(self.location.origin) !== 0) return;
-  e.respondWith(
-    caches.match(e.request).then(function (hit) {
-      var refresh = fetch(e.request).then(function (resp) {
-        if (resp && (resp.status === 200 || resp.type === 'opaque')) {
-          var copy = resp.clone();
-          caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
-        }
-        return resp;
-      }).catch(function () {
-        if (hit) return hit;
-        if (e.request.mode === 'navigate') return caches.match('./index.html');
-        return new Response('', { status: 504, statusText: 'Offline' });
-      });
-      return hit || refresh;
-    })
-  );
+
+  // For same-origin requests: stale-while-revalidate
+  if (e.request.url.indexOf(self.location.origin) === 0) {
+    e.respondWith(
+      caches.open(CACHE).then(function (cache) {
+        return cache.match(e.request).then(function (hit) {
+          var fetchPromise = fetch(e.request).then(function (resp) {
+            if (resp && resp.status === 200) {
+              cache.put(e.request, resp.clone());
+            }
+            return resp;
+          }).catch(function () {
+            if (hit) return hit;
+            if (e.request.mode === 'navigate') return cache.match('./index.html');
+            return new Response('', { status: 504, statusText: 'Offline' });
+          });
+          return hit || fetchPromise;
+        });
+      })
+    );
+    return;
+  }
+
+  // For CDN requests (QR library): cache-first
+  if (e.request.url.indexOf('cdnjs.cloudflare.com') !== -1) {
+    e.respondWith(
+      caches.open(CACHE).then(function (cache) {
+        return cache.match(e.request).then(function (hit) {
+          if (hit) return hit;
+          return fetch(e.request).then(function (resp) {
+            if (resp && resp.status === 200) {
+              cache.put(e.request, resp.clone());
+            }
+            return resp;
+          });
+        });
+      })
+    );
+  }
 });

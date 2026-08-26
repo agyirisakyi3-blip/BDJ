@@ -1,11 +1,30 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { avatarHue, avatarInitials, fmtHours, todayStr } from '../../utils';
 
 const RING_CIRC = 2 * Math.PI * 35;
-const WORKDAY_HOURS = 8;
 
-export default function StatusCard() {
+function computeStreak(week) {
+  const map = {};
+  (week || []).forEach((d) => { map[d.date] = d.hours || 0; });
+  const today = todayStr();
+  if (!(map[today] > 0) && !(map[today.replace(/(\d{4}-\d{2}-)\d{2}/, (_, p) => {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    return p + String(d.getDate()).padStart(2, '0');
+  })] > 0)) return 0;
+  let cursor = map[today] > 0 ? 0 : -1;
+  let streak = 0;
+  while (streak < 7) {
+    const d = new Date();
+    d.setDate(d.getDate() + cursor - streak);
+    const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    if (map[ds] > 0) streak++;
+    else break;
+  }
+  return streak;
+}
+
+export default memo(function StatusCard() {
   const { profile, status, week } = useApp();
   const [elapsed, setElapsed] = useState('0h 0m 0s');
   const intervalRef = useRef(null);
@@ -14,26 +33,7 @@ export default function StatusCard() {
   const onBreakNow = act === 'Break-out';
   const checkedIn = act === 'Check-in' || act === 'Break-in' || onBreakNow;
   const isCheckedOut = status && !checkedIn;
-
-  const computeStreak = useCallback(() => {
-    const map = {};
-    (week || []).forEach((d) => { map[d.date] = d.hours || 0; });
-    const today = todayStr();
-    if (!(map[today] > 0) && !(map[today.replace(/(\d{4}-\d{2}-)\d{2}/, (_, p) => {
-      const d = new Date(); d.setDate(d.getDate() - 1);
-      return p + String(d.getDate()).padStart(2, '0');
-    })] > 0)) return 0;
-    let cursor = map[today] > 0 ? 0 : -1;
-    let streak = 0;
-    while (streak < 7) {
-      const d = new Date();
-      d.setDate(d.getDate() + cursor - streak);
-      const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-      if (map[ds] > 0) streak++;
-      else break;
-    }
-    return streak;
-  }, [week]);
+  const streak = useMemo(() => computeStreak(week), [week]);
 
   useEffect(() => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
@@ -101,10 +101,10 @@ export default function StatusCard() {
       <div className="status-info">
         <div className="status-label-row">
           <div className="status-label">{label}</div>
-          {computeStreak() >= 2 && (
+          {streak >= 2 && (
             <span className="streak-badge" title="Jours de presence consecutifs">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
-              <span>{computeStreak()}</span>&nbsp;j
+              <span>{streak}</span>&nbsp;j
             </span>
           )}
         </div>
@@ -122,4 +122,4 @@ export default function StatusCard() {
       </div>
     </div>
   );
-}
+});

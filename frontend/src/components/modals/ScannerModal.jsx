@@ -1,5 +1,24 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
+const QR_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
+
+function loadQrScript() {
+  if (typeof window.Html5Qrcode !== 'undefined') return Promise.resolve();
+  const existing = document.querySelector('script[src="' + QR_CDN_URL + '"]');
+  if (existing) return new Promise((resolve, reject) => {
+    existing.addEventListener('load', resolve);
+    existing.addEventListener('error', reject);
+  });
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = QR_CDN_URL;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
 export default function ScannerModal({ isOpen, onClose, onScan }) {
   const [manualInput, setManualInput] = useState('');
   const [cameraError, setCameraError] = useState('');
@@ -10,6 +29,13 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
     setCameraError('');
     if (!containerRef.current) return;
     containerRef.current.innerHTML = '';
+
+    try {
+      await loadQrScript();
+    } catch {
+      setCameraError("Le scanner QR n'a pas pu se charger (verifiez votre connexion).");
+      return;
+    }
 
     if (typeof window.Html5Qrcode === 'undefined') {
       setCameraError("Le scanner QR n'a pas pu se charger (verifiez votre connexion).");

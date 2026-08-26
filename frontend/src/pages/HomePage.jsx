@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { api, isConfigured } from '../api';
 import { parseQr, todayStr } from '../utils';
@@ -10,12 +10,13 @@ import BreakControls from '../components/home/BreakControls';
 import RecentActivity from '../components/home/RecentActivity';
 import WeekChart from '../components/home/WeekChart';
 import MonthSummary from '../components/home/MonthSummary';
-import ScannerModal from '../components/modals/ScannerModal';
-import SelfieModal from '../components/modals/SelfieModal';
-import ProfileModal from '../components/modals/ProfileModal';
-import OnboardingModal from '../components/modals/OnboardingModal';
 import SetupBanner from '../components/shared/SetupBanner';
 import ScanSuccess from '../components/shared/ScanSuccess';
+
+const ScannerModal = lazy(() => import('../components/modals/ScannerModal'));
+const SelfieModal = lazy(() => import('../components/modals/SelfieModal'));
+const ProfileModal = lazy(() => import('../components/modals/ProfileModal'));
+const OnboardingModal = lazy(() => import('../components/modals/OnboardingModal'));
 
 const LS_QUEUE = 'att.queue.v1';
 
@@ -175,10 +176,12 @@ export default function HomePage() {
       <WeekChart />
       <MonthSummary />
 
-      <ScannerModal isOpen={showScanner} onClose={() => setShowScanner(false)} onScan={handleScan} />
-      <SelfieModal isOpen={showSelfie} onClose={() => { setShowSelfie(false); setPendingPayload(null); }} onCapture={handleSelfieCapture} />
-      <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
-      <OnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      <Suspense fallback={null}>
+        <ScannerModal isOpen={showScanner} onClose={() => setShowScanner(false)} onScan={handleScan} />
+        <SelfieModal isOpen={showSelfie} onClose={() => { setShowSelfie(false); setPendingPayload(null); }} onCapture={handleSelfieCapture} />
+        <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
+        <OnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      </Suspense>
       <ScanSuccess {...scanSuccess} />
     </>
   );

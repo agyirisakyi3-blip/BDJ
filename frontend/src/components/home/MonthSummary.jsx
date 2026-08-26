@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { fmtHours } from '../../utils';
 
-export default function MonthSummary() {
+export default memo(function MonthSummary() {
   const { profile, monthSummary } = useApp();
   if (!profile || !monthSummary) return null;
 
@@ -22,4 +23,4 @@ export default function MonthSummary() {
       <p className="hint">{note}</p>
     </section>
   );
-}
+});
