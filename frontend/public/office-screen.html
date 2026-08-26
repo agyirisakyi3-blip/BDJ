@@ -1,0 +1,115 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ecran d'entree</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      background: linear-gradient(170deg, #0c1222, #111a2e 50%, #0e1529) fixed;
+      color: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .kiosk {
+      text-align: center;
+      padding: 32px 16px;
+      width: min(520px, 94vw);
+    }
+    .kiosk h1 { margin: 0 0 4px; font-size: clamp(22px, 4vw, 34px); font-weight: 800; letter-spacing: -0.5px; }
+    .kiosk .sub { color: #7e8da6; margin-bottom: 22px; font-size: 14px; }
+    #qrcode {
+      display: inline-block;
+      padding: 18px;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    }
+    .countdown {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+      margin: 22px auto 6px;
+      max-width: 320px;
+    }
+    .countdown > div {
+      height: 100%;
+      width: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #10b981, #34d399);
+      transition: width 1s linear;
+    }
+    .countdown.warn > div { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    #clock { font-variant-numeric: tabular-nums; color: #aab7cc; font-size: 13px; }
+    #status { color: #f87171; font-size: 13px; min-height: 18px; margin-top: 12px; }
+    /* Login card */
+    #login {
+      background: rgba(17, 26, 46, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 20px;
+      padding: 28px 24px;
+      text-align: left;
+    }
+    #login label { display: block; margin: 14px 0 6px; color: #7e8da6; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    #login input {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: inherit;
+      font-size: 15px;
+    }
+    #login input:focus { outline: none; border-color: #10b981; }
+    #login button { margin-top: 18px; width: 100%; }
+    .hidden { display: none !important; }
+    .top-actions { position: fixed; top: 14px; right: 14px; display: flex; gap: 8px; }
+    @media print { .top-actions, .countdown, #clock, #status { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="top-actions">
+    <button id="fs-btn" class="ghost-btn" type="button">Plein ecran</button>
+    <button id="logout-btn" class="ghost-btn hidden" type="button">Deconnexion</button>
+  </div>
+
+  <main class="kiosk">
+    <!-- ============ LOGIN ============ -->
+    <section id="login">
+      <h1>Ecran d'entree</h1>
+      <p class="sub">Acces admin requis : ce code change toutes les 30 secondes.</p>
+      <label for="l-email">Email admin</label>
+      <input id="l-email" type="email" autocomplete="username" placeholder="admin@bdjconsulting.com">
+      <label for="tenant-inp">Code tenant <span style="color:#64748b">(optionnel)</span></label>
+      <input id="tenant-inp" type="text" autocomplete="off" placeholder="ex. acme">
+      <div id="otp-row" class="hidden">
+        <label for="l-otp">Code a usage unique (envoye par email)</label>
+        <input id="l-otp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+      </div>
+      <button id="l-go" class="primary-btn" type="button">Connexion</button>
+      <p id="l-status" class="sub" style="margin-top:14px; min-height:18px;"></p>
+    </section>
+
+    <!-- ============ KIOSK DISPLAY ============ -->
+    <section id="screen" class="hidden">
+      <h1 id="app-title">Presence</h1>
+      <p class="sub">Scannez pour pointer &mdash; le code se renouvelle automatiquement.</p>
+      <div id="qrcode"></div>
+      <div class="countdown" id="cd"><div id="cd-bar"></div></div>
+      <div id="clock"></div>
+      <p id="status"></p>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script src="office-screen.js"></script>
+</body>
+</html>
