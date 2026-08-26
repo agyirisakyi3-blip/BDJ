@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../contexts/AppContext';
 import { fmtHours, todayStr, shiftDateStr, avatarHue, avatarInitials, cmpVals } from '../../utils';
 import AdminLogin from './AdminLogin';
+import QRGenerator from './QRGenerator';
 
 const PEOPLE_STATUS = {
   onsite: { label: 'Sur place', cls: 'in' },
@@ -529,6 +530,7 @@ export default function AdminDashboard() {
       <LeaveSection leaves={leaves} onAdd={handleLeaveAdd} onDelete={handleLeaveDelete} />
       <HolidaySection holidays={holidays} onAdd={handleHolidayAdd} onDelete={handleHolidayDelete} />
       <CorrectionSection onApply={handleCorrection} />
+      <QRGenerator />
       <OfficeScreenLink />
     </div>
   );
