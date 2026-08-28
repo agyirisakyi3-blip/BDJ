@@ -1,4 +1,4 @@
-var CACHE = 'att-v31';
+var CACHE = 'att-v32';
 
 self.addEventListener('install', function (e) {
   e.waitUntil(

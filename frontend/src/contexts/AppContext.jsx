@@ -99,7 +99,7 @@ export function AppProvider({ children }) {
     document.documentElement.setAttribute('data-theme-mode', themeMode);
     document.documentElement.setAttribute('data-theme', resolved);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', resolved === 'light' ? '#059669' : '#0c1222');
+    if (meta) meta.setAttribute('content', resolved === 'light' ? '#0e86c4' : '#0a1525');
   }, [themeMode]);
 
   const cycleTheme = useCallback(() => {

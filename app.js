@@ -317,7 +317,7 @@ import {
     var btn = $('btn-theme');
     if (btn) btn.title = 'Theme : ' + (mode === 'auto' ? 'automatique' : (mode === 'light' ? 'clair' : 'sombre'));
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', resolved === 'light' ? '#059669' : '#0c1222');
+    if (meta) meta.setAttribute('content', resolved === 'light' ? '#0e86c4' : '#0a1525');
   }
 
   function initTheme() {
@@ -925,11 +925,11 @@ import {
         ctx.drawImage(img, 0, 0, 64, 64);
         ctx.beginPath();
         ctx.arc(51, 51, 13, 0, Math.PI * 2);
-        ctx.fillStyle = '#0c1222';
+        ctx.fillStyle = '#0a1525';
         ctx.fill();
         ctx.beginPath();
         ctx.arc(51, 51, 10, 0, Math.PI * 2);
-        ctx.fillStyle = status === 'in' ? '#10b981' : '#64748b';
+        ctx.fillStyle = status === 'in' ? '#0e86c4' : '#64748b';
         ctx.fill();
         link.href = c.toDataURL('image/png');
         updateFavicon._done = true;
@@ -1367,7 +1367,7 @@ import {
 
   var ssTimer = null;
 
-  var CONFETTI_COLORS = ['#10b981', '#34d399', '#f59e0b', '#38bdf8', '#a78bfa', '#f472b6'];
+  var CONFETTI_COLORS = ['#0e86c4', '#4cc1e9', '#f09020', '#e00060', '#38bdf8', '#a78bfa'];
 
   function burstConfetti(container) {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
