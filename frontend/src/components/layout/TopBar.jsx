@@ -37,8 +37,8 @@ export default function TopBar({ onProfileClick, onThemeClick, onInstallClick })
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        <span className="brand-mark brand-logo" aria-hidden="true">
+          <img src="/icons/icon-192.png" alt="Logo BDJ" />
         </span>
         <div className="brand-text">
           <h1>{config.appName || 'Presence'}</h1>

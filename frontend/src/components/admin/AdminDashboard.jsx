@@ -153,8 +153,8 @@ export default function AdminDashboard() {
       <div>
         <header className="topbar">
           <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/></svg>
+            <span className="brand-mark brand-logo" aria-hidden="true">
+              <img src="/icons/icon-192.png" alt="Logo BDJ" />
             </span>
             <div className="brand-text"><h1>Admin</h1><p className="muted">Resume du jour</p></div>
           </div>

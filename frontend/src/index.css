@@ -189,6 +189,8 @@ html, body {
 .brand-mark svg { width: 22px; height: 22px; }
 .brand-mark.sm { width: 38px; height: 38px; border-radius: 12px; }
 .brand-mark.sm svg { width: 20px; height: 20px; }
+.brand-mark.brand-logo { background: #fff; overflow: hidden; padding: 0; }
+.brand-mark.brand-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .brand-text { min-width: 0; }
 .brand-text h1 { margin: 0; font-size: 20px; font-weight: 700; color: #fff; letter-spacing: -0.2px; }
