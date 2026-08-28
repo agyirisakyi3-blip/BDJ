@@ -85,7 +85,7 @@ import {
 
   function defaultsConfig() {
     return {
-      appName: DEFAULTS.APP_NAME || 'Presence'
+      appName: DEFAULTS.APP_NAME || 'addredance'
     };
   }
 
@@ -1294,7 +1294,7 @@ import {
          (state.status.action !== 'Check-in' && state.status.action !== 'Break-in')) &&
         !alreadyNotified('att.remind.in')) {
       markNotified('att.remind.in');
-      pushLocalNotification(cfg.appName || 'Presence',
+      pushLocalNotification(cfg.appName || 'addredance',
         'Vous n\'avez pas encore pointe votre arrivee. Pensez a scanner le QR !');
     }
 
@@ -1305,7 +1305,7 @@ import {
         (state.status.action === 'Check-in' || state.status.action === 'Break-in') &&
         !alreadyNotified('att.remind.out')) {
       markNotified('att.remind.out');
-      pushLocalNotification(cfg.appName || 'Presence',
+      pushLocalNotification(cfg.appName || 'addredance',
         'Vous n\'avez pas pointe votre sortie. Si vous quittez le bureau, scannez le QR !');
     }
   }

@@ -16,14 +16,14 @@ afterAll(async () => {
 describe('App Loading', () => {
   test('index.html loads with correct title', async () => {
     const page = await bootPage(browser);
-    expect(await page.title()).toBe('BDJ Consulting');
+    expect(await page.title()).toBe('addredance');
     await page.close();
   });
 
   test('app-name displays correct text', async () => {
     const page = await bootPage(browser);
     const text = await page.$eval('#app-name', el => el.textContent);
-    expect(text).toBe('BDJ Consulting');
+    expect(text).toBe('addredance');
     await page.close();
   });
 
@@ -209,8 +209,8 @@ describe('Static Assets', () => {
     const { status, body } = await assetBody('manifest.webmanifest');
     expect(status).toBe(200);
     const json = JSON.parse(body);
-    expect(json.name).toBe('BDJ Consulting');
-    expect(json.short_name).toBe('BDJ');
+    expect(json.name).toBe('addredance');
+    expect(json.short_name).toBe('addredance');
     expect(json.display).toBe('standalone');
     expect(json.icons.length).toBeGreaterThanOrEqual(3);
   });

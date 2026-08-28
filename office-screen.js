@@ -89,7 +89,7 @@
 
       function render(scr) {
         statusEl.textContent = '';
-        $('app-title').textContent = scr.appName || 'Presence';
+        $('app-title').textContent = scr.appName || 'addredance';
         drawQr(scr.token);
         var pct = Math.max(0, Math.min(100, (scr.secondsLeft / scr.intervalSec) * 100));
         $('cd-bar').style.width = pct.toFixed(1) + '%';

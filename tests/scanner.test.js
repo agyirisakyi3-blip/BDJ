@@ -255,7 +255,7 @@ describe('Offline Queue', () => {
 describe('Selfie Required Mode', () => {
   test('check-in with selfie required opens selfie modal and blocks scan', async () => {
     const cap = apiCapture(apiRoutes({
-      config: { ok: true, config: { appName: 'BDJ Consulting', selfieMode: 'required' } }
+      config: { ok: true, config: { appName: 'addredance', selfieMode: 'required' } }
     }));
     const page = await bootPage(browser, { profile: true, noCamera: true, api: body => cap.handler(body) });
 
@@ -287,7 +287,7 @@ describe('Unconfigured API', () => {
       profile: true,
       configOverride: {
         API_URL: 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec',
-        APP_NAME: 'BDJ Consulting',
+        APP_NAME: 'addredance',
         DEFAULT_TENANT: ''
       }
     });

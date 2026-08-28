@@ -32,7 +32,7 @@ function apiRoutes(map) {
       const h = map[body.action];
       return typeof h === 'function' ? h(body) : h;
     }
-    if (body.action === 'config') return { ok: true, config: { appName: 'BDJ Consulting' } };
+    if (body.action === 'config') return { ok: true, config: { appName: 'addredance' } };
     return { ok: false, message: 'Unhandled action in test mock: ' + body.action };
   };
 }
@@ -51,7 +51,7 @@ function apiCapture(responder) {
   cap.handler = function (body) {
     cap.calls.push(body);
     if (cap.responder) return cap.responder(body);
-    if (body.action === 'config') return { ok: true, config: { appName: 'BDJ Consulting' } };
+    if (body.action === 'config') return { ok: true, config: { appName: 'addredance' } };
     return { ok: false, message: 'Unhandled action in test mock: ' + body.action };
   };
   cap.set = fn => { cap.responder = fn; };
@@ -61,7 +61,7 @@ function apiCapture(responder) {
 
 function adminFixture(overrides) {
   const base = {
-    appName: 'BDJ Consulting',
+    appName: 'addredance',
     sheetUrl: '',
     today: todayStr(),
     range: { from: todayStr(), to: todayStr() },

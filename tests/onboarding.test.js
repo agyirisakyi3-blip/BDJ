@@ -70,7 +70,7 @@ describe('Onboarding', () => {
   async function openOnboardingPage() {
     return bootPage(browser, {
       seed: {},
-      api: body => (body.action === 'config' ? { ok: true, config: { appName: 'BDJ Consulting' } } : null)
+      api: body => (body.action === 'config' ? { ok: true, config: { appName: 'addredance' } } : null)
     });
   }
 

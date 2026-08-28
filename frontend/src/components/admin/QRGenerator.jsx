@@ -73,7 +73,7 @@ export default function QRGenerator() {
     const canvas = boxRef.current?.querySelector('canvas');
     if (!canvas) return;
     const a = document.createElement('a');
-    a.download = 'qr-bdj-' + (tenant.trim() || 'office') + '.png';
+    a.download = 'qr-addredance-' + (tenant.trim() || 'office') + '.png';
     a.href = canvas.toDataURL('image/png');
     document.body.appendChild(a);
     a.click();
@@ -86,10 +86,10 @@ export default function QRGenerator() {
     const win = window.open('', '_blank');
     if (!win) return;
     win.document.write(
-      '<html><head><title>QR Code - BDJ Consulting</title>' +
+      '<html><head><title>QR Code - addredance</title>' +
       '<style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:sans-serif;background:#fff}' +
       'img{width:300px;height:300px}h2{margin-bottom:8px}p{color:#666;margin-top:4px}</style></head><body>' +
-      '<h2>BDJ Consulting</h2>' +
+      '<h2>addredance</h2>' +
       '<img src="' + canvas.toDataURL('image/png') + '" />' +
       '<p>Scannez pour pointer</p>' +
       '</body></html>'
@@ -123,7 +123,7 @@ export default function QRGenerator() {
             Code tenant <span className="opt">(optionnel)</span>
             <input
               type="text"
-              placeholder="ex. bdj"
+              placeholder="ex. addredance"
               value={tenant}
               onChange={(e) => setTenant(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && generate()}

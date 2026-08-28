@@ -38,10 +38,10 @@ export default function TopBar({ onProfileClick, onThemeClick, onInstallClick })
     <header className="topbar">
       <div className="brand">
         <span className="brand-mark brand-logo" aria-hidden="true">
-          <img src="/icons/icon-192.png" alt="Logo BDJ" />
+          <img src="/icons/icon-192.png" alt="Logo addredance" />
         </span>
         <div className="brand-text">
-          <h1>{config.appName || 'Presence'}</h1>
+          <h1>{config.appName || 'addredance'}</h1>
           <p className="muted">{fmtDateLabel(new Date())}</p>
         </div>
       </div>

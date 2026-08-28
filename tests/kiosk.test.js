@@ -24,7 +24,7 @@ function newKioskPage(seedFn) {
           ? {
               ok: true,
               screen: {
-                appName: 'BDJ Consulting',
+                appName: 'addredance',
                 token: 'rotating-token-1',
                 secondsLeft: 20,
                 intervalSec: 30,
@@ -70,7 +70,7 @@ describe('Office Screen (kiosk)', () => {
 
     await page.waitForFunction(() => !document.getElementById('screen').classList.contains('hidden'), { timeout: 10000 });
     const title = await page.$eval('#app-title', el => el.textContent);
-    expect(title).toBe('BDJ Consulting');
+    expect(title).toBe('addredance');
 
     const logoutVisible = await page.$eval('#logout-btn', el => !el.classList.contains('hidden'));
     expect(logoutVisible).toBe(true);

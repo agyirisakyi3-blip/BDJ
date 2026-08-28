@@ -95,7 +95,7 @@ describe('Routing / Navigation', () => {
       profile: true,
       api: body => (body.action === 'admin_check'
         ? { ok: false, message: 'boom' }
-        : (body.action === 'config' ? { ok: true, config: { appName: 'BDJ Consulting' } } : null))
+        : (body.action === 'config' ? { ok: true, config: { appName: 'addredance' } } : null))
     });
     await new Promise(r => setTimeout(r, 1200));
     const hidden = await page.$eval('#btn-admin', el => el.classList.contains('hidden'));

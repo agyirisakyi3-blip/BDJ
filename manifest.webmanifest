@@ -1,7 +1,7 @@
 {
-  "name": "BDJ Consulting",
-  "short_name": "BDJ",
-  "description": "Glad to be one them - BDJ Consulting Attendance System",
+  "name": "addredance",
+  "short_name": "addredance",
+  "description": "Glad to be one them - addredance Attendance System",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

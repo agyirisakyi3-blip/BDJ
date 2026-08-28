@@ -154,7 +154,7 @@ export default function AdminDashboard() {
         <header className="topbar">
           <div className="brand">
             <span className="brand-mark brand-logo" aria-hidden="true">
-              <img src="/icons/icon-192.png" alt="Logo BDJ" />
+              <img src="/icons/icon-192.png" alt="Logo addredance" />
             </span>
             <div className="brand-text"><h1>Admin</h1><p className="muted">Resume du jour</p></div>
           </div>
