@@ -1376,3 +1376,155 @@ th.sortable.desc::after { content: "\2193"; opacity: 1; }
 }
 .login-wrap .login-card label { font-size: 13px; }
 #view-login .otp-seg { justify-content: center; margin-top: 4px; }
+
+/* ================= Admin dashboard redesign — Light SaaS workspace =================
+   Scoped to body.admin-view only. The admin turns into an always-light, minimal SaaS
+   workspace inspired by light-mode HR management dashboards: a cool near-white canvas,
+   ONE indigo accent, hairline borders and soft shadows, with emerald/amber/sky reserved
+   for status semantics. Customer-facing screens keep the app theme toggle untouched.
+   Selectors are prefixed (html[data-theme] body.admin-view) to win over the existing
+   theme-scoped rules. No DOM ids/classes changed — app.js and test suites are safe.
+   Shape lock: cards 16px, controls/buttons 12px, chips/pills/avatars circular. */
+
+/* 1) Tokens — redefined on body so every admin control inherits the light palette
+      regardless of the app's dark/light theme */
+body.admin-view {
+  --bg-0: #eef1f7;
+  --bg-1: #f6f7fb;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --muted: #5a6478;
+  --muted-2: #8a94ab;
+  --stroke: rgba(15, 23, 42, 0.08);
+  --stroke-strong: rgba(15, 23, 42, 0.14);
+  --accent: #4f46e5;
+  --accent-light: #6366f1;
+  --accent-soft: rgba(79, 70, 229, 0.09);
+  --accent-border: rgba(79, 70, 229, 0.28);
+  --grad-primary: linear-gradient(135deg, #4338ca, #4f46e5 55%, #6366f1);
+  --success: #10b981;
+  --warn: #f59e0b;
+  --info: #0ea5e9;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -12px rgba(16, 24, 40, 0.12);
+  background: var(--bg-0);
+  color: var(--text);
+}
+
+/* 2) Workspace chrome — top bar and decorative layer */
+html[data-theme] body.admin-view .bg-decor { opacity: 0.6; }
+html[data-theme] body.admin-view .blob-1 { background: radial-gradient(circle, rgba(79, 70, 229, 0.22), transparent 70%); }
+html[data-theme] body.admin-view .blob-2 { background: radial-gradient(circle, rgba(99, 102, 241, 0.16), transparent 70%); }
+html[data-theme] body.admin-view .blob-3 { background: radial-gradient(circle, rgba(129, 140, 248, 0.14), transparent 70%); }
+html[data-theme] body.admin-view .brand-text h1 { color: var(--text); }
+html[data-theme] body.admin-view .brand-text p { color: var(--muted); }
+html[data-theme] body.admin-view .brand-mark { background: var(--grad-primary); box-shadow: 0 4px 14px -4px rgba(79, 70, 229, 0.4); }
+html[data-theme] body.admin-view .live-clock { background: var(--surface); border-color: var(--stroke-strong); color: var(--text); }
+html[data-theme] body.admin-view .live-dot { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
+html[data-theme] body.admin-view .live-toggle input:checked ~ span { color: var(--accent); }
+html[data-theme] body.admin-view .icon-btn { background: var(--surface); border-color: var(--stroke-strong); color: var(--text); }
+html[data-theme] body.admin-view .icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* 3) Base text, forms and tables forced light */
+html[data-theme] body.admin-view .card h3,
+html[data-theme] body.admin-view .block-head h3,
+html[data-theme] body.admin-view .modal-head h3,
+html[data-theme] body.admin-view .login-head h3 { color: var(--text); }
+html[data-theme] body.admin-view label { color: var(--muted); }
+html[data-theme] body.admin-view td { color: #1e293b; }
+html[data-theme] body.admin-view th { color: var(--muted-2); }
+html[data-theme] body.admin-view input,
+html[data-theme] body.admin-view select,
+html[data-theme] body.admin-view textarea {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--stroke-strong);
+}
+html[data-theme] body.admin-view input:hover,
+html[data-theme] body.admin-view select:hover { border-color: rgba(79, 70, 229, 0.4); }
+html[data-theme] body.admin-view input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+}
+html[data-theme] body.admin-view input::placeholder { color: #9aa4b8; }
+html[data-theme] body.admin-view .pin-toggle:hover { background: var(--accent-soft); color: var(--accent); }
+html[data-theme] body.admin-view details summary { color: var(--accent); }
+html[data-theme] body.admin-view .prov-result { background: #f4f6fb; border-color: var(--stroke-strong); color: var(--text); }
+html[data-theme] body.admin-view .check-row input[type="checkbox"] { accent-color: var(--accent); }
+
+/* 4) Feedback toasts — dark-on-light variants */
+html[data-theme] body.admin-view .feedback.success { background: rgba(16, 185, 129, 0.1);  border-color: rgba(16, 185, 129, 0.3);  color: #047857; }
+html[data-theme] body.admin-view .feedback.error   { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: #be123c; }
+html[data-theme] body.admin-view .feedback.warn    { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.35); color: #b45309; }
+html[data-theme] body.admin-view .feedback.info    { background: rgba(14, 165, 233, 0.08); border-color: rgba(14, 165, 233, 0.3); color: #0369a1; }
+
+/* 5) Buttons */
+html[data-theme] body.admin-view .primary-btn { border-radius: 12px; box-shadow: 0 4px 14px -6px rgba(79, 70, 229, 0.5); }
+html[data-theme] body.admin-view .primary-btn:hover { box-shadow: 0 6px 18px -6px rgba(79, 70, 229, 0.55); }
+html[data-theme] body.admin-view .ghost-btn { background: #ffffff; border-color: var(--stroke-strong); color: var(--text); }
+html[data-theme] body.admin-view .ghost-btn:hover { background: #f4f6fb; }
+html[data-theme] body.admin-view .ghost-btn.sm { border-radius: 8px; }
+
+/* 6) KPI cards — tinted icon chips, one accent, tabular numerals */
+html[data-theme] body.admin-view .kpi { border-radius: 14px; gap: 12px; }
+html[data-theme] body.admin-view .kpi::after { background: radial-gradient(circle, rgba(79, 70, 229, 0.07), transparent 65%); }
+html[data-theme] body.admin-view .kpi b { color: var(--text); }
+html[data-theme] body.admin-view .kpi > span:last-child { color: var(--muted); }
+html[data-theme] body.admin-view .kpi-violet  { background: rgba(79, 70, 229, 0.1);  color: #4f46e5; box-shadow: none; }
+html[data-theme] body.admin-view .kpi-emerald { background: rgba(16, 185, 129, 0.1); color: #059669; box-shadow: none; }
+html[data-theme] body.admin-view .kpi-blue    { background: rgba(14, 165, 233, 0.1); color: #0284c7; box-shadow: none; }
+html[data-theme] body.admin-view .kpi-amber   { background: rgba(245, 158, 11, 0.12); color: #d97706; box-shadow: none; }
+
+/* 7) Report summary tiles */
+html[data-theme] body.admin-view .stat { border-radius: 14px; }
+html[data-theme] body.admin-view .stat b { color: var(--text); }
+html[data-theme] body.admin-view .stat-in b  { color: #059669; }
+html[data-theme] body.admin-view .stat-out b { color: #d97706; }
+html[data-theme] body.admin-view .stat-on b  { color: #0284c7; }
+html[data-theme] body.admin-view .stat:hover { box-shadow: var(--shadow-card); }
+
+/* 8) Period toolbar — segmented control look */
+html[data-theme] body.admin-view .dash-toolbar { box-shadow: var(--shadow-card); }
+html[data-theme] body.admin-view .quick-ranges {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  padding: 4px;
+  gap: 2px;
+  background: #eef1f7;
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+}
+html[data-theme] body.admin-view .qr-chip { background: transparent; border-color: transparent; color: var(--muted); }
+html[data-theme] body.admin-view .qr-chip:hover { background: #ffffff; color: var(--text); }
+html[data-theme] body.admin-view .qr-chip.active {
+  background: #ffffff;
+  border-color: var(--stroke-strong);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+
+/* 9) Charts, tables, chips and pills */
+html[data-theme] body.admin-view .bar { background: linear-gradient(180deg, #6366f1, #4f46e5); border-radius: 7px 7px 3px 3px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+html[data-theme] body.admin-view .bar.zero { background: #e6eaf3; box-shadow: none; }
+html[data-theme] body.admin-view .table-wrap { border-radius: 14px; }
+html[data-theme] body.admin-view .table-wrap thead th { background: var(--surface); box-shadow: inset 0 -1px 0 var(--stroke-strong); }
+html[data-theme] body.admin-view .table-wrap tbody tr:hover td { background: #f4f6fb; }
+html[data-theme] body.admin-view th.sortable:hover,
+html[data-theme] body.admin-view th.sortable.asc,
+html[data-theme] body.admin-view th.sortable.desc { color: var(--accent); }
+html[data-theme] body.admin-view .pill { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-border); }
+html[data-theme] body.admin-view .chip { background: rgba(79, 70, 229, 0.08); border-color: rgba(79, 70, 229, 0.22); color: #4338ca; }
+html[data-theme] body.admin-view .chip.absent { background: rgba(244, 63, 94, 0.06); border-color: rgba(244, 63, 94, 0.2); color: #be123c; }
+html[data-theme] body.admin-view .chip-pause { border-color: rgba(245, 158, 11, 0.4); color: #b45309; }
+html[data-theme] body.admin-view .chip.leave, html[data-theme] body.admin-view .chip-leave { border-color: rgba(79, 70, 229, 0.35); color: #4338ca; }
+html[data-theme] body.admin-view .tag.in      { background: rgba(16, 185, 129, 0.1);  color: #047857; }
+html[data-theme] body.admin-view .tag.out     { background: rgba(245, 158, 11, 0.12); color: #b45309; }
+html[data-theme] body.admin-view .tag.neutral { background: rgba(71, 85, 105, 0.09); color: #475569; }
+html[data-theme] body.admin-view .tag.pause   { background: rgba(245, 158, 11, 0.12); color: #b45309; }
+html[data-theme] body.admin-view .tag.leave   { background: rgba(79, 70, 229, 0.1);  color: #4f46e5; }
+html[data-theme] body.admin-view .table-wrap tbody tr.row-late td { background: rgba(245, 158, 11, 0.06); }
+html[data-theme] body.admin-view .table-wrap tbody tr.row-late { color: #b45309; }
+html[data-theme] body.admin-view .table-wrap tbody tr.row-missing td { background: rgba(244, 63, 94, 0.06); }
+html[data-theme] body.admin-view .table-wrap tbody tr.row-missing { color: #be123c; }
+html[data-theme] body.admin-view .nav-item.active { color: var(--accent); background: var(--accent-soft); }
+html[data-theme] body.admin-view .ob-dot.on { background: var(--accent); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); }
