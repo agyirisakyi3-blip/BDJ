@@ -11,7 +11,13 @@ afterAll(async () => {
 });
 
 function adminCheckApi(isAdmin) {
-  return apiRoutes({ admin_check: { ok: true, isAdmin } });
+  return apiRoutes({
+    admin_check: { ok: true, isAdmin },
+    /* quiet background loaders so they never overwrite #feedback with errors */
+    recent: { ok: true, recent: [] },
+    week: { ok: true, week: [] },
+    myattendance: { ok: true, attendance: { range: {}, summary: {}, pairs: [] } }
+  });
 }
 
 /* ==========================================

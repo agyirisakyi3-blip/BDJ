@@ -221,6 +221,9 @@ function handleRequest_(e) {
     if (action === 'correction_apply') {
       return json_(correctionApply_(payload, cfg, now, tz, ss));
     }
+    if (action === 'user_login') {
+      return json_(userLogin_(payload, cfg, now, tz, ss));
+    }
     return json_(error_('Unknown action: ' + action));
   } catch (err) {
     return json_(error_('Server error: ' + err));
@@ -1682,6 +1685,92 @@ function sendOtpTo_(email, now, ss) {
       'Your one-time code is: ' + code + '\n\nIt is valid for 10 minutes.\nIf you did not request this, ignore this email.');
   } catch (e) {}
   return { dev: code };
+}
+
+/* ================= Employee sign-in (email + one-time code) ================= */
+
+function sendUserOtp_(email, now, ss) {
+  var cache = CacheService.getScriptCache();
+  var key = 'otp:user:' + ss.getId() + ':' + email;
+  var code = String(Math.floor(100000 + Math.random() * 900000));
+  cache.put(key, JSON.stringify({ code: code, until: now.getTime() + 600000, tries: 0 }), 600);
+  try {
+    MailApp.sendEmail(email, 'Your attendance sign-in code',
+      'Your one-time sign-in code is: ' + code + '\n\nIt is valid for 10 minutes.\nIf you did not request this, ignore this email.');
+  } catch (e) {}
+  return { dev: code };
+}
+
+function verifyUserOtp_(email, otp, now, ss) {
+  var cache = CacheService.getScriptCache();
+  var key = 'otp:user:' + ss.getId() + ':' + email;
+  var entry = cache.get(key);
+  if (!entry) return false;
+  var o = {};
+  try { o = JSON.parse(entry); } catch (e) { return false; }
+  if (now.getTime() > Number(o.until || 0)) return false;
+  if (Number(o.tries || 0) >= 5) return false;
+  if (String(o.code) !== String(otp || '').trim()) {
+    o.tries = Number(o.tries || 0) + 1;
+    cache.put(key, JSON.stringify(o), 600);
+    return false;
+  }
+  cache.remove(key);
+  return true;
+}
+
+/**
+ * Employee sign-in (the app's login view).
+ * Step 1: Client sends { action:'user_login', email, tenant } -> sends OTP.
+ * Step 2: Client sends { action:'user_login', email, otp } -> verifies and
+ *   returns the profile + a session token (admins also get an admin session).
+ * The session token is a client-side handle; real enforcement for attendance
+ * (roster, geofence, quotas) happens on each action independently.
+ */
+function userLogin_(payload, cfg, now, tz, ss) {
+  var email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return error_('Email required');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Adresse email invalide.');
+
+  var otp = String(payload.otp || '').trim();
+
+  // Step 2: verify the code and hand back the signed-in profile.
+  if (otp) {
+    if (!verifyUserOtp_(email, otp, now, ss)) {
+      logAudit_(ss, email, 'Bad sign-in one-time code', 'BAD_OTP', now, tz);
+      return error_('Code invalide ou expire.');
+    }
+    logAudit_(ss, email, 'User signed in (email code)', 'USER_LOGIN', now, tz);
+    var emp = findEmployee_(ss, email);
+    var name = (emp && emp.name) || email.split('@')[0] || email;
+    var isAdmin = isAdmin_(ss, email);
+    return {
+      ok: true,
+      user: {
+        name: name,
+        email: email,
+        tenant: String(payload.tenant || '').trim(),
+        isAdmin: isAdmin
+      },
+      sessionToken: isAdmin ? createSession_(ss, now) : (randomToken_() + randomToken_())
+    };
+  }
+
+  // Step 1: roster gate, then send the code.
+  if (!isEmailAllowed_(ss, email, cfg)) {
+    logAudit_(ss, email, 'Sign-in blocked by roster', 'LOGIN_DENIED', now, tz);
+    return error_('Cet email n\'est pas autorise sur cet espace.');
+  }
+
+  var sent = sendUserOtp_(email, now, ss);
+  logAudit_(ss, email, 'Sign-in OTP requested', 'USER_OTP', now, tz);
+  return {
+    ok: true,
+    needOtp: true,
+    message: 'Un code a ete envoye a ' + email + '.',
+    otpDev: sent.dev,
+    email: email
+  };
 }
 
 /**

@@ -21,21 +21,21 @@ describe('App Loading', () => {
   });
 
   test('app-name displays correct text', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const text = await page.$eval('#app-name', el => el.textContent);
     expect(text).toBe('addredance');
     await page.close();
   });
 
   test('live-time shows HH:MM:SS format', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const text = await page.$eval('#live-time', el => el.textContent);
     expect(text).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     await page.close();
   });
 
   test('scan button is visible and enabled', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const btn = await page.$('#btn-scan');
     expect(btn).not.toBeNull();
     const disabled = await page.$eval('#btn-scan', el => el.disabled);
@@ -44,28 +44,28 @@ describe('App Loading', () => {
   });
 
   test('today-date shows formatted date', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const text = await page.$eval('#today-date', el => el.textContent);
     expect(text.length).toBeGreaterThan(5);
     await page.close();
   });
 
   test('scan button label says "Scan QR to check in"', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const text = await page.$eval('#btn-scan-label', el => el.textContent);
     expect(text).toBe('Scanner QR pour pointer');
     await page.close();
   });
 
   test('status card shows status-avatar', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const avatar = await page.$('#status-avatar');
     expect(avatar).not.toBeNull();
     await page.close();
   });
 
   test('footer buttons are visible', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const historyBtn = await page.$('#btn-history');
     const adminBtn = await page.$('#btn-admin');
     const helpBtn = await page.$('#btn-help');
@@ -76,14 +76,14 @@ describe('App Loading', () => {
   });
 
   test('install button is hidden until the browser offers install', async () => {
-    const page = await bootPage(browser, { blockBeforeInstall: true });
+    const page = await bootPage(browser, { profile: true, blockBeforeInstall: true });
     const hidden = await page.$eval('#btn-install', el => el.classList.contains('hidden'));
     expect(hidden).toBe(true);
     await page.close();
   });
 
   test('no geolocation prompt appears', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const geoCalled = await page.evaluate(() => {
       return new Promise(resolve => {
         let called = false;
@@ -111,7 +111,7 @@ describe('App Loading', () => {
   });
 
   test('service worker registers on localhost', async () => {
-    const page = await bootPage(browser, { allowServiceWorker: true });
+    const page = await bootPage(browser, { profile: true, allowServiceWorker: true });
     const hasSw = await page.evaluate(async () => {
       const t0 = Date.now();
       while (Date.now() - t0 < 9000) {
@@ -232,7 +232,7 @@ describe('Static Assets', () => {
    ========================================== */
 describe('Live Clock', () => {
   test('clock updates every second', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const time1 = await page.$eval('#live-time', el => el.textContent);
     await page.waitForFunction(prev => {
       return document.getElementById('live-time').textContent !== prev;
@@ -255,7 +255,7 @@ describe('Responsive Viewports', () => {
 
   viewports.forEach(({ name, width, height }) => {
     test(`renders at ${name}`, async () => {
-      const page = await bootPage(browser);
+      const page = await bootPage(browser, { profile: true });
       await page.setViewport({ width, height });
       await page.reload({ waitUntil: 'load' });
       await page.waitForFunction(() => {
@@ -317,15 +317,17 @@ describe('No JavaScript Errors', () => {
     expect(errors).toEqual([]);
   });
 
-  test('full flow: onboard -> profile -> home without errors', async () => {
+  test('full flow: login -> onboard -> profile -> home without errors', async () => {
     const errors = await collectErrors(async page => {
       await bootExisting(page, {}, true);
+      await page.waitForSelector('#view-login:not(.hidden)', { timeout: 10000 });
+      await page.type('#login-email', 'flow@test.com');
+      await page.click('#btn-login-go');
       await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 10000 });
       await page.click('#ob-skip');
       await page.waitForFunction(() => document.getElementById('modal-onboard').classList.contains('hidden'));
       await page.click('#btn-profile');
       await page.type('#pf-name', 'Flow Test');
-      await page.type('#pf-email', 'flow@test.com');
       await page.click('#btn-profile-save');
       await page.waitForFunction(() => document.getElementById('status-label').textContent === 'Non pointe', { timeout: 10000 });
     });
@@ -338,7 +340,9 @@ describe('No JavaScript Errors', () => {
       ? [['att.consent.v1', '1']]
       : [
           ['att.consent.v1', '1'],
-          ['att.onboarded.v1', '1']
+          ['att.onboarded.v1', '1'],
+          ['att.session.v1', JSON.stringify({ name: 'Test User', email: 'test@bdj.com', tenant: '', isAdmin: false, token: '' })],
+          ['att.profile.v1', JSON.stringify({ name: 'Test User', email: 'test@bdj.com', tenant: '' })]
         ];
     await page.evaluateOnNewDocument(p => {
       try {
@@ -350,6 +354,7 @@ describe('No JavaScript Errors', () => {
     }, seedPairs);
     await attachHttpMock(page, body => {
       if (body.action === 'admin_check') return { ok: true, isAdmin: false };
+      if (body.action === 'user_login') return { ok: true, user: { name: 'Flow Test', email: body.email || 'flow@test.com' }, token: 't1' };
       return null; /* DEFAULT_API answers config/recent/week/myattendance quietly */
     });
     await page.goto(APP_URL + (opts.hash || ''), { waitUntil: 'load', timeout: 20000 });

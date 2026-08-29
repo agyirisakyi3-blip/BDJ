@@ -8,6 +8,7 @@ import Feedback from './components/shared/Feedback';
 import ConsentBanner from './components/shared/ConsentBanner';
 
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const EmployeeDetailPage = lazy(() => import('./pages/EmployeeDetailPage'));
 const HelpModal = lazy(() => import('./components/modals/HelpModal'));
 const HistoryModal = lazy(() => import('./components/modals/HistoryModal'));
 
@@ -50,6 +51,7 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin/employe/:email" element={<EmployeeDetailPage />} />
           </Routes>
         </Suspense>
       </main>

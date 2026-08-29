@@ -1300,3 +1300,84 @@ th.sortable.desc::after { content: "\2193"; opacity: 1; }
   #view-admin table { font-size: 13.5px; }
   #view-admin th, #view-admin td { padding: 11px 12px; }
 }
+
+/* ============ Live refresh toggle ============ */
+.live-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 700; color: var(--muted-2);
+  cursor: pointer; user-select: none; margin-left: auto;
+}
+.live-toggle input { display: none; }
+.live-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--muted-2); transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.live-toggle input:checked ~ .live-dot {
+  background: #34d399;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+  animation: live-pulse 1.8s infinite;
+}
+.live-toggle input:checked ~ span { color: var(--accent-light); }
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+  70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+.dash-toolbar .dash-toolbar-head { display: flex; align-items: center; gap: 12px; }
+.dash-toolbar .live-toggle { margin-left: auto; }
+
+/* ============ Alerts ============ */
+.alert-block { border-color: rgba(245, 158, 11, 0.25); }
+.pills-warn { color: #fde68a; background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.35); }
+.alert-item {
+  padding: 9px 12px; border-radius: 10px; margin-bottom: 8px;
+  background: rgba(244, 63, 94, 0.06); border: 1px solid rgba(244, 63, 94, 0.22);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.alert-item strong { color: #fecdd3; font-size: 13px; font-weight: 700; }
+.alert-rows { color: var(--muted-2); font-size: 12px; line-height: 1.5; }
+.alert-missingout, .alert-late { background: rgba(245, 158, 11, 0.06); border-color: rgba(245, 158, 11, 0.25); }
+.alert-missingout strong, .alert-late strong { color: #fde68a; }
+
+/* ============ Anomalies ============ */
+.anomaly-block { border-color: rgba(167, 139, 250, 0.3); }
+.anomaly-item {
+  display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+  padding: 8px 12px; border-radius: 10px; margin-bottom: 6px;
+  background: rgba(167, 139, 250, 0.06); border: 1px solid rgba(167, 139, 250, 0.2);
+}
+.anomaly-name { color: #ddd6fe; font-size: 13px; font-weight: 700; }
+.anomaly-detail { color: var(--muted-2); font-size: 12px; text-align: right; }
+.anomaly-short .anomaly-detail { color: #fca5a5; }
+.anomaly-long .anomaly-detail { color: #fde68a; }
+.anomaly-break .anomaly-detail { color: #a7f3d0; }
+.anomaly-missing .anomaly-detail { color: #fdba74; }
+
+/* ============ Employee detail drill-down ============ */
+.clickable-row { cursor: pointer; }
+.clickable-row:hover td { background: rgba(14, 134, 196, 0.06); }
+
+/* ============ Bulk import ============ */
+.emp-bulk { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--stroke-strong); }
+.bulk-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.bulk-row textarea {
+  width: 100%; min-height: 110px; resize: vertical;
+  background: rgba(15, 23, 42, 0.4); color: var(--text);
+  border: 1px solid var(--stroke-strong); border-radius: 10px;
+  padding: 10px 12px; font-size: 12px; font-family: monospace; line-height: 1.5;
+}
+.file-btn { position: relative; overflow: hidden; text-align: center; }
+.file-btn input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.emp-bulk .primary-btn.range-btn { width: 100%; }
+
+/* ============ Light theme overrides for new elements ============ */
+:root[data-theme="light"] .alert-item strong { color: #be123c; }
+:root[data-theme="light"] .alert-missingout strong, :root[data-theme="light"] .alert-late strong { color: #b45309; }
+:root[data-theme="light"] .anomaly-name { color: #6d28d9; }
+:root[data-theme="light"] .anomaly-short .anomaly-detail { color: #dc2626; }
+:root[data-theme="light"] .anomaly-long .anomaly-detail { color: #b45309; }
+:root[data-theme="light"] .anomaly-break .anomaly-detail { color: #047857; }
+:root[data-theme="light"] .anomaly-missing .anomaly-detail { color: #c2410c; }
+:root[data-theme="light"] .bulk-row textarea { background: rgba(241, 245, 249, 0.7); }
+:root[data-theme="light"] .pills-warn { color: #92400e; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.4); }
+:root[data-theme="light"] .live-toggle input:checked ~ span { color: #076aab; }

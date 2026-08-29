@@ -42,7 +42,7 @@ function homeApi(map) {
    ========================================== */
 describe('Status Card', () => {
   test('shows Welcome when no profile', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { freshProfile: true });
     const label = await page.$eval('#status-label', el => el.textContent);
     expect(label).toBe('Bienvenue');
     const sub = await page.$eval('#status-sub', el => el.textContent);
@@ -386,7 +386,7 @@ describe('History Modal', () => {
   });
 
   test('history button without profile prompts for details', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-history');
     const feedbackEl = await page.$('#feedback');
     const text = await feedbackEl.evaluate(el => el.textContent);

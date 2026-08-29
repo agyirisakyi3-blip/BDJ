@@ -1300,3 +1300,79 @@ th.sortable.desc::after { content: "\2193"; opacity: 1; }
   #view-admin table { font-size: 13.5px; }
   #view-admin th, #view-admin td { padding: 11px 12px; }
 }
+
+/* ============ Admin responsive UI ============ */
+
+/* Card rhythm + touch targets (all sizes) */
+#admin-dash .card.block { padding: 18px; }
+#view-admin button, #view-admin .qr-chip, #view-admin .range-btn { touch-action: manipulation; }
+.qr-chip, .ghost-btn, .primary-btn, .block-head.collapsible { -webkit-tap-highlight-color: transparent; }
+.qr-chip:active, .ghost-btn:active, .primary-btn:active { transform: scale(0.97); }
+.block-head.collapsible { min-height: 42px; }
+#view-admin .kpi b { font-variant-numeric: tabular-nums; }
+
+/* Mobile-first: stack forms, full-width range button, bigger chips & stats */
+@media (max-width: 639px) {
+  .emp-form { grid-template-columns: 1fr; gap: 10px; }
+  #view-admin .range-row { grid-template-columns: 1fr 1fr; }
+  #view-admin .range-row .range-btn { grid-column: 1 / -1; }
+  .quick-ranges { gap: 8px; }
+  .qr-chip { padding: 10px 14px; }
+  #admin-dash .table-tools { margin-bottom: 12px; }
+  #view-admin .kpi { padding: 16px; }
+  #view-admin .stat { padding: 18px 10px 14px; }
+}
+
+/* Freeze the first column (identity) while wide tables scroll */
+@media (max-width: 1023px) {
+  #view-admin .table-wrap th:first-child,
+  #view-admin .table-wrap td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--surface);
+  }
+  #view-admin .table-wrap thead th:first-child { z-index: 3; }
+  #view-admin .table-wrap th, #view-admin .table-wrap td { padding: 12px 10px; }
+}
+
+@media (min-width: 480px) {
+  .emp-form { grid-template-columns: 1fr 1fr; }
+  .table-tools .search-wrap { max-width: 420px; }
+  #view-admin .kpi { padding: 17px; }
+}
+
+/* Tablet */
+@media (min-width: 640px) and (max-width: 1023px) {
+  #admin-dash .card.block { padding: 22px; }
+  .emp-form { gap: 12px; }
+  #admin-dash .bar-chart { height: 185px; }
+  #view-admin .kpi { padding: 18px; }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  /* Data tables deserve the full width; chart + presence pair up nicely */
+  #admin-dash > .people-block,
+  #admin-dash > .report-block { grid-column: 1 / -1; }
+
+  #admin-dash .card.block { padding: 24px; }
+  #view-admin .kpi { padding: 20px; }
+  #view-admin .stat { padding: 24px 14px 18px; }
+  #admin-login { padding: 34px 32px; }
+  .emp-form { gap: 12px; }
+  #view-admin th, #view-admin td { padding: 12px 14px; }
+}
+
+/* ============ Login view ============ */
+.login-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 9vh 0 4vh;
+}
+.login-wrap .login-card {
+  width: 100%;
+  max-width: 440px;
+}
+.login-wrap .login-card label { font-size: 13px; }
+#view-login .otp-seg { justify-content: center; margin-top: 4px; }

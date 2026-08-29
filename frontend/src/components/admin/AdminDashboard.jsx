@@ -31,6 +31,62 @@ const REPORT_SORT_KEYS = {
   status: (p) => p.missing ? 2 : p.late ? 1 : 0,
 };
 
+const ANOMALY_MIN_HOURS = 2;      // days under this number of net hours
+const ANOMALY_MAX_HOURS = 16;     // days over this number of net hours
+const ANOMALY_MAX_BREAK = 120;    // minutes of break above which we flag
+
+function buildAnomalies(pairs, people) {
+  const items = [];
+  (pairs || []).forEach((p) => {
+    if (!p.date) return;
+    if (p.hours != null && !isNaN(p.hours)) {
+      if (p.hours < ANOMALY_MIN_HOURS) items.push({ kind: 'short', p, detail: fmtHours(p.hours) + ' h sur ' + p.date });
+      else if (p.hours > ANOMALY_MAX_HOURS) items.push({ kind: 'long', p, detail: fmtHours(p.hours) + ' h sur ' + p.date });
+    }
+    if (p.breakMin != null && p.breakMin > ANOMALY_MAX_BREAK) items.push({ kind: 'break', p, detail: Math.round(p.breakMin / 60 * 10) / 10 + ' h de pause le ' + p.date });
+    if (p.missing) items.push({ kind: 'missing', p, detail: 'Pas de sortie le ' + p.date });
+  });
+  (people || []).forEach((per) => {
+    const late = Number(per.lateCount || 0);
+    if (late >= 5) items.push({ kind: 'repeat-late', per, detail: late + ' retards sur la periode' });
+  });
+  items.sort((a, b) => (b.p && b.p.date || '').localeCompare(a.p && a.p.date || ''));
+  return items;
+}
+
+function buildAlerts(adminData) {
+  const out = [];
+  const live = (adminData && adminData.live) || {};
+  const summary = (adminData && adminData.summary) || {};
+
+  if (!live.isHolidayToday && (live.absent || []).length > 0) {
+    out.push({
+      kind: 'absent',
+      title: (live.absent || []).length + ' personne' + ((live.absent || []).length > 1 ? 's' : '') + ' pas encore pointe' + ((live.absent || []).length > 1 ? 'es' : 'e') + " aujourd'hui",
+      rows: (live.absent || []).slice(0, 12).map((p) => p.name ? p.name + ' \u00b7 ' + p.email : p.email),
+      more: (live.absent || []).length > 12 ? (live.absent || []).length - 12 + ' de plus...' : ''
+    });
+  }
+
+  if (summary.missingOut > 0) {
+    out.push({
+      kind: 'missingout',
+      title: summary.missingOut + ' sortie' + (summary.missingOut > 1 ? 's' : '') + ' manquante' + (summary.missingOut > 1 ? 's' : '') + ' sur la periode',
+      rows: []
+    });
+  }
+
+  if (summary.lateCount > 0) {
+    out.push({
+      kind: 'late',
+      title: summary.lateCount + ' retard' + (summary.lateCount > 1 ? 's' : '') + ' sur la periode',
+      rows: []
+    });
+  }
+
+  return out;
+}
+
 function CollapsibleCard({ title, count, children, defaultCollapsed = false }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   return (
@@ -72,7 +128,7 @@ function SortableTable({ columns, data, sortKey, sortDir, onSort, renderRow }) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const { showFeedback, apiCall, config } = useApp();
+  const { showFeedback, apiCall, config, setAdminToken: contextSetToken, setAdminEmail: contextSetEmail } = useApp();
   const [token, setToken] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminData, setAdminData] = useState(null);
@@ -93,6 +149,17 @@ export default function AdminDashboard() {
   // Report table state
   const [reportQuery, setReportQuery] = useState('');
   const [reportSort, setReportSort] = useState({ key: '', dir: 1 });
+  // Live refresh
+  const [liveRefresh, setLiveRefresh] = useState(true);
+
+  // Auto-refresh the "today" dashboard every 30s for live on-site status.
+  useEffect(() => {
+    if (!adminData || !liveRefresh || activeQuickRange !== 'today') return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDashboard(todayStr(), todayStr());
+    }, 30000);
+    return () => clearInterval(id);
+  }, [adminData, liveRefresh, activeQuickRange]);
 
   const loadDashboard = useCallback(async (from, to, tkn) => {
     setLoading(true);
@@ -123,6 +190,8 @@ export default function AdminDashboard() {
   const handleLogin = ({ token: tkn, email, data }) => {
     setToken(tkn);
     setAdminEmail(email);
+    contextSetToken(tkn);
+    contextSetEmail(email);
     setAdminData(data.admin);
     const from = todayStr();
     const to = todayStr();
@@ -213,6 +282,23 @@ export default function AdminDashboard() {
       showFeedback('success', email + ' supprime.');
       loadSubData();
     } catch (err) { showFeedback('error', err.message); }
+  };
+
+  const handleBulkImport = async (rows) => {
+    let added = 0, updated = 0, failed = 0;
+    for (const r of rows) {
+      try {
+        const res = await apiCall({ action: 'employee_add', token, ...r });
+        if (!res.ok) throw new Error(res.message);
+        if (res.employee && res.updated) updated++; else added++;
+      } catch (err) { failed++; }
+    }
+    if (added || updated) {
+      showFeedback('success', added + ' ajoute' + (added > 1 ? 's' : '') + ', ' + updated + ' mis a jour' + (failed ? ', ' + failed + ' en erreur' : '') + '.');
+      loadSubData();
+    } else {
+      showFeedback('error', 'Aucun employe ajoute' + (failed ? ' (' + failed + ' erreur' + (failed > 1 ? 's' : '') + ').' : '.'));
+    }
   };
 
   const handleAdminAdd = async (data) => {
@@ -325,6 +411,13 @@ export default function AdminDashboard() {
             </span>
             <div><h3>Tableau de bord</h3><p className="hint">Periode : {dateFrom} \u2192 {dateTo}</p></div>
           </div>
+          {activeQuickRange === 'today' && (
+            <label className="live-toggle" title="Actualisation automatique toutes les 30s">
+              <input type="checkbox" checked={liveRefresh} onChange={(e) => setLiveRefresh(e.target.checked)} />
+              <span className="live-dot" aria-hidden="true"></span>
+              En direct
+            </label>
+          )}
           <div className="quick-ranges">
             {['today','7d','30d','month'].map((r) => (
               <button key={r} className={'qr-chip' + (activeQuickRange === r ? ' active' : '')} onClick={() => handleQuickRange(r)}>
@@ -374,6 +467,47 @@ export default function AdminDashboard() {
         <div className="stat stat-out"><b>{summary.lateCount}</b><span>Retards</span></div>
         <div className="stat stat-in"><b>{summary.missingOut}</b><span>Pas de sortie</span></div>
       </div>
+
+      {/* Alerts */}
+      {(function () {
+        const alerts = buildAlerts(adminData);
+        if (!alerts.length) return null;
+        return (
+          <div className="card block alert-block">
+            <div className="block-head"><h3>Alertes</h3><span className="pill pills-warn">{alerts.length}</span></div>
+            <div className="block-body">
+              {alerts.map((al, i) => (
+                <div key={i} className={'alert-item alert-' + al.kind}>
+                  <strong>{al.title}</strong>
+                  {al.rows && al.rows.length > 0 && (
+                    <span className="alert-rows">{al.rows.join(' \u00b7 ')}{al.more ? ' ' + al.more : ''}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Anomalies */}
+      {(function () {
+        const anomalies = buildAnomalies(pairs, allPeople);
+        if (!anomalies.length) return null;
+        return (
+          <div className="card block anomaly-block">
+            <div className="block-head"><h3>Anomalies</h3><span className="pill pills-warn">{anomalies.length}</span></div>
+            <div className="block-body">
+              {anomalies.slice(0, 20).map((an, i) => (
+                <div key={i} className={'anomaly-item anomaly-' + an.kind}>
+                  <span className="anomaly-name">{an.p ? (an.p.name || an.p.email) : (an.per ? (an.per.name || an.per.email) : '')}</span>
+                  <span className="anomaly-detail">{an.detail}</span>
+                </div>
+              ))}
+              {anomalies.length > 20 && <p className="hint">{anomalies.length - 20} autres anomalies...</p>}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Hours Chart */}
       <div className="card block chart-block">
@@ -452,7 +586,8 @@ export default function AdminDashboard() {
                   const hue = avatarHue(p.email || p.name);
                   const st = PEOPLE_STATUS[p.statusToday];
                   return (
-                    <tr key={p.email} title={p.email + (p.department ? ' \u00b7 ' + p.department : '')}>
+                    <tr key={p.email} className="clickable-row" title={'Voir le detail de ' + p.email}
+                        onClick={() => navigate('/admin/employe/' + encodeURIComponent(p.email))}>
                       <td>
                         <div className="person-cell">
                           <span className="avatar" style={{ background: `linear-gradient(135deg, hsl(${hue}, 70%, 84%), hsl(${(hue+40)%360}, 62%, 68%))`, color: `hsl(${hue}, 58%, 28%)` }}>{avatarInitials(p.name, p.email)}</span>
@@ -525,7 +660,7 @@ export default function AdminDashboard() {
       {/* Management sections */}
       <p className="stat-caption">Gestion</p>
 
-      <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} />
+      <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} onBulkImport={handleBulkImport} />
       <AdminSection admins={admins} onAdd={handleAdminAdd} onRemove={handleAdminRemove} />
       <LeaveSection leaves={leaves} onAdd={handleLeaveAdd} onDelete={handleLeaveDelete} />
       <HolidaySection holidays={holidays} onAdd={handleHolidayAdd} onDelete={handleHolidayDelete} />
@@ -536,7 +671,7 @@ export default function AdminDashboard() {
   );
 }
 
-function EmployeeSection({ employees, onAdd, onDelete }) {
+function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [dept, setDept] = useState('');
@@ -544,6 +679,9 @@ function EmployeeSection({ employees, onAdd, onDelete }) {
   const [shiftEnd, setShiftEnd] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkMsg, setBulkMsg] = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const handleAdd = async () => {
     if (!name.trim()) { setError('Saisissez le nom.'); return; }
@@ -552,6 +690,52 @@ function EmployeeSection({ employees, onAdd, onDelete }) {
     await onAdd({ name: name.trim(), email: email.trim(), department: dept.trim(), shiftStart, shiftEnd });
     setLoading(false);
     setName(''); setEmail(''); setDept(''); setShiftStart(''); setShiftEnd('');
+  };
+
+  const parseCsvLine = (line) => {
+    const out = [];
+    let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) {
+        if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+        else cur += c;
+      } else if (c === '"') { q = true; }
+      else if (c === ',') { out.push(cur); cur = ''; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out;
+  };
+
+  const handleFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setBulkText(String(reader.result || ''));
+    reader.readAsText(file);
+  };
+
+  const handleBulk = async () => {
+    const rows = bulkText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!rows.length) { setBulkMsg('Collez ou uploadez un CSV (Nom,Email,Departement,Debut,Fin).'); return; }
+    const parsed = [];
+    let skipped = 0;
+    rows.forEach((line) => {
+      if (/^(nom|name)/i.test(line)) return;
+      const cols = parseCsvLine(line).map((c) => c.trim());
+      const nm = cols[0] || '';
+      const em = (cols[1] || '').toLowerCase();
+      const dp = cols[2] || '';
+      const ss = cols[3] || '';
+      const se = cols[4] || '';
+      if (!nm || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { skipped++; return; }
+      parsed.push({ name: nm, email: em, department: dp, shiftStart: ss, shiftEnd: se });
+    });
+    if (!parsed.length) { setBulkMsg('Aucune ligne valide (il faut au moins Nom et Email).'); return; }
+    setBulkLoading(true); setBulkMsg('');
+    await onBulkImport(parsed);
+    setBulkLoading(false);
+    setBulkMsg(parsed.length + ' ligne' + (parsed.length > 1 ? 's' : '') + ' traitee' + (parsed.length > 1 ? 's' : '') + (skipped ? ' (' + skipped + ' ignoree' + (skipped > 1 ? 's' : '') + ').' : '.'));
   };
 
   return (
@@ -566,6 +750,15 @@ function EmployeeSection({ employees, onAdd, onDelete }) {
         <button className="ghost-btn range-btn" onClick={handleAdd} disabled={loading}>{loading ? 'Ajout...' : 'Ajouter'}</button>
       </div>
       {error && <p className="feedback error">{error}</p>}
+      <div className="emp-bulk">
+        <p className="hint">Import en masse : collez un tableau ou uploadez un fichier CSV (en-tête facultatif) au format <b>Nom,Email,Departement,Debut(Fin)</b>.</p>
+        <div className="bulk-row">
+          <textarea rows={5} placeholder={'Nom,Email,Departement,08:00,17:00\nJean Dupont,jean@ex.fr,Compta,08:00,17:00'} value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
+          <label className="ghost-btn range-btn file-btn">Uploadez un CSV<input type="file" accept=".csv,text/csv" onChange={(e) => handleFile(e.target.files && e.target.files[0])} /></label>
+        </div>
+        <button className="primary-btn range-btn" onClick={handleBulk} disabled={bulkLoading || !bulkText.trim()}>{bulkLoading ? 'Import...' : 'Importer en masse'}</button>
+        {bulkMsg && <p className="hint">{bulkMsg}</p>}
+      </div>
       <div className="table-wrap emp-table">
         <table>
           <thead><tr><th>Nom</th><th>Email</th><th>Departement</th><th>Horaires</th><th></th></tr></thead>

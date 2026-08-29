@@ -310,7 +310,7 @@
           </div>
         </div>
 
-        <div class="card block">
+        <div class="card block live-block">
           <div class="block-head collapsible">
             <h3 data-i18n="live.present">Present maintenant</h3>
             <span id="on-site-count" class="pill"></span>
@@ -327,7 +327,7 @@
           </div>
         </div>
 
-        <div class="card block">
+        <div class="card block people-block">
           <div class="block-head collapsible">
             <h3 data-i18n="people.title">Effectif complet</h3>
             <span id="people-count" class="pill"></span>
@@ -362,7 +362,7 @@
           </div>
         </div>
 
-        <div class="card block">
+        <div class="card block report-block">
           <div class="block-head collapsible">
             <h3>Rapport</h3>
             <span id="report-count" class="pill"></span>
@@ -410,7 +410,7 @@
 
         <p class="stat-caption">Gestion</p>
 
-        <div class="card block collapsed">
+        <div class="card block collapsed mgmt-card">
           <div class="block-head collapsible">
             <h3>Creer un espace</h3>
           </div>
@@ -433,7 +433,7 @@
           </div>
         </div>
 
-        <div class="card block collapsed">
+        <div class="card block collapsed mgmt-card">
           <div class="block-head collapsible">
             <h3>Employes</h3>
             <span id="emp-count" class="pill"></span>
@@ -470,7 +470,7 @@
           </div>
         </div>
 
-        <div class="card block collapsed">
+        <div class="card block collapsed mgmt-card">
           <div class="block-head collapsible">
             <h3>Admins</h3>
             <span id="adm-count" class="pill"></span>
@@ -498,7 +498,7 @@
           </div>
         </div>
 
-        <div class="card block collapsed">
+        <div class="card block collapsed mgmt-card">
           <div class="block-head collapsible">
             <h3>Conges</h3>
             <span id="lv-count" class="pill"></span>
@@ -532,7 +532,7 @@
           </div>
         </div>
 
-        <div class="card block collapsed">
+        <div class="card block collapsed mgmt-card">
           <div class="block-head collapsible">
             <h3>Jours feries</h3>
             <span id="hf-count" class="pill"></span>
@@ -560,7 +560,7 @@
           </div>
         </div>
 
-        <div class="card block collapsed">
+        <div class="card block collapsed mgmt-card">
           <div class="block-head collapsible">
             <h3>Corrections de pointage</h3>
           </div>
@@ -593,7 +593,7 @@
           </div>
         </div>
 
-        <div class="card block collapsed">
+        <div class="card block collapsed mgmt-card">
           <div class="block-head collapsible">
             <h3>Ecran d'entree (QR rotatif)</h3>
           </div>
@@ -604,6 +604,45 @@
               Ouvrir l'ecran d'entree
             </a>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LOGIN ============ -->
+    <section id="view-login" class="view hidden">
+      <div class="login-wrap">
+        <div class="card login-card">
+          <div class="login-head">
+            <span class="brand-mark sm" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </span>
+            <div>
+              <h3>Connexion</h3>
+              <p class="muted">Identifiez-vous avec votre email pour pointer et consulter uniquement vos enregistrements.</p>
+            </div>
+          </div>
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" inputmode="email" autocomplete="email"
+                 placeholder="vous@entreprise.com">
+          <label for="login-tenant">Code espace <span class="opt">(facultatif)</span></label>
+          <input id="login-tenant" type="text" placeholder="ex. acme" autocomplete="off"
+                 aria-describedby="login-tenant-hint">
+          <p id="login-tenant-hint" class="hint">Laissez vide pour l'espace par defaut.</p>
+          <div id="login-otp-row" class="hidden">
+            <label for="login-otp">Code a usage unique</label>
+            <div id="login-otp-seg" class="otp-seg" role="group" aria-label="Code a 6 chiffres envoye par email">
+              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Chiffre 1">
+              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 2">
+              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 3">
+              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
+              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 5">
+              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 6">
+            </div>
+            <input id="login-otp" type="text" class="sr-only" tabindex="-1" aria-hidden="true">
+          </div>
+          <button id="btn-login-go" class="primary-btn" type="button">Se connecter</button>
+          <p id="login-otp-note" class="hint hidden"></p>
+          <p id="login-error" class="feedback error hidden"></p>
         </div>
       </div>
     </section>
@@ -657,6 +696,7 @@
       <p id="pf-privacy" class="hint">Votre nom, email et historique de pointage sont enregistres dans la feuille Google de l'entreprise. Seuls vous (avec cet email) et les admins peuvent les consulter. Effacez les donnees de ce site si vous partagez cet appareil.</p>
       <p id="profile-error" class="feedback error hidden"></p>
       <button id="btn-profile-save" class="primary-btn" type="button">Enregistrer</button>
+      <button id="btn-logout" class="ghost-btn" type="button">Se deconnecter</button>
     </div>
   </div>
 

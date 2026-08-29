@@ -159,6 +159,11 @@ Camera and geolocation **require HTTPS**. Any static host works:
   the roster. A random person who finds the web app URL can no longer read anyone's history;
   denials are logged to the **Audit** sheet as `PRIVACY_DENY`. If no roster is configured yet,
   reads stay open for backwards compatibility until staff are added.
+- **Employee sign-in is roster-gated email + one-time-code** - the login view asks for a
+  profile email (a 6-digit code valid for 10 minutes, max 5 tries) and only emails listed on
+  the **Roster**/**Employees** sheet may sign in; blocked sign-ins are logged as
+  `LOGIN_DENIED`, OTP requests as `USER_OTP`, and successful sign-ins as `USER_LOGIN`. Admins
+  who sign in this way get a working admin session token on the same ride.
 - **Admin access is PIN + one-time-code and audited** - logging in sends a one-time code to
   `adminEmail` (a 6-digit code valid for 10 minutes, max 5 tries) and succeeds only when you
   enter the PIN *and* the emailed code. Successful logins are logged as `ADMIN_OK` / `ADMIN_2FA`,
@@ -223,7 +228,8 @@ Camera and geolocation **require HTTPS**. Any static host works:
 
 `Date`, `Time`, `Email`, `Reason`, `Code`. Codes: `INVALID_QR`, `STALE`, `ROSTER_DENIED`, `NO_LOCATION`,
 `OUTSIDE_RANGE`, `SPOOF_REUSE`, `TOO_QUICK`, `ACCURACY_LOW`, `IMPLAUSIBLE`, `QUOTA_EMAIL`,
-`QUOTA_TENANT`, `PRIVACY_DENY`, `BAD_PIN`, `BAD_OTP`, `ADMIN_OK`, `ADMIN_2FA`, `DATA_ERASED`.
+`QUOTA_TENANT`, `PRIVACY_DENY`, `BAD_PIN`, `BAD_OTP`, `ADMIN_OK`, `ADMIN_2FA`, `LOGIN_DENIED`,
+`USER_OTP`, `USER_LOGIN`, `DATA_ERASED`.
 
 ### Daily digest
 

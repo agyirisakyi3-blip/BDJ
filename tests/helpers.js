@@ -164,6 +164,27 @@ async function bootPage(browser, opts = {}) {
       opts.profile === true ? { name: 'Test User', email: 'test@bdj.com' } : opts.profile
     );
   }
+  if (opts.freshProfile) {
+    /* Signed-in session with an empty profile, so the profile modal opens
+       empty and its validation tests keep their pre-login behaviour. */
+    seed['att.onboarded.v1'] = '1';
+    seed['att.profile.v1'] = JSON.stringify({ name: '', email: '', tenant: '' });
+  }
+  /* A session is required before any data loads. Derive one from the seeded
+     profile unless the test explicitly opts out (opts.noSession) or supplies
+     its own (opts.session / a raw entry in seed). */
+  let signedIn = !!(opts.profile || opts.freshProfile || opts.session) && !opts.noSession;
+  const seededSession = opts.seed && Object.prototype.hasOwnProperty.call(opts.seed, 'att.session.v1');
+  if (signedIn) {
+    const fromProfile = opts.session ? opts.session
+      : (opts.freshProfile ? { name: '', email: '', tenant: '' }
+        : (opts.profile === true ? { name: 'Test User', email: 'test@bdj.com', tenant: '' }
+          : Object.assign({ name: 'Test User', email: 'test@bdj.com', tenant: '' }, opts.profile)));
+    seed['att.session.v1'] = JSON.stringify(Object.assign({ token: '', isAdmin: false }, fromProfile));
+  } else if (seededSession) {
+    /* explicit seed.session opts in to the signed-in boot path */
+    signedIn = true;
+  }
   const pairs = Object.keys(seed).map(k => [k, seed[k]]);
   await page.evaluateOnNewDocument(p => {
     try {
@@ -271,11 +292,17 @@ async function bootPage(browser, opts = {}) {
         const b = document.getElementById('setup-banner');
         return !!(b && !b.classList.contains('hidden'));
       }, { timeout: 15000 });
-    } else {
+    } else if (signedIn) {
       await configSettled;
       await page.waitForFunction(() => {
         const el = document.getElementById('today-date');
         return !!(el && el.textContent.length > 0);
+      }, { timeout: 15000 });
+    } else {
+      /* Signed out: the app shows only the login view and never calls the API. */
+      await page.waitForFunction(() => {
+        const el = document.getElementById('view-login');
+        return !!(el && !el.classList.contains('hidden'));
       }, { timeout: 15000 });
     }
   }
@@ -348,6 +375,29 @@ async function expandAdminSection(page, title) {
   }
 }
 
+/* Log in via the user login view. If OTP is provided, it enters the OTP into
+   the segmented boxes after the OTP step appears. */
+async function loginUser(page, email = 'test@bdj.com', tenant = '', otp = '') {
+  await page.type('#login-email', email);
+  if (tenant) await page.type('#login-tenant', tenant);
+  await page.click('#btn-login-go');
+  if (otp) {
+    await page.waitForSelector('#login-otp-row:not(.hidden)', { timeout: 5000 });
+    const boxes = await page.$$('#login-otp-seg .otp-box');
+    for (let i = 0; i < otp.length && i < boxes.length; i++) {
+      await boxes[i].type(otp[i]);
+    }
+    const loginHidden = await page.evaluate(() => document.getElementById('view-login').classList.contains('hidden'));
+    if (!loginHidden) {
+      await page.click('#btn-login-go');
+    }
+  }
+  await page.waitForFunction(
+    () => document.getElementById('view-login').classList.contains('hidden'),
+    { timeout: 15000 }
+  );
+}
+
 module.exports = {
   APP_URL,
   launchBrowser,
@@ -356,6 +406,7 @@ module.exports = {
   scanManualQr,
   safeClick,
   loginAdmin,
+  loginUser,
   expandAdminSection,
   apiRoutes,
   apiCapture,

@@ -17,14 +17,14 @@ afterAll(async () => {
    ========================================== */
 describe('Profile Modal', () => {
   test('profile button opens modal', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.waitForSelector('#modal-profile:not(.hidden)', { timeout: 5000 });
     await page.close();
   });
 
   test('shows error when saving empty name', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.click('#btn-profile-save');
     const errText = await page.$eval('#profile-error', el => el.textContent);
@@ -33,7 +33,7 @@ describe('Profile Modal', () => {
   });
 
   test('shows error when saving invalid email', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'John Doe');
     await page.type('#pf-email', 'invalid');
@@ -44,7 +44,7 @@ describe('Profile Modal', () => {
   });
 
   test('valid profile saves and closes modal', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'John Doe');
     await page.type('#pf-email', 'john@test.com');
@@ -56,7 +56,7 @@ describe('Profile Modal', () => {
   });
 
   test('saved profile data persists encrypted in localStorage', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'Jane Doe');
     await page.type('#pf-email', 'jane@test.com');
@@ -82,7 +82,7 @@ describe('Profile Modal', () => {
   });
 
   test('shows error for invalid tenant code', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'Test');
     await page.type('#pf-email', 'test@test.com');
@@ -94,7 +94,7 @@ describe('Profile Modal', () => {
   });
 
   test('valid tenant code saves', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'Test');
     await page.type('#pf-email', 'test@test.com');
@@ -110,7 +110,7 @@ describe('Profile Modal', () => {
    ========================================== */
 describe('Encrypted Local Storage', () => {
   test('profile is stored with enc1 prefix', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'Enc Test');
     await page.type('#pf-email', 'enc@test.com');
@@ -122,7 +122,7 @@ describe('Encrypted Local Storage', () => {
   });
 
   test('encryption key is created on first encrypted write', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'Key Test');
     await page.type('#pf-email', 'key@test.com');
@@ -173,7 +173,7 @@ describe('Encrypted Local Storage', () => {
    ========================================== */
 describe('Profile Extras', () => {
   test('reminder opt-in persists to localStorage', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.click('#pf-remind');
     await page.type('#pf-name', 'Remi Test');
@@ -190,7 +190,7 @@ describe('Profile Extras', () => {
   });
 
   test('tenant code persists and pre-fills the modal', async () => {
-    const page = await bootPage(browser, { seed: { 'att.onboarded.v1': '1' } });
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-profile');
     await page.type('#pf-name', 'Tena Test');
     await page.type('#pf-email', 'tena@test.com');

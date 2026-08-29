@@ -24,8 +24,10 @@ import {
   var LS_THEME = 'att.theme.v1';
   var LS_CONSENT = 'att.consent.v1';
   var LS_REMIND = 'att.remind.v1';
+  var LS_SESSION = 'att.session.v1';
 
   var state = {
+    session: null,
     profile: null,
     config: defaultsConfig(),
     status: null,
@@ -97,6 +99,14 @@ import {
     try { localStorage.setItem(LS_CONSENT, val ? '1' : '0'); } catch (e) {}
   }
 
+  function hasOnboarded() {
+    try { return localStorage.getItem(LS_ONBOARDED) === '1'; } catch (e) { return false; }
+  }
+
+  function hasProfile() {
+    return !!(state.profile && state.profile.name && String(state.profile.name).trim() && state.profile.email && String(state.profile.email).trim());
+  }
+
   function init() {
     bindEvents();
     if (!hasConsent()) {
@@ -109,7 +119,21 @@ import {
   function bootApp() {
     initTheme();
     initCollapsibles();
+    loadSession().then(function (s) {
+      if (!s) {
+        showLoginView();
+        route();
+        return;
+      }
+      enterApp();
+    });
+  }
+
+  var sessionListenersBound = false;
+
+  function enterApp() {
     loadProfile().then(function () {
+      syncProfileFromSession();
       return loadStatus();
     }).then(function () {
       if (state.status && state.status.date !== todayStr()) {
@@ -123,8 +147,13 @@ import {
       if (!isConfigured()) showSetupBanner();
 
       renderHome();
-
+      hideLoginView();
       refreshAdminAccess();
+      route();
+
+      if (!hasOnboarded()) {
+        openOnboarding();
+      }
 
       fetchConfig()
         .then(renderHome)
@@ -134,12 +163,13 @@ import {
           renderHome();
         });
 
-      route();
-      window.addEventListener('hashchange', route);
-      window.addEventListener('online', flushQueue);
+      if (!sessionListenersBound) {
+        sessionListenersBound = true;
+        window.addEventListener('online', flushQueue);
 
-      if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-        navigator.serviceWorker.register('sw.js').catch(function () {});
+        if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+          navigator.serviceWorker.register('sw.js').catch(function () {});
+        }
       }
 
       setTimeout(function () {
@@ -148,7 +178,6 @@ import {
         loadWeek();
         loadMonth();
         initReminders();
-        if (!state.profile && !localStorage.getItem(LS_ONBOARDED)) openOnboarding();
       }, 800);
     });
   }
@@ -211,6 +240,10 @@ import {
     $('ob-skip').addEventListener('click', dismissOnboarding);
     $('admin-pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
     $('admin-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
+    $('btn-login-go').addEventListener('click', onLoginGo);
+    $('login-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
+    $('login-tenant').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
+    $('btn-logout').addEventListener('click', onLogout);
     var pinToggle = $('pin-toggle');
     if (pinToggle) pinToggle.addEventListener('click', function () {
       var inp = $('admin-pin');
@@ -218,7 +251,8 @@ import {
       inp.type = show ? 'text' : 'password';
       pinToggle.classList.toggle('on', show);
     });
-    initOtpSegments();
+    initOtpSegments('otp-seg', 'admin-otp', onAdminGo);
+    initOtpSegments('login-otp-seg', 'login-otp', onLoginGo);
     var consentAccept = $('consent-accept');
     var consentDecline = $('consent-decline');
     if (consentAccept) consentAccept.addEventListener('click', function () {
@@ -232,6 +266,7 @@ import {
     });
     window.addEventListener('online', updateOfflinePill);
     window.addEventListener('offline', updateOfflinePill);
+    window.addEventListener('hashchange', route);
     updateOfflinePill();
     initInstallPrompt();
     var themeBtn = $('btn-theme');
@@ -451,6 +486,158 @@ import {
     return lsSet(LS_STATUS, JSON.stringify(state.status));
   }
 
+  /* ---------------- Login session ---------------- */
+
+  function loadSession() {
+    return lsGet(LS_SESSION).then(function (raw) {
+      try { state.session = raw ? JSON.parse(raw) : null; } catch (e) { state.session = null; }
+      if (state.session && typeof state.session !== 'object') state.session = null;
+      return state.session;
+    });
+  }
+
+  function saveSession() {
+    return lsSet(LS_SESSION, JSON.stringify(state.session));
+  }
+
+  function clearSession() {
+    state.session = null;
+    var prevToken = state.adminToken;
+    state.adminToken = '';
+    state.isAdmin = false;
+    state.admin = null;
+    try { localStorage.removeItem(LS_SESSION); } catch (e) {}
+    if (prevToken) { applyAdminVisibility(); }
+  }
+
+  function syncProfileFromSession() {
+    var s = state.session;
+    if (!s) return;
+    var p = state.profile || {};
+    var changed = false;
+    if (p.name !== s.name) { p.name = s.name; changed = true; }
+    if (p.email !== s.email) { p.email = s.email; changed = true; }
+    if (p.tenant !== (s.tenant || '')) { p.tenant = s.tenant || ''; changed = true; }
+    if (changed) { state.profile = p; saveProfile(); }
+  }
+
+  function showLoginView() {
+    $('view-login').classList.remove('hidden');
+    $('view-home').classList.add('hidden');
+    $('view-admin').classList.add('hidden');
+    document.body.classList.remove('admin-view');
+    var banner = $('setup-banner');
+    if (banner) banner.classList.add('hidden');
+    var nav = document.querySelector('.bottom-nav');
+    if (nav) nav.classList.add('hidden');
+    closeScanner();
+    var f = $('login-email');
+    if (f) { try { f.focus(); } catch (e) {} }
+  }
+
+  function hideLoginView() {
+    $('view-login').classList.add('hidden');
+    var nav = document.querySelector('.bottom-nav');
+    if (nav) nav.classList.remove('hidden');
+  }
+
+  function resetLoginOtpState() {
+    var row = $('login-otp-row');
+    if (!row) return;
+    row.classList.add('hidden');
+    var note = $('login-otp-note');
+    if (note) { note.textContent = ''; note.classList.add('hidden'); }
+    $('login-otp').value = '';
+    $('btn-login-go').textContent = 'Se connecter';
+  }
+
+  function onLoginGo() {
+    var btn = $('btn-login-go');
+    var email = $('login-email').value.trim();
+    var tenant = $('login-tenant').value.trim();
+    var otp = $('login-otp').value.trim();
+
+    if (!email) { showError('login-error', 'Saisissez votre email.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('login-error', 'Saisissez un email valide.'); return; }
+    if (tenant && !/^[a-z0-9][a-z0-9\-]{1,23}$/.test(tenant)) {
+      showError('login-error', 'Code espace : 2-24 caracteres, lettres/chiffres/tirets.');
+      return;
+    }
+
+    var otpRow = $('login-otp-row');
+    var expectingOtp = otpRow && !otpRow.classList.contains('hidden');
+    if (expectingOtp && otp.length < 6) { showError('login-error', 'Le code comporte 6 chiffres.'); return; }
+
+    hideError('login-error');
+    var body = { action: 'user_login', email: email };
+    if (tenant) body.tenant = tenant;
+    if (expectingOtp) body.otp = otp;
+    btn.textContent = 'Chargement...';
+
+    api(body).then(function (res) {
+      if (!res.ok || !res.needOtp) btn.textContent = 'Se connecter';
+      if (res && res.needOtp) {
+        otpRow.classList.remove('hidden');
+        var note = $('login-otp-note');
+        if (note) {
+          note.textContent = res.message || 'Code envoye par email.';
+          if (res.otpDev) note.textContent += ' Code de developpement : ' + res.otpDev;
+          note.classList.remove('hidden');
+        }
+        btn.textContent = 'Verifier le code';
+        var firstBox = otpRow.querySelector('.otp-box');
+        if (firstBox) firstBox.focus();
+        else $('login-otp').focus();
+        return;
+      }
+      if (!res.ok) throw new Error((res && res.message) || 'Connexion refusee.');
+      if (!res.user) throw new Error('Reponse invalide du serveur.');
+
+      state.session = {
+        name: res.user.name || email,
+        email: res.user.email || email,
+        tenant: res.user.tenant || tenant,
+        isAdmin: !!res.user.isAdmin,
+        token: res.sessionToken || res.token || ''
+      };
+      state.profile = {
+        name: state.session.name,
+        email: state.session.email,
+        tenant: state.session.tenant
+      };
+      state.adminToken = state.session.token || state.adminToken;
+      state.isAdmin = state.session.isAdmin;
+      applyAdminVisibility();
+      saveSession();
+      saveProfile();
+      hideModal('modal-profile');
+      resetLoginOtpState();
+      enterApp();
+    }).catch(function (err) {
+      btn.textContent = 'Se connecter';
+      showError('login-error', err.message);
+    });
+  }
+
+  function onLogout() {
+    var ok = window.confirm('Se deconnecter ? Vos donnees locales de cet utilisateur seront effacees de cet appareil.');
+    if (!ok) return;
+    clearSession();
+    hideModal('modal-profile');
+    try { localStorage.removeItem(LS_PROFILE); } catch (e) {}
+    try { localStorage.removeItem(LS_STATUS); } catch (e) {}
+    try { localStorage.removeItem(LS_QUEUE); } catch (e) {}
+    state.profile = null;
+    state.status = null;
+    $('login-email').value = '';
+    $('login-tenant').value = '';
+    resetLoginOtpState();
+    hideError('login-error');
+    showLoginView();
+    location.hash = '#home';
+    route();
+  }
+
   function showProfileModal() {
     if (state.profile) {
       $('pf-name').value = state.profile.name || '';
@@ -612,7 +799,7 @@ import {
 
   function onScanClick() {
     if (!state.config) { showFeedback('warn', 'Chargement des parametres du bureau en cours, reessayez dans un instant.'); return; }
-    if (!state.profile) {
+    if (!hasProfile()) {
       state.pendingScan = true;
       showProfileModal();
       return;
@@ -711,7 +898,7 @@ import {
       showFeedback('warn', 'Les parametres du bureau sont en cours de chargement. Reessayez dans un instant.');
       return;
     }
-    if (!state.profile) {
+    if (!hasProfile()) {
       showFeedback('warn', 'Definissez vos coordonnees d\'abord.');
       showProfileModal();
       return;
@@ -951,13 +1138,13 @@ import {
 
     card.classList.remove('checked-in');
     var recentCard = $('recent-card');
-    if (recentCard) recentCard.classList.toggle('hidden', !state.profile);
+    if (recentCard) recentCard.classList.toggle('hidden', !hasProfile());
     var weekCard = $('week-card');
-    if (weekCard) weekCard.classList.toggle('hidden', !state.profile);
+    if (weekCard) weekCard.classList.toggle('hidden', !hasProfile());
     var monthCard = $('month-card');
-    if (monthCard) monthCard.classList.toggle('hidden', !state.profile);
+    if (monthCard) monthCard.classList.toggle('hidden', !hasProfile());
 
-    if (!state.profile) {
+    if (!hasProfile()) {
       avatar.className = 'status-avatar';
       clearAvatarGradient(avatar);
       avatar.textContent = '?';
@@ -1037,7 +1224,7 @@ import {
   /* ---------------- Recent activity ---------------- */
 
   function loadRecent() {
-    if (!state.profile || !isConfigured()) return;
+    if (!hasProfile() || !isConfigured()) return;
     if (state.recentLoading) return;
     state.recentLoading = true;
     renderRecent();
@@ -1107,7 +1294,7 @@ import {
   /* ---------------- Last 7 days ---------------- */
 
   function loadWeek() {
-    if (!state.profile || !isConfigured()) return;
+    if (!hasProfile() || !isConfigured()) return;
     if (state.weekLoading) return;
     state.weekLoading = true;
     renderWeek();
@@ -1209,7 +1396,7 @@ import {
   /* ---------------- Monthly summary ---------------- */
 
   function loadMonth() {
-    if (!state.profile || !isConfigured()) return;
+    if (!hasProfile() || !isConfigured()) return;
     if (state.monthLoading) return;
     state.monthLoading = true;
     api({ action: 'myattendance', email: state.profile.email }).then(function (res) {
@@ -1502,7 +1689,16 @@ import {
   function route() {
     var hash = location.hash || '#home';
     var wantsAdmin = hash.indexOf('admin') !== -1;
-    var allowed = !!state.isAdmin || !!state.adminToken;
+    var allowed = !!state.session && (!!state.isAdmin || !!state.adminToken);
+
+    if (!state.session) {
+      showLoginView();
+      if (wantsAdmin) {
+        showFeedback('warn', 'Connectez-vous pour acceder a cette page.');
+        location.hash = '#home';
+      }
+      return;
+    }
 
     document.body.classList.toggle('admin-view', wantsAdmin);
 
@@ -1518,6 +1714,7 @@ import {
       return;
     }
 
+    hideLoginView();
     $('view-home').classList.toggle('hidden', wantsAdmin);
     $('view-admin').classList.toggle('hidden', !wantsAdmin);
     var navHome = $('nav-home');
@@ -1664,17 +1861,17 @@ import {
 
   /* ---------------- Segmented OTP input ---------------- */
 
-  function initOtpSegments() {
-    var seg = $('otp-seg');
+  function initOtpSegments(segId, hiddenId, onComplete) {
+    var seg = $(segId);
     if (!seg) return;
-    var hidden = $('admin-otp');
+    var hidden = $(hiddenId);
     var boxes = seg.querySelectorAll('.otp-box');
 
     function syncToHidden() {
       var v = '';
       for (var i = 0; i < boxes.length; i++) v += boxes[i].value;
-      hidden.value = v;
-      if (v.length === boxes.length) onAdminGo();
+      if (hidden) hidden.value = v;
+      if (v.length === boxes.length && onComplete) onComplete();
     }
 
     for (var i = 0; i < boxes.length; i++) {
@@ -2587,7 +2784,7 @@ import {
   /* ---------------- My attendance ---------------- */
 
   function onHistoryClick() {
-    if (!state.profile) {
+    if (!hasProfile()) {
       showFeedback('warn', 'Definissez vos coordonnees d\'abord, puis ouvrez Mon historique.');
       showProfileModal();
       return;
@@ -2603,7 +2800,7 @@ import {
   }
 
   function onHistoryExport() {
-    if (!state.profile) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
+    if (!hasProfile()) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
     showFeedback('info', 'Preparation de vos donnees...');
     api({ action: 'myexport', email: state.profile.email }).then(function (res) {
       if (!res.ok) throw new Error(res.message || 'Impossible d\'exporter');
@@ -2626,7 +2823,7 @@ import {
   }
 
   function onHistoryDelete() {
-    if (!state.profile) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
+    if (!hasProfile()) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
     if (!window.confirm('Effacer TOUS vos enregistrements de presence de la feuille du bureau ? Cette action est irreversible.')) return;
     api({ action: 'mydelete', email: state.profile.email }).then(function (res) {
       if (!res.ok) throw new Error(res.message || 'Impossible d\'effacer les donnees');

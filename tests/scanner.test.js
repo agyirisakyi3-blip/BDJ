@@ -21,11 +21,20 @@ const PROFILE = { name: 'Test User', email: 'test@bdj.com' };
    ========================================== */
 describe('QR Scanner Modal', () => {
   test('scan click without profile opens profile modal instead', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { freshProfile: true });
     await page.click('#btn-scan');
     await page.waitForSelector('#modal-profile:not(.hidden)', { timeout: 5000 });
     const scanHidden = await page.$eval('#modal-scan', el => el.classList.contains('hidden'));
     expect(scanHidden).toBe(true);
+    await page.close();
+  });
+
+  test('scanner is gated behind login', async () => {
+    const page = await bootPage(browser);
+    const loginHidden = await page.$eval('#view-login', el => el.classList.contains('hidden'));
+    expect(loginHidden).toBe(false);
+    const homeHidden = await page.$eval('#view-home', el => el.classList.contains('hidden'));
+    expect(homeHidden).toBe(true);
     await page.close();
   });
 

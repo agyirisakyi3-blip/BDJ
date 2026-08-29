@@ -21,12 +21,12 @@ describe('Consent Banner', () => {
     await page.close();
   });
 
-  test('accept hides banner and app initializes', async () => {
+  test('accept hides banner and app shows login view', async () => {
     const page = await bootPage(browser, { noConsent: true });
     await page.click('#consent-accept');
     await page.waitForFunction(() => {
-      const el = document.getElementById('today-date');
-      return !el.classList.contains('hidden') && el.textContent.length > 0;
+      const el = document.getElementById('view-login');
+      return el && !el.classList.contains('hidden');
     }, { timeout: 10000 });
     const hidden = await page.$eval('#consent-banner', el => el.classList.contains('hidden'));
     expect(hidden).toBe(true);
@@ -47,7 +47,7 @@ describe('Consent Banner', () => {
   });
 
   test('consent banner hidden when consent already given', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     const hidden = await page.$eval('#consent-banner', el => el.classList.contains('hidden'));
     expect(hidden).toBe(true);
     await page.close();
@@ -69,7 +69,7 @@ describe('Consent Banner', () => {
 describe('Onboarding', () => {
   async function openOnboardingPage() {
     return bootPage(browser, {
-      seed: {},
+      session: { name: 'Test User', email: 'test@bdj.com', tenant: '' },
       api: body => (body.action === 'config' ? { ok: true, config: { appName: 'addredance' } } : null)
     });
   }
@@ -151,7 +151,7 @@ describe('Onboarding', () => {
    ========================================== */
 describe('Theme Toggle', () => {
   test('switches dark to auto on click', async () => {
-    const page = await bootPage(browser, { seed: { 'att.theme.v1': 'dark' } });
+    const page = await bootPage(browser, { profile: true, seed: { 'att.theme.v1': 'dark' } });
     await page.click('#btn-theme');
     await page.waitForFunction(() => document.documentElement.getAttribute('data-theme-mode') === 'auto');
     const mode = await page.$eval('html', el => el.getAttribute('data-theme-mode'));
@@ -160,7 +160,7 @@ describe('Theme Toggle', () => {
   });
 
   test('switches light to dark on click', async () => {
-    const page = await bootPage(browser, { seed: { 'att.theme.v1': 'light' } });
+    const page = await bootPage(browser, { profile: true, seed: { 'att.theme.v1': 'light' } });
     await page.click('#btn-theme');
     await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark');
     const mode = await page.$eval('html', el => el.getAttribute('data-theme-mode'));
@@ -169,21 +169,21 @@ describe('Theme Toggle', () => {
   });
 
   test('sun icon hidden in light mode', async () => {
-    const page = await bootPage(browser, { seed: { 'att.theme.v1': 'light' } });
+    const page = await bootPage(browser, { profile: true, seed: { 'att.theme.v1': 'light' } });
     const display = await page.$eval('#ic-sun', el => el.style.display);
     expect(display).toBe('none');
     await page.close();
   });
 
   test('moon icon hidden in dark mode', async () => {
-    const page = await bootPage(browser, { seed: { 'att.theme.v1': 'dark' } });
+    const page = await bootPage(browser, { profile: true, seed: { 'att.theme.v1': 'dark' } });
     const display = await page.$eval('#ic-moon', el => el.style.display);
     expect(display).toBe('none');
     await page.close();
   });
 
   test('auto mode follows prefers-color-scheme', async () => {
-    const page = await bootPage(browser, { colorScheme: 'dark' });
+    const page = await bootPage(browser, { profile: true, colorScheme: 'dark' });
     const theme = await page.$eval('html', el => el.getAttribute('data-theme'));
     expect(theme).toBe('dark');
     const mode = await page.$eval('html', el => el.getAttribute('data-theme-mode'));
@@ -194,7 +194,7 @@ describe('Theme Toggle', () => {
   });
 
   test('clicking from auto switches to explicit light', async () => {
-    const page = await bootPage(browser, { colorScheme: 'dark' });
+    const page = await bootPage(browser, { profile: true, colorScheme: 'dark' });
     await page.click('#btn-theme');
     await page.waitForFunction(() => document.documentElement.getAttribute('data-theme-mode') === 'light');
     const theme = await page.$eval('html', el => el.getAttribute('data-theme'));
@@ -203,7 +203,7 @@ describe('Theme Toggle', () => {
   });
 
   test('theme persists after reload', async () => {
-    const page = await bootPage(browser, { seed: { 'att.theme.v1': 'light' } });
+    const page = await bootPage(browser, { profile: true, seed: { 'att.theme.v1': 'light' } });
     await page.click('#btn-theme');
     await page.waitForFunction(() => document.documentElement.getAttribute('data-theme') === 'dark');
     await page.reload({ waitUntil: 'load' });
@@ -222,7 +222,7 @@ describe('Theme Toggle', () => {
    ========================================== */
 describe('Help Modal', () => {
   test('help button opens the help modal', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     await page.click('#btn-help');
     await page.waitForSelector('#modal-help:not(.hidden)', { timeout: 5000 });
     const title = await page.$eval('#modal-help h3', el => el.textContent);
@@ -231,7 +231,7 @@ describe('Help Modal', () => {
   });
 
   test('close button hides the help modal', async () => {
-    const page = await bootPage(browser);
+    const page = await bootPage(browser, { profile: true });
     await page.click('#btn-help');
     await page.waitForSelector('#modal-help:not(.hidden)', { timeout: 5000 });
     await page.click('#btn-help-close');
