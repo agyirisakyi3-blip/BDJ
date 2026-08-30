@@ -1905,6 +1905,10 @@ html[data-theme] body.admin-view .help-toc { position: sticky; top: 20px; }
 .help-ul { font-size: 13px; line-height: 1.7; color: var(--muted); margin: 0 0 10px; padding-left: 18px; }
 .help-ul b { color: var(--text); }
 .help-ul li { margin-bottom: 4px; }
+.help-steps { margin: 0 0 12px; padding-left: 20px; counter-reset: helpstep; }
+.help-steps li { position: relative; font-size: 13px; line-height: 1.7; color: var(--muted); margin-bottom: 6px; padding-left: 4px; }
+.help-steps li b { color: var(--text); }
+.help-steps li::marker { color: var(--accent); font-weight: 700; }
 .help-tip { font-size: 12.5px; line-height: 1.6; color: #0f766e; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 9px 12px; }
 .help-tip b { color: #0f766e; }
 
