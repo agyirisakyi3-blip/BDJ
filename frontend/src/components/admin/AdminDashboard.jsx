@@ -10,6 +10,7 @@ import HoursChart from './HoursChart';
 import PresenceDonut from './PresenceDonut';
 import PhotoAvatar from './PhotoAvatar';
 import AdminSidebar from './AdminSidebar';
+import AdminHelp from './AdminHelp';
 import { compressImage, printReportPDF } from '../../utils';
 
 const PEOPLE_STATUS = {
@@ -81,6 +82,7 @@ const VIEW_TITLES = {
   gestion: 'Gestion',
   qr: 'QR & acces',
   annonces: 'Annonces',
+  aide: 'Centre d\u0027aide',
 };
 
 const ANOMALY_MIN_HOURS = 2;      // days under this number of net hours
@@ -1400,6 +1402,12 @@ export default function AdminDashboard() {
               </div>
             </Reveal>
           </>
+        )}
+
+        {activeView === 'aide' && (
+          <Reveal delay={40}>
+            <AdminHelp />
+          </Reveal>
         )}
       </div>
     </div>

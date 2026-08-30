@@ -1889,3 +1889,27 @@ html[data-theme] body.admin-view .sidebar-toggle { box-shadow: var(--shadow-sm);
 .ann-form input[type="text"], .ann-form textarea { width: 100%; }
 .ann-form textarea { min-height: 72px; resize: vertical; }
 .ann-pin-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+
+/* ============ Admin Help (Centre d'aide) ============ */
+
+.help-layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
+
+html[data-theme] body.admin-view .help-toc { position: sticky; top: 20px; }
+.help-toc .block-body { display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 120px); overflow: auto; }
+.help-toc-link { display: block; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; transition: background .15s, color .15s; }
+.help-toc-link:hover { background: rgba(127, 141, 166, 0.12); color: var(--text); }
+.help-body { display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth; }
+
+.help-card .block-head h3 { font-size: 16px; }
+.help-p { font-size: 13px; line-height: 1.6; color: var(--muted); margin: 0 0 10px; }
+.help-ul { font-size: 13px; line-height: 1.7; color: var(--muted); margin: 0 0 10px; padding-left: 18px; }
+.help-ul b { color: var(--text); }
+.help-ul li { margin-bottom: 4px; }
+.help-tip { font-size: 12.5px; line-height: 1.6; color: #0f766e; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 9px 12px; }
+.help-tip b { color: #0f766e; }
+
+@media (max-width: 900px) {
+  .help-layout { grid-template-columns: 1fr; }
+  html[data-theme] body.admin-view .help-toc { position: static; }
+}
+

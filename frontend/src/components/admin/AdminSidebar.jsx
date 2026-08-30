@@ -27,6 +27,12 @@ const NAV_GROUPS = [
       { key: 'annonces', label: 'Annonces', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
     ],
   },
+  {
+    label: 'Support',
+    items: [
+      { key: 'aide', label: 'Aide', icon: 'M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3 M12 17h.01' },
+    ],
+  },
 ];
 
 export default function AdminSidebar({ active, onSelect, open, onToggle, onLogout, adminEmail }) {
