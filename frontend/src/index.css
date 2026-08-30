@@ -1121,6 +1121,7 @@ html[data-theme] body.admin-view .login-split { box-shadow: 0 20px 48px -20px rg
 .table-wrap tbody tr { transition: background 0.15s ease; }
 .table-wrap tbody tr:hover td { background: rgba(127, 141, 166, 0.07); }
 :root[data-theme="light"] .table-wrap tbody tr:hover td { background: rgba(15, 23, 42, 0.04); }
+.table-wrap td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .block-head.collapsible { border-radius: 8px; transition: opacity 0.15s ease; }
 .block-head.collapsible:hover h3 { color: var(--accent-light); }

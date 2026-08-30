@@ -38,11 +38,22 @@ const REPORT_SORT_KEYS = {
   status: (p) => p.missing ? 2 : p.late ? 1 : 0,
 };
 
+const PAYROLL_SORT_KEYS = {
+  name: (r) => r.name || r.email || '',
+  days: (r) => Number(r.days || 0),
+  hours: (r) => r.hours == null ? -1 : Number(r.hours),
+  avgHours: (r) => r.avgHours == null ? -1 : Number(r.avgHours),
+  breakMin: (r) => Number(r.breakMin || 0),
+  late: (r) => Number(r.late || 0),
+  missing: (r) => Number(r.missing || 0),
+};
+
 const VIEW_TITLES = {
   dashboard: 'Tableau de bord',
   effectif: 'Effectif',
   annuaire: 'Annuaire (bios)',
   rapport: 'Rapport',
+  paie: 'Paie (synthese)',
   alertes: 'Alertes & anomalies',
   gestion: 'Gestion',
   qr: 'QR & acces',
@@ -170,6 +181,9 @@ export default function AdminDashboard() {
   // Report table state
   const [reportQuery, setReportQuery] = useState('');
   const [reportSort, setReportSort] = useState({ key: '', dir: 1 });
+  // Payroll table state
+  const [payrollQuery, setPayrollQuery] = useState('');
+  const [payrollSort, setPayrollSort] = useState({ key: 'hours', dir: -1 });
   // Live refresh
   const [liveRefresh, setLiveRefresh] = useState(true);
 
@@ -293,6 +307,43 @@ export default function AdminDashboard() {
     label: d.slice(8, 10) + '/' + d.slice(5, 7),
     hours: Math.round(hoursByDate[d] * 10) / 10,
   }));
+
+  // Payroll: aggregate net hours / breaks / late / missing per employee over period
+  const payrollMap = {};
+  pairs.forEach((p) => {
+    if (!p.email) return;
+    const e = p.email.toLowerCase();
+    if (!payrollMap[e]) payrollMap[e] = { email: e, name: p.name || e, days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 };
+    const row = payrollMap[e];
+    row.days += 1;
+    if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
+    if (p.breakMin != null) row.breakMin += p.breakMin;
+    if (p.late) row.late += 1;
+    if (p.missing) row.missing += 1;
+  });
+  let payroll = Object.keys(payrollMap).map((k) => {
+    const r = payrollMap[k];
+    return {
+      email: r.email,
+      name: r.name,
+      days: r.days,
+      hours: Math.round(r.hours * 100) / 100,
+      avgHours: r.days ? Math.round((r.hours / r.days) * 100) / 100 : 0,
+      breakMin: Math.round(r.breakMin),
+      late: r.late,
+      missing: r.missing,
+    };
+  });
+  const pql = payrollQuery.trim().toLowerCase();
+  if (pql) payroll = payroll.filter((r) => [r.name, r.email].filter(Boolean).join(' ').toLowerCase().includes(pql));
+  if (payrollSort.key && PAYROLL_SORT_KEYS[payrollSort.key]) {
+    payroll.sort((x, y) => cmpVals(PAYROLL_SORT_KEYS[payrollSort.key](x), PAYROLL_SORT_KEYS[payrollSort.key](y)) * payrollSort.dir);
+  }
+  const payrollTotals = payroll.reduce((acc, r) => {
+    acc.days += r.days; acc.hours += r.hours; acc.breakMin += r.breakMin; acc.late += r.late; acc.missing += r.missing;
+    return acc;
+  }, { days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
+  payrollTotals.hours = Math.round(payrollTotals.hours * 100) / 100;
 
   // Presence donut (today's status breakdown)
   const onBreakCount = (live.onBreakNames || []).length;
@@ -428,6 +479,20 @@ export default function AdminDashboard() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'presence-' + dateFrom + '_' + dateTo + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  const downloadPayrollCsv = () => {
+    const head = ['Nom', 'Email', 'Jours', 'Total heures', 'Moyenne/jour', 'Pause (min)', 'Retards', 'Sorties manquantes'];
+    const lines = [head.join(',')];
+    payroll.forEach((r) => {
+      const row = [r.name || '', r.email, r.days, r.hours, r.avgHours, r.breakMin, r.late, r.missing];
+      lines.push(row.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(','));
+    });
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'paie-' + dateFrom + '_' + dateTo + '.csv';
     document.body.appendChild(a); a.click(); a.remove();
   };
 
@@ -712,6 +777,94 @@ export default function AdminDashboard() {
               <div className="btn-row">
                 <button className="ghost-btn" onClick={downloadReportCsv}>CSV</button>
                 <a className="ghost-btn" href={a.sheetUrl || '#'} target="_blank" rel="noopener">Feuille</a>
+                <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
+              </div>
+            </Reveal>
+          </>
+        )}
+
+        {activeView === 'paie' && (
+          <>
+            {/* Payroll summary */}
+            <Reveal delay={40}>
+              <div className="kpi-grid">
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-blue" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M14 7l3 3-6 6-3-3"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Salaries</span>
+                    <AnimatedNumber value={payroll.length} suffix=" " />
+                    <span className="kpi-sub muted">{dateFrom} → {dateTo}</span>
+                  </div>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-green" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10 M18 20V4 M6 20v-4"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Total heures</span>
+                    <AnimatedNumber value={Math.round(payrollTotals.hours * 10) / 10} decimals={1} suffix=" h" />
+                    <span className="kpi-sub muted">sur {payrollTotals.days} jour(s) pre</span>
+                  </div>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-violet" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z M5 22a7 7 0 0 1 14 0"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Pause totale</span>
+                    <AnimatedNumber value={Math.round(payrollTotals.breakMin)} suffix=" min" />
+                    <span className="kpi-sub muted">{payrollTotals.late} retard(s) · {payrollTotals.missing} s. manquante(s)</span>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Payroll table */}
+            <Reveal delay={40}>
+              <div className="card block">
+                <div className="block-head">
+                  <h3>Synthese paie</h3>
+                  <span className="pill">{payroll.length} salarie(s)</span>
+                </div>
+                <div className="block-body">
+                  <div className="table-tools">
+                    <div className="search-wrap">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input type="search" placeholder="Rechercher un salarie..." value={payrollQuery} onChange={(e) => setPayrollQuery(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          {[{key:'name',label:'Nom'},{key:'days',label:'Jours'},{key:'hours',label:'Total h'},{key:'avgHours',label:'Moyenne'},{key:'breakMin',label:'Pause'},{key:'late',label:'Retards'},{key:'missing',label:'S. manq'}].map((col) => (
+                          <th key={col.key} className="sortable" onClick={() => setPayrollSort((s) => s.key === col.key ? { key: col.key, dir: -s.dir } : { key: col.key, dir: 1 })}>
+                            {col.label}{payrollSort.key === col.key ? (payrollSort.dir === 1 ? ' \u2191' : ' \u2193') : ''}
+                          </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payroll.length === 0 ? (
+                          <tr><td className="empty" colSpan={7}>Aucun salarie dans cette periode.</td></tr>
+                        ) : payroll.map((r, i) => (
+                          <tr key={i}>
+                            <td>{r.name || r.email}</td>
+                            <td>{r.days}</td>
+                            <td className="num">{fmtHours(r.hours)}</td>
+                            <td className="num">{fmtHours(r.avgHours)}</td>
+                            <td className="num">{Math.round(r.breakMin)} min</td>
+                            <td className="num"><span className={'tag ' + (r.late ? 'out' : 'in')}>{r.late}</span></td>
+                            <td className="num"><span className={'tag ' + (r.missing ? 'neutral' : 'in')}>{r.missing}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Payroll export */}
+            <Reveal delay={40}>
+              <div className="btn-row">
+                <button className="ghost-btn" onClick={downloadPayrollCsv}>Exporter (CSV)</button>
                 <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
               </div>
             </Reveal>
