@@ -1,9 +1,16 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../contexts/AppContext';
-import { fmtHours, todayStr, shiftDateStr, avatarHue, avatarInitials, cmpVals } from '../../utils';
+import { fmtHours, todayStr, shiftDateStr, cmpVals } from '../../utils';
 import AdminLogin from './AdminLogin';
 import QRGenerator from './QRGenerator';
+import AnimatedNumber from './AnimatedNumber';
+import Reveal from './Reveal';
+import HoursChart from './HoursChart';
+import PresenceDonut from './PresenceDonut';
+import PhotoAvatar from './PhotoAvatar';
+import AdminSidebar from './AdminSidebar';
+import { compressImage } from '../../utils';
 
 const PEOPLE_STATUS = {
   onsite: { label: 'Sur place', cls: 'in' },
@@ -29,6 +36,16 @@ const REPORT_SORT_KEYS = {
   out: (p) => p.out || '',
   hours: (p) => p.hours == null ? -1 : Number(p.hours),
   status: (p) => p.missing ? 2 : p.late ? 1 : 0,
+};
+
+const VIEW_TITLES = {
+  dashboard: 'Tableau de bord',
+  effectif: 'Effectif',
+  annuaire: 'Annuaire (bios)',
+  rapport: 'Rapport',
+  alertes: 'Alertes & anomalies',
+  gestion: 'Gestion',
+  qr: 'QR & acces',
 };
 
 const ANOMALY_MIN_HOURS = 2;      // days under this number of net hours
@@ -136,6 +153,10 @@ export default function AdminDashboard() {
   const [dateFrom, setDateFrom] = useState(todayStr());
   const [dateTo, setDateTo] = useState(todayStr());
   const [activeQuickRange, setActiveQuickRange] = useState('today');
+  const [activeView, setActiveView] = useState(() => {
+    try { return sessionStorage.getItem('adminView') || 'dashboard'; } catch (e) { return 'dashboard'; }
+  });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Sub-section data
   const [employees, setEmployees] = useState([]);
@@ -240,6 +261,11 @@ export default function AdminDashboard() {
   const pairs = a.pairs || [];
   const allPeople = a.people || [];
 
+  // Map employee email -> uploaded photo (from the employees roster) so the
+  // Effectif table and bios can show photos.
+  const photoByEmail = {};
+  employees.forEach((e) => { if (e.email) photoByEmail[e.email.toLowerCase()] = e.photo || ''; });
+
   // Filter + sort people
   const pq = peopleQuery.trim().toLowerCase();
   let filteredPeople = pq ? allPeople.filter((p) => [p.name, p.email, p.department].filter(Boolean).join(' ').toLowerCase().includes(pq)) : [...allPeople];
@@ -262,14 +288,37 @@ export default function AdminDashboard() {
   pairs.forEach((p) => { if (!p.date) return; if (!hoursByDate[p.date]) { hoursByDate[p.date] = 0; dates.push(p.date); } hoursByDate[p.date] += (p.hours != null && !isNaN(p.hours)) ? p.hours : 0; });
   dates.sort();
   const shownDates = dates.slice(-14);
-  const hoursMax = Math.max(...shownDates.map((d) => hoursByDate[d]), 0);
   const totalShownHours = shownDates.reduce((s, d) => s + hoursByDate[d], 0);
+  const hoursChartData = shownDates.map((d) => ({
+    label: d.slice(8, 10) + '/' + d.slice(5, 7),
+    hours: Math.round(hoursByDate[d] * 10) / 10,
+  }));
+
+  // Presence donut (today's status breakdown)
+  const onBreakCount = (live.onBreakNames || []).length;
+  const statusBuckets = [
+    { key: 'onsite', value: Number(live.onSite || 0) },
+    { key: 'break', value: onBreakCount },
+    { key: 'leave', value: Number(live.onLeave || 0) },
+    { key: 'out', value: Number(live.checkedOutToday || 0) },
+    { key: 'absent', value: Number((live.absent || []).length) },
+  ].filter((b) => b.value > 0);
+  const donutTotal = statusBuckets.reduce((s, b) => s + b.value, 0);
 
   const handleEmployeeAdd = async (data) => {
     try {
       const res = await apiCall({ action: 'employee_add', token, ...data });
       if (!res.ok) throw new Error(res.message);
       showFeedback('success', 'Employe "' + res.employee.name + '" enregistre.');
+      loadSubData();
+    } catch (err) { showFeedback('error', err.message); }
+  };
+
+  const handleBioUpdate = async (data) => {
+    try {
+      const res = await apiCall({ action: 'employee_bio_update', token, ...data });
+      if (!res.ok) throw new Error(res.message);
+      showFeedback('success', 'Fiche de "' + data.email + '" mise a jour.');
       loadSubData();
     } catch (err) { showFeedback('error', err.message); }
   };
@@ -401,272 +450,338 @@ export default function AdminDashboard() {
   (live.onBreakNames || []).forEach((n) => { onBreakSet[n] = true; });
 
   return (
-    <div>
-      {/* Dashboard Toolbar */}
-      <div className="card block dash-toolbar">
-        <div className="block-body">
-          <div className="dash-toolbar-head">
-            <span className="kpi-icon lg kpi-violet" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            </span>
-            <div><h3>Tableau de bord</h3><p className="hint">Periode : {dateFrom} \u2192 {dateTo}</p></div>
-          </div>
-          {activeQuickRange === 'today' && (
-            <label className="live-toggle" title="Actualisation automatique toutes les 30s">
-              <input type="checkbox" checked={liveRefresh} onChange={(e) => setLiveRefresh(e.target.checked)} />
-              <span className="live-dot" aria-hidden="true"></span>
-              En direct
-            </label>
-          )}
-          <div className="quick-ranges">
-            {['today','7d','30d','month'].map((r) => (
-              <button key={r} className={'qr-chip' + (activeQuickRange === r ? ' active' : '')} onClick={() => handleQuickRange(r)}>
-                {r === 'today' ? "Aujourd'hui" : r === '7d' ? '7 jours' : r === '30d' ? '30 jours' : 'Ce mois'}
+    <div className="admin-shell">
+      <AdminSidebar
+        active={activeView}
+        onSelect={(v) => { setActiveView(v); try { sessionStorage.setItem('adminView', v); } catch (e) {} }}
+        open={sidebarOpen}
+        onToggle={(val) => { if (typeof val === 'boolean') setSidebarOpen(val); else setSidebarOpen((s) => !s); }}
+        onLogout={() => { setToken(''); setAdminData(null); contextSetToken(''); }}
+        adminEmail={adminEmail}
+      />
+
+      <div className="admin-content">
+        {/* Dashboard Toolbar */}
+        <div className="card block dash-toolbar">
+          <div className="block-body">
+            <div className="dash-toolbar-head">
+              <button className="sidebar-toggle" type="button" onClick={() => setSidebarOpen(true)} aria-label="Ouvrir le menu">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
               </button>
-            ))}
-          </div>
-          <div className="range-row">
-            <label className="range-field"><span>Du</span>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            </label>
-            <label className="range-field"><span>Au</span>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            </label>
-            <button className="primary-btn range-btn" onClick={() => loadDashboard(dateFrom, dateTo)}>
-              {loading ? 'Chargement...' : 'Charger'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* KPIs */}
-      <div className="kpi-grid">
-        <div className="kpi">
-          <span className="kpi-icon kpi-violet"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-          <b>{allPeople.length}</b><span>Effectif</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-icon kpi-emerald"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></span>
-          <b>{live.onSite || 0}</b><span>Sur place</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-icon kpi-blue"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
-          <b>{live.checkedInToday || 0}</b><span>Entrees aujourd'hui</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-icon kpi-amber"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
-          <b>{live.checkedOutToday || 0}</b><span>Sorties aujourd'hui</span>
-        </div>
-      </div>
-
-      {/* Period Summary */}
-      <p className="stat-caption">Periode selectionnee</p>
-      <div className="report-summary stat-row">
-        <div className="stat stat-in"><b>{fmtHours(summary.totalHours)}</b><span>Total heures</span></div>
-        <div className="stat stat-on"><b>{summary.daysPresent}</b><span>Jours presents</span></div>
-        <div className="stat stat-out"><b>{summary.lateCount}</b><span>Retards</span></div>
-        <div className="stat stat-in"><b>{summary.missingOut}</b><span>Pas de sortie</span></div>
-      </div>
-
-      {/* Alerts */}
-      {(function () {
-        const alerts = buildAlerts(adminData);
-        if (!alerts.length) return null;
-        return (
-          <div className="card block alert-block">
-            <div className="block-head"><h3>Alertes</h3><span className="pill pills-warn">{alerts.length}</span></div>
-            <div className="block-body">
-              {alerts.map((al, i) => (
-                <div key={i} className={'alert-item alert-' + al.kind}>
-                  <strong>{al.title}</strong>
-                  {al.rows && al.rows.length > 0 && (
-                    <span className="alert-rows">{al.rows.join(' \u00b7 ')}{al.more ? ' ' + al.more : ''}</span>
-                  )}
-                </div>
+              <span className="kpi-icon lg kpi-violet" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              </span>
+              <div><h3>{VIEW_TITLES[activeView] || 'Tableau de bord'}</h3><p className="hint">Periode : {dateFrom} \u2192 {dateTo}</p></div>
+            </div>
+            {activeQuickRange === 'today' && (
+              <label className="live-toggle" title="Actualisation automatique toutes les 30s">
+                <input type="checkbox" checked={liveRefresh} onChange={(e) => setLiveRefresh(e.target.checked)} />
+                <span className="live-dot" aria-hidden="true"></span>
+                En direct
+              </label>
+            )}
+            <div className="quick-ranges">
+              {['today','7d','30d','month'].map((r) => (
+                <button key={r} className={'qr-chip' + (activeQuickRange === r ? ' active' : '')} onClick={() => handleQuickRange(r)}>
+                  {r === 'today' ? "Aujourd'hui" : r === '7d' ? '7 jours' : r === '30d' ? '30 jours' : 'Ce mois'}
+                </button>
               ))}
             </div>
-          </div>
-        );
-      })()}
-
-      {/* Anomalies */}
-      {(function () {
-        const anomalies = buildAnomalies(pairs, allPeople);
-        if (!anomalies.length) return null;
-        return (
-          <div className="card block anomaly-block">
-            <div className="block-head"><h3>Anomalies</h3><span className="pill pills-warn">{anomalies.length}</span></div>
-            <div className="block-body">
-              {anomalies.slice(0, 20).map((an, i) => (
-                <div key={i} className={'anomaly-item anomaly-' + an.kind}>
-                  <span className="anomaly-name">{an.p ? (an.p.name || an.p.email) : (an.per ? (an.per.name || an.per.email) : '')}</span>
-                  <span className="anomaly-detail">{an.detail}</span>
-                </div>
-              ))}
-              {anomalies.length > 20 && <p className="hint">{anomalies.length - 20} autres anomalies...</p>}
+            <div className="range-row">
+              <label className="range-field"><span>Du</span>
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </label>
+              <label className="range-field"><span>Au</span>
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </label>
+              <button className="primary-btn range-btn" onClick={() => loadDashboard(dateFrom, dateTo)}>
+                {loading ? 'Chargement...' : 'Charger'}
+              </button>
             </div>
           </div>
-        );
-      })()}
-
-      {/* Hours Chart */}
-      <div className="card block chart-block">
-        <div className="block-head collapsible">
-          <h3>Heures par jour</h3>
-          <span className="pill">{Math.round(totalShownHours * 10) / 10} h</span>
         </div>
-        <div className="block-body">
-          <div className="bar-chart">
-            {shownDates.length === 0 ? null : shownDates.map((d) => (
-              <div key={d} className="bar-col" title={d + ' \u00b7 ' + fmtHours(hoursByDate[d])}>
-                <span className="bar-val">{hoursByDate[d] ? Math.round(hoursByDate[d] * 10) / 10 : ''}</span>
-                <div className={'bar' + (hoursByDate[d] ? '' : ' zero')}
-                  style={hoursByDate[d] ? { height: Math.max(4, Math.round((hoursByDate[d] / hoursMax) * 100)) + '%' } : {}} />
-                <span className="bar-label">{d.slice(8, 10) + '/' + d.slice(5, 7)}</span>
+
+        {activeView === 'dashboard' && (
+          <>
+            {/* KPIs */}
+            <Reveal>
+              <div className="kpi-grid">
+                <div className="kpi">
+                  <span className="kpi-icon kpi-violet"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                  <b><AnimatedNumber value={allPeople.length} /></b><span>Effectif</span>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon kpi-emerald"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></span>
+                  <b><AnimatedNumber value={live.onSite || 0} /></b><span>Sur place</span>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon kpi-blue"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span>
+                  <b><AnimatedNumber value={live.checkedInToday || 0} /></b><span>Entrees aujourd'hui</span>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon kpi-amber"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+                  <b><AnimatedNumber value={live.checkedOutToday || 0} /></b><span>Sorties aujourd'hui</span>
+                </div>
               </div>
-            ))}
-          </div>
-          {shownDates.length === 0 && <p className="hint">Aucune donnee sur cette periode.</p>}
-        </div>
-      </div>
+            </Reveal>
 
-      {/* On-site / Absent */}
-      <div className="card block">
-        <div className="block-head collapsible">
-          <h3>Present maintenant</h3>
-          <span className="pill">{live.onSite || 0} sur place</span>
-        </div>
-        <div className="block-body">
-          <div className="chips">
-            {(!live.onSiteNames || live.onSiteNames.length === 0) ? (
-              <span className="empty">{live.isHolidayToday ? 'Jour ferie : ' + (live.holidayToday || '') + '. Personne n\'est attendu.' : 'Personne n\'est sur place actuellement.'}</span>
-            ) : live.onSiteNames.map((n) => (
-              <span key={n} className={'chip' + (onBreakSet[n] ? ' chip-pause' : '')}>{onBreakSet[n] ? n + ' \u00b7 pause' : n}</span>
-            ))}
-          </div>
-          <div className="absent-block">
-            <div className="block-head"><h3>Pas encore pointe</h3><span className="pill">{(live.absent || []).length} non pointe{(live.absent || []).length > 1 ? 's' : ''}</span></div>
-            <div className="chips">
-              {(live.absent || []).length === 0 ? (
-                <span className="empty">Tout le personnel a deja pointe aujourd'hui.</span>
-              ) : (live.absent || []).map((p) => (
-                <span key={p.email} className="chip absent" title={p.email}>{p.name ? p.name + ' \u00b7 ' + p.email : p.email}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+            {/* Charts row */}
+            <Reveal delay={80}>
+              <div className="charts-row">
+                <div className="card block chart-card">
+                  <div className="block-head">
+                    <h3>Heures par jour</h3>
+                    <span className="pill">{totalShownHours ? Math.round(totalShownHours * 10) / 10 : 0} h</span>
+                  </div>
+                  <div className="block-body">
+                    <HoursChart data={hoursChartData} />
+                  </div>
+                </div>
+                <div className="card block chart-card donut-card">
+                  <div className="block-head">
+                    <h3>Presence aujourd'hui</h3>
+                    <span className="pill">{donutTotal} personnel</span>
+                  </div>
+                  <div className="block-body">
+                    <PresenceDonut data={statusBuckets} total={donutTotal} />
+                  </div>
+                </div>
+              </div>
+            </Reveal>
 
-      {/* People Table */}
-      <div className="card block">
-        <div className="block-head collapsible">
-          <h3>Effectif complet</h3>
-          <span className="pill">{filteredPeople.length === allPeople.length ? allPeople.length + (allPeople.length > 1 ? ' personnes' : ' personne') : filteredPeople.length + ' / ' + allPeople.length}</span>
-        </div>
-        <div className="block-body">
-          <div className="table-tools">
-            <div className="search-wrap">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="search" placeholder="Rechercher nom, email, departement..." value={peopleQuery} onChange={(e) => setPeopleQuery(e.target.value)} />
-            </div>
-          </div>
-          <div className="table-wrap people-table">
-            <table>
-              <thead>
-                <tr>
-                  {[{key:'name',label:'Nom'},{key:'daysPresent',label:'Jours'},{key:'totalHours',label:'Heures'},{key:'avgHours',label:'Moy./jour'},{key:'lateCount',label:'Retards'},{key:'statusToday',label:"Aujourd'hui"}].map((col) => (
-                    <th key={col.key} className="sortable" onClick={() => setPeopleSort((s) => s.key === col.key ? { key: col.key, dir: -s.dir } : { key: col.key, dir: 1 })}>{col.label}</th>
+            {/* Period Summary */}
+            <Reveal delay={40}>
+              <div>
+                <p className="stat-caption">Periode selectionnee</p>
+                <div className="report-summary stat-row">
+                  <div className="stat stat-in"><b>{fmtHours(summary.totalHours)}</b><span>Total heures</span></div>
+                  <div className="stat stat-on"><b><AnimatedNumber value={summary.daysPresent} /></b><span>Jours presents</span></div>
+                  <div className="stat stat-out"><b><AnimatedNumber value={summary.lateCount} /></b><span>Retards</span></div>
+                  <div className="stat stat-in"><b><AnimatedNumber value={summary.missingOut} /></b><span>Pas de sortie</span></div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* On-site / Absent */}
+            <Reveal delay={60}>
+              <div className="card block">
+                <div className="block-head collapsible">
+                  <h3>Present maintenant</h3>
+                  <span className="pill">{live.onSite || 0} sur place</span>
+                </div>
+              <div className="block-body">
+                <div className="chips">
+                  {(!live.onSiteNames || live.onSiteNames.length === 0) ? (
+                    <span className="empty">{live.isHolidayToday ? 'Jour ferie : ' + (live.holidayToday || '') + '. Personne n\'est attendu.' : 'Personne n\'est sur place actuellement.'}</span>
+                  ) : live.onSiteNames.map((n) => (
+                    <span key={n} className={'chip' + (onBreakSet[n] ? ' chip-pause' : '')}>{onBreakSet[n] ? n + ' \u00b7 pause' : n}</span>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPeople.length === 0 ? (
-                  <tr><td className="empty" colSpan={6}>{allPeople.length === 0 ? 'Aucun membre d\'effectif configure.' : 'Aucun resultat pour cette recherche.'}</td></tr>
-                ) : filteredPeople.map((p) => {
-                  const hue = avatarHue(p.email || p.name);
-                  const st = PEOPLE_STATUS[p.statusToday];
-                  return (
-                    <tr key={p.email} className="clickable-row" title={'Voir le detail de ' + p.email}
-                        onClick={() => navigate('/admin/employe/' + encodeURIComponent(p.email))}>
-                      <td>
-                        <div className="person-cell">
-                          <span className="avatar" style={{ background: `linear-gradient(135deg, hsl(${hue}, 70%, 84%), hsl(${(hue+40)%360}, 62%, 68%))`, color: `hsl(${hue}, 58%, 28%)` }}>{avatarInitials(p.name, p.email)}</span>
-                          <span className="person-name">{p.name || p.email}</span>
-                          {p.department && <span className="person-dept">{p.department}</span>}
-                        </div>
-                      </td>
-                      <td>{p.daysPresent || 0}</td>
-                      <td>{fmtHours(p.totalHours)}</td>
-                      <td>{fmtHours(p.avgHours)}</td>
-                      <td>{p.lateCount || 0}</td>
-                      <td>{st ? <span className={'tag ' + st.cls}>{st.label}</span> : '\u2014'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <button className="ghost-btn sm" onClick={downloadPeopleCsv}>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Exporter l'effectif (CSV)</span>
-          </button>
-        </div>
+                </div>
+                <div className="absent-block">
+                  <div className="block-head"><h3>Pas encore pointe</h3><span className="pill">{(live.absent || []).length} non pointe{(live.absent || []).length > 1 ? 's' : ''}</span></div>
+                  <div className="chips">
+                    {live.isWeekendToday ? (
+                      <span className="empty">Week-end : personne n'est attendu aujourd'hui (samedi/dimanche non ouvres).</span>
+                    ) : live.isHolidayToday ? (
+                      <span className="empty">Jour ferie : personne n'est attendu aujourd'hui ({live.holidayToday || ''}).</span>
+                    ) : (live.absent || []).length === 0 ? (
+                      <span className="empty">Tout le personnel a deja pointe aujourd'hui.</span>
+                    ) : (live.absent || []).map((p) => (
+                      <span key={p.email} className="chip absent" title={p.email}>{p.name ? p.name + ' \u00b7 ' + p.email : p.email}</span>
+                    ))}
+                  </div>
+                </div>
+                </div>
+              </div>
+            </Reveal>
+          </>
+        )}
+
+        {activeView === 'effectif' && (
+          <>
+            {/* People Table */}
+            <Reveal delay={40}>
+              <div className="card block">
+                <div className="block-head collapsible">
+                  <h3>Effectif complet</h3>
+                  <span className="pill">{filteredPeople.length === allPeople.length ? allPeople.length + (allPeople.length > 1 ? ' personnes' : ' personne') : filteredPeople.length + ' / ' + allPeople.length}</span>
+                </div>
+              <div className="block-body">
+                <div className="table-tools">
+                  <div className="search-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="search" placeholder="Rechercher nom, email, departement..." value={peopleQuery} onChange={(e) => setPeopleQuery(e.target.value)} />
+                  </div>
+                </div>
+                <div className="table-wrap people-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        {[{key:'name',label:'Nom'},{key:'daysPresent',label:'Jours'},{key:'totalHours',label:'Heures'},{key:'avgHours',label:'Moy./jour'},{key:'lateCount',label:'Retards'},{key:'statusToday',label:"Aujourd'hui"}].map((col) => (
+                          <th key={col.key} className="sortable" onClick={() => setPeopleSort((s) => s.key === col.key ? { key: col.key, dir: -s.dir } : { key: col.key, dir: 1 })}>{col.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPeople.length === 0 ? (
+                        <tr><td className="empty" colSpan={6}>{allPeople.length === 0 ? 'Aucun membre d\'effectif configure.' : 'Aucun resultat pour cette recherche.'}</td></tr>
+                      ) : filteredPeople.map((p) => {
+                        const st = PEOPLE_STATUS[p.statusToday];
+                        return (
+                          <tr key={p.email} className="clickable-row" title={'Voir le detail de ' + p.email}
+                              onClick={() => navigate('/admin/employe/' + encodeURIComponent(p.email))}>
+                            <td>
+                              <div className="person-cell">
+                                <PhotoAvatar name={p.name} email={p.email} photo={photoByEmail[String(p.email || '').toLowerCase()]} />
+                                <span className="person-name">{p.name || p.email}</span>
+                                {p.department && <span className="person-dept">{p.department}</span>}
+                              </div>
+                            </td>
+                            <td>{p.daysPresent || 0}</td>
+                            <td>{fmtHours(p.totalHours)}</td>
+                            <td>{fmtHours(p.avgHours)}</td>
+                            <td>{p.lateCount || 0}</td>
+                            <td>{st ? <span className={'tag ' + st.cls}>{st.label}</span> : '\u2014'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <button className="ghost-btn sm" onClick={downloadPeopleCsv}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Exporter l'effectif (CSV)</span>
+                </button>
+                </div>
+              </div>
+            </Reveal>
+          </>
+        )}
+
+        {activeView === 'annuaire' && (
+          <Reveal delay={40}>
+            {employees.length > 0
+              ? <BiosSection employees={employees} onBioUpdate={handleBioUpdate} />
+              : <div className="card block"><div className="block-body"><p className="empty">Aucune fiche. Ajoutez d'abord des employes dans « Gestion ».</p></div></div>}
+          </Reveal>
+        )}
+
+        {activeView === 'rapport' && (
+          <>
+            {/* Report Table */}
+            <Reveal delay={40}>
+              <div className="card block">
+                <div className="block-head collapsible">
+                  <h3>Rapport</h3>
+                <span className="pill">{filteredReport.length === pairs.length ? pairs.length + ' entree' + (pairs.length > 1 ? 's' : '') : filteredReport.length + ' / ' + pairs.length}</span>
+              </div>
+              <div className="block-body">
+                <div className="table-tools">
+                  <div className="search-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="search" placeholder="Rechercher un nom..." value={reportQuery} onChange={(e) => setReportQuery(e.target.value)} />
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        {[{key:'date',label:'Date'},{key:'name',label:'Nom'},{key:'in',label:'Entree'},{key:'out',label:'Sortie'},{key:'hours',label:'Heures'},{key:'status',label:'Statut'}].map((col) => (
+                          <th key={col.key} className="sortable" onClick={() => setReportSort((s) => s.key === col.key ? { key: col.key, dir: -s.dir } : { key: col.key, dir: 1 })}>{col.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredReport.length === 0 ? (
+                        <tr><td className="empty" colSpan={6}>{pairs.length === 0 ? 'Aucune presence dans cette periode.' : 'Aucun resultat pour cette recherche.'}</td></tr>
+                      ) : filteredReport.map((p, i) => (
+                        <tr key={i} className={p.missing ? 'row-missing' : p.late ? 'row-late' : ''}>
+                          <td>{p.date}</td><td>{p.name}</td><td>{p.in || '\u2014'}</td><td>{p.out || '\u2014'}</td><td>{fmtHours(p.hours)}</td>
+                          <td><span className={'tag ' + (p.missing ? 'neutral' : p.late ? 'out' : 'in')}>{p.missing ? 'Pas de sortie' : p.late ? 'Retard' : 'OK'}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Export buttons */}
+            <Reveal delay={40}>
+              <div className="btn-row">
+                <button className="ghost-btn" onClick={downloadReportCsv}>CSV</button>
+                <a className="ghost-btn" href={a.sheetUrl || '#'} target="_blank" rel="noopener">Feuille</a>
+                <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
+              </div>
+            </Reveal>
+          </>
+        )}
+
+        {activeView === 'alertes' && (
+          <>
+            {/* Alerts */}
+            {(function () {
+              const alerts = buildAlerts(adminData);
+              if (!alerts.length) return <div className="card block"><div className="block-body"><p className="empty">Aucune alerte. Tout est en ordre.</p></div></div>;
+              return (
+                <div className="card block alert-block">
+                  <div className="block-head"><h3>Alertes</h3><span className="pill pills-warn">{alerts.length}</span></div>
+                  <div className="block-body">
+                    {alerts.map((al, i) => (
+                      <div key={i} className={'alert-item alert-' + al.kind}>
+                        <strong>{al.title}</strong>
+                        {al.rows && al.rows.length > 0 && (
+                          <span className="alert-rows">{al.rows.join(' \u00b7 ')}{al.more ? ' ' + al.more : ''}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Anomalies */}
+            {(function () {
+              const anomalies = buildAnomalies(pairs, allPeople);
+              if (!anomalies.length) return <div className="card block"><div className="block-body"><p className="empty">Aucune anomalie sur la periode.</p></div></div>;
+              return (
+                <div className="card block anomaly-block">
+                  <div className="block-head"><h3>Anomalies</h3><span className="pill pills-warn">{anomalies.length}</span></div>
+                  <div className="block-body">
+                    {anomalies.slice(0, 20).map((an, i) => (
+                      <div key={i} className={'anomaly-item anomaly-' + an.kind}>
+                        <span className="anomaly-name">{an.p ? (an.p.name || an.p.email) : (an.per ? (an.per.name || an.per.email) : '')}</span>
+                        <span className="anomaly-detail">{an.detail}</span>
+                      </div>
+                    ))}
+                    {anomalies.length > 20 && <p className="hint">{anomalies.length - 20} autres anomalies...</p>}
+                  </div>
+                </div>
+              );
+            })()}
+          </>
+        )}
+
+        {activeView === 'gestion' && (
+          <>
+            <p className="stat-caption">Gestion</p>
+            <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} onBulkImport={handleBulkImport} />
+            <AdminSection admins={admins} onAdd={handleAdminAdd} onRemove={handleAdminRemove} />
+            <LeaveSection leaves={leaves} onAdd={handleLeaveAdd} onDelete={handleLeaveDelete} />
+            <HolidaySection holidays={holidays} onAdd={handleHolidayAdd} onDelete={handleHolidayDelete} />
+            <CorrectionSection onApply={handleCorrection} />
+          </>
+        )}
+
+        {activeView === 'qr' && (
+          <>
+            <p className="stat-caption">Acces</p>
+            <QRGenerator />
+            <OfficeScreenLink />
+          </>
+        )}
       </div>
-
-      {/* Report Table */}
-      <div className="card block">
-        <div className="block-head collapsible">
-          <h3>Rapport</h3>
-          <span className="pill">{filteredReport.length === pairs.length ? pairs.length + ' entree' + (pairs.length > 1 ? 's' : '') : filteredReport.length + ' / ' + pairs.length}</span>
-        </div>
-        <div className="block-body">
-          <div className="table-tools">
-            <div className="search-wrap">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="search" placeholder="Rechercher un nom..." value={reportQuery} onChange={(e) => setReportQuery(e.target.value)} />
-            </div>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  {[{key:'date',label:'Date'},{key:'name',label:'Nom'},{key:'in',label:'Entree'},{key:'out',label:'Sortie'},{key:'hours',label:'Heures'},{key:'status',label:'Statut'}].map((col) => (
-                    <th key={col.key} className="sortable" onClick={() => setReportSort((s) => s.key === col.key ? { key: col.key, dir: -s.dir } : { key: col.key, dir: 1 })}>{col.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredReport.length === 0 ? (
-                  <tr><td className="empty" colSpan={6}>{pairs.length === 0 ? 'Aucune presence dans cette periode.' : 'Aucun resultat pour cette recherche.'}</td></tr>
-                ) : filteredReport.map((p, i) => (
-                  <tr key={i} className={p.missing ? 'row-missing' : p.late ? 'row-late' : ''}>
-                    <td>{p.date}</td><td>{p.name}</td><td>{p.in || '\u2014'}</td><td>{p.out || '\u2014'}</td><td>{fmtHours(p.hours)}</td>
-                    <td><span className={'tag ' + (p.missing ? 'neutral' : p.late ? 'out' : 'in')}>{p.missing ? 'Pas de sortie' : p.late ? 'Retard' : 'OK'}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* Export buttons */}
-      <div className="btn-row">
-        <button className="ghost-btn" onClick={downloadReportCsv}>CSV</button>
-        <a className="ghost-btn" href={a.sheetUrl || '#'} target="_blank" rel="noopener">Feuille</a>
-        <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
-      </div>
-
-      {/* Management sections */}
-      <p className="stat-caption">Gestion</p>
-
-      <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} onBulkImport={handleBulkImport} />
-      <AdminSection admins={admins} onAdd={handleAdminAdd} onRemove={handleAdminRemove} />
-      <LeaveSection leaves={leaves} onAdd={handleLeaveAdd} onDelete={handleLeaveDelete} />
-      <HolidaySection holidays={holidays} onAdd={handleHolidayAdd} onDelete={handleHolidayDelete} />
-      <CorrectionSection onApply={handleCorrection} />
-      <QRGenerator />
-      <OfficeScreenLink />
     </div>
   );
 }
@@ -675,6 +790,10 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [dept, setDept] = useState('');
+  const [role, setRole] = useState('');
+  const [phone, setPhone] = useState('');
+  const [birth, setBirth] = useState('');
+  const [photo, setPhoto] = useState('');
   const [shiftStart, setShiftStart] = useState('');
   const [shiftEnd, setShiftEnd] = useState('');
   const [error, setError] = useState('');
@@ -687,9 +806,15 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
     if (!name.trim()) { setError('Saisissez le nom.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setError('Email invalide.'); return; }
     setLoading(true); setError('');
-    await onAdd({ name: name.trim(), email: email.trim(), department: dept.trim(), shiftStart, shiftEnd });
+    await onAdd({ name: name.trim(), email: email.trim(), department: dept.trim(), role: role.trim(), phone: phone.trim(), birth: birth || '', photo, shiftStart, shiftEnd });
     setLoading(false);
-    setName(''); setEmail(''); setDept(''); setShiftStart(''); setShiftEnd('');
+    setName(''); setEmail(''); setDept(''); setRole(''); setPhone(''); setBirth(''); setPhoto('');
+  };
+
+  const handlePhotoFile = async (file) => {
+    if (!file) return;
+    try { const data = await compressImage(file); setPhoto(data); }
+    catch (err) { setError(err.message); }
   };
 
   const parseCsvLine = (line) => {
@@ -745,8 +870,18 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
         <label className="range-field">Nom<input type="text" placeholder="Nom complet" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="range-field">Email<input type="email" placeholder="vous@entreprise.com" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
         <label className="range-field">Departement <span className="opt">(facultatif)</span><input type="text" placeholder="Informatique" value={dept} onChange={(e) => setDept(e.target.value)} /></label>
+        <label className="range-field">Poste <span className="opt">(facultatif)</span><input type="text" placeholder="Developpeur" value={role} onChange={(e) => setRole(e.target.value)} /></label>
+        <label className="range-field">Telephone <span className="opt">(facultatif)</span><input type="tel" placeholder="+33 6 12 34 56 78" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+        <label className="range-field">Naissance <span className="opt">(facultatif)</span><input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} /></label>
         <label className="range-field">Debut <span className="opt">(HH:MM)</span><input type="time" value={shiftStart} onChange={(e) => setShiftStart(e.target.value)} /></label>
         <label className="range-field">Fin <span className="opt">(HH:MM)</span><input type="time" value={shiftEnd} onChange={(e) => setShiftEnd(e.target.value)} /></label>
+        <div className="photo-upload">
+          <PhotoAvatar name={name} email={email} photo={photo} size={64} />
+          <div className="upload-controls">
+            <label className="ghost-btn sm file-btn">Ajouter une photo<input type="file" accept="image/*" onChange={(e) => handlePhotoFile(e.target.files && e.target.files[0])} /></label>
+            {photo && <button type="button" className="photo-clear" onClick={() => setPhoto('')}>Retirer la photo</button>}
+          </div>
+        </div>
         <button className="ghost-btn range-btn" onClick={handleAdd} disabled={loading}>{loading ? 'Ajout...' : 'Ajouter'}</button>
       </div>
       {error && <p className="feedback error">{error}</p>}
@@ -765,7 +900,8 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
           <tbody>
             {employees.length === 0 ? <tr><td className="empty" colSpan={5}>Aucun employe.</td></tr> : employees.map((e) => (
               <tr key={e.email}>
-                <td>{e.name}</td><td>{e.email}</td><td>{e.department || '\u2014'}</td>
+                <td><div className="person-cell"><PhotoAvatar name={e.name} email={e.email} photo={e.photo} /><span className="person-name">{e.name}</span></div></td>
+                <td>{e.email}</td><td>{e.department || '\u2014'}</td>
                 <td>{(e.shiftStart || e.shiftEnd) ? ((e.shiftStart || '--:--') + ' - ' + (e.shiftEnd || '--:--')) : '\u2014'}</td>
                 <td><button className="ghost-btn sm" onClick={() => onDelete(e.email)}>Supprimer</button></td>
               </tr>
@@ -774,6 +910,108 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
         </table>
       </div>
     </CollapsibleCard>
+  );
+}
+
+function BiosSection({ employees, onBioUpdate }) {
+  const [editing, setEditing] = useState(null);
+  const [q, setQ] = useState('');
+  const query = q.trim().toLowerCase();
+  const list = query
+    ? employees.filter((e) => [e.name, e.email, e.role, e.department, e.phone].filter(Boolean).join(' ').toLowerCase().includes(query))
+    : employees;
+
+  return (
+    <CollapsibleCard title="Annuaire (bios)" count={employees.length + ' fiche' + (employees.length === 1 ? '' : 's')}>
+      <p className="hint">Fiches du personnel avec photo, poste et coordonnees. Cliquez sur « Modifier » pour ajouter ou changer une photo.</p>
+      <div className="table-tools">
+        <div className="search-wrap">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" placeholder="Rechercher fiche..." value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+      </div>
+      {list.length === 0 ? (
+        <p className="empty">Aucune fiche.</p>
+      ) : (
+        <div className="bio-grid">
+          {list.map((e) => (
+            <div className="bio-card" key={e.email}>
+              {editing === e.email ? (
+                <EmployeeBioEditor emp={e} onSave={(data) => onBioUpdate(data)} onCancel={() => setEditing(null)} />
+              ) : (
+                <>
+                  <div className="bio-top">
+                    <PhotoAvatar name={e.name} email={e.email} photo={e.photo} size={54} />
+                    <div className="bio-id">
+                      <div className="bio-name">{e.name || e.email}</div>
+                      {e.role && <div className="bio-role">{e.role}</div>}
+                    </div>
+                  </div>
+                  {e.department && <div className="bio-row"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>{e.department}</span></div>}
+                  {e.phone && <div className="bio-row"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.58 2.81.7A2 2 0 0 1 22 16.92z"/></svg><span>{e.phone}</span></div>}
+                  {e.birth && <div className="bio-row"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Nee le {e.birth}</span></div>}
+                  <div className="bio-row"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><span>{e.email}</span></div>
+                  {e.shiftStart && <div className="bio-row"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>{e.shiftStart} - {e.shiftEnd || '--:--'}</span></div>}
+                  <div className="bio-actions">
+                    <button className="ghost-btn sm" onClick={() => setEditing(e.email)}>Modifier</button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </CollapsibleCard>
+  );
+}
+
+function EmployeeBioEditor({ emp, onSave, onCancel }) {
+  const [name, setName] = useState(emp.name || '');
+  const [dept, setDept] = useState(emp.department || '');
+  const [role, setRole] = useState(emp.role || '');
+  const [phone, setPhone] = useState(emp.phone || '');
+  const [birth, setBirth] = useState(emp.birth || '');
+  const [photo, setPhoto] = useState(emp.photo || '');
+  const [stillPhoto, setStillPhoto] = useState(emp.photo || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handlePhotoFile = async (file) => {
+    if (!file) return;
+    try { const data = await compressImage(file); setPhoto(data); setStillPhoto(''); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const submit = async () => {
+    if (!name.trim()) { setErr('Le nom est requis.'); return; }
+    setSaving(true); setErr('');
+    await onSave({ email: emp.email, name: name.trim(), department: dept.trim(), role: role.trim(), phone: phone.trim(), birth: birth || '', photo: photo || stillPhoto });
+    setSaving(false);
+    onCancel();
+  };
+
+  return (
+    <div className="bio-edit">
+      <div className="bio-top">
+        <PhotoAvatar name={name} email={emp.email} photo={photo || stillPhoto} size={54} />
+        <div className="upload-controls">
+          <label className="ghost-btn sm file-btn">Changer la photo<input type="file" accept="image/*" onChange={(e) => handlePhotoFile(e.target.files && e.target.files[0])} /></label>
+          {photo && <button type="button" className="photo-clear" onClick={() => { setPhoto(''); setStillPhoto(''); }}>Retirer la photo</button>}
+        </div>
+      </div>
+      <div className="edit-fields">
+        <label className="range-field">Nom<input type="text" value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="range-field">Departement<input type="text" value={dept} onChange={(e) => setDept(e.target.value)} /></label>
+        <label className="range-field">Poste<input type="text" value={role} onChange={(e) => setRole(e.target.value)} /></label>
+        <label className="range-field">Telephone<input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+        <label className="range-field">Naissance<input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} /></label>
+      </div>
+      {err && <p className="feedback error">{err}</p>}
+      <div className="bio-actions">
+        <button className="primary-btn sm" onClick={submit} disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>
+        <button className="ghost-btn sm" onClick={onCancel} disabled={saving}>Annuler</button>
+      </div>
+    </div>
   );
 }
 

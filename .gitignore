@@ -29,6 +29,10 @@ build/
 .env
 .env.local
 
+# Google Apps Script clasp credentials (never commit)
+.clasprc.json
+.clasprc.json.backup
+
 # All markdown docs EXCEPT README
 TEST_REPORT.md
 ADVANCED_TEST_REPORT.md

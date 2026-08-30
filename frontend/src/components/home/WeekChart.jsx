@@ -28,17 +28,27 @@ export default memo(function WeekChart() {
       <div className="block-head"><h3>7 derniers jours</h3></div>
       <div className="week-chart" role="img" aria-label="Heures par jour sur les 7 derniers jours">
         {week.map((d, i) => (
-          <div key={i} className="week-col">
-            <span className="week-val">{d.hours > 0 ? fmtHours(d.hours) : ''}</span>
-            <div className="week-bar-wrap">
-              <div
-                className={'week-bar' + (d.hours > 0 ? '' : ' zero')}
-                title={d.date + ': ' + (d.hours > 0 ? fmtHours(d.hours) : 'pas de pointage')}
-                style={d.hours > 0 ? { height: Math.max(8, Math.round((d.hours / max) * 100)) + '%' } : {}}
-              />
+          d.working === false ? (
+            <div key={i} className="week-col week-col-off">
+              <span className="week-val">{dayLabel(d.date)}</span>
+              <div className="week-bar-wrap">
+                <div className="week-bar zero week-bar-off" title={d.date + ': week-end'} />
+              </div>
+              <span className="week-label">{d.date === today ? "Aujourd'hui" : 'Week-end'}</span>
             </div>
-            <span className="week-label">{d.date === today ? "Aujourd'hui" : dayLabel(d.date)}</span>
-          </div>
+          ) : (
+            <div key={i} className="week-col">
+              <span className="week-val">{d.hours > 0 ? fmtHours(d.hours) : ''}</span>
+              <div className="week-bar-wrap">
+                <div
+                  className={'week-bar' + (d.hours > 0 ? '' : ' zero')}
+                  title={d.date + ': ' + (d.hours > 0 ? fmtHours(d.hours) : 'pas de pointage')}
+                  style={d.hours > 0 ? { height: Math.max(8, Math.round((d.hours / max) * 100)) + '%' } : {}}
+                />
+              </div>
+              <span className="week-label">{d.date === today ? "Aujourd'hui" : dayLabel(d.date)}</span>
+            </div>
+          )
         ))}
       </div>
       {!hasData && <p className="hint">Aucun pointage sur les 7 derniers jours.</p>}

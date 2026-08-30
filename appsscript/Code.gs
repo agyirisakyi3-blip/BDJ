@@ -182,6 +182,9 @@ function handleRequest_(e) {
     if (action === 'employee_delete') {
       return json_(employeeDelete_(payload, cfg, now, tz, ss));
     }
+    if (action === 'employee_bio_update') {
+      return json_(employeeBioUpdate_(payload, cfg, now, tz, ss));
+    }
     if (action === 'admin_login') {
       return json_(adminLogin_(payload, cfg, now, tz, ss));
     }
@@ -384,6 +387,7 @@ function ensureSheets_(ss) {
     c.appendRow(['selfieMode', 'off']);
     c.appendRow(['reminderCheckInAfter', '']);
     c.appendRow(['reminderCheckOutAfter', '']);
+    c.appendRow(['weekendsOff', 'on']);
   }
   if (!ss.getSheetByName(SHEET_ATT)) {
     var a = ss.insertSheet(SHEET_ATT);
@@ -397,8 +401,8 @@ function ensureSheets_(ss) {
   }
   if (!ss.getSheetByName(SHEET_EMPLOYEES)) {
     var e = ss.insertSheet(SHEET_EMPLOYEES);
-    e.appendRow(['Name', 'Email', 'Department', 'Created']);
-    e.getRange('A1:D1').setFontWeight('bold');
+    e.appendRow(['Name', 'Email', 'Department', 'Created', 'ShiftStart', 'ShiftEnd', 'Role', 'Phone', 'BirthDate', 'Photo']);
+    e.getRange('A1:J1').setFontWeight('bold');
   }
   if (!ss.getSheetByName(SHEET_OFFICES)) {
     var o = ss.insertSheet(SHEET_OFFICES);
@@ -500,6 +504,8 @@ function getConfig_(ss) {
   cfg.retentionDays = Number(cfg.retentionDays || 0);
   cfg.selfieMode = String(cfg.selfieMode || 'off').toLowerCase();
   if (['off', 'optional', 'required'].indexOf(cfg.selfieMode) === -1) cfg.selfieMode = 'off';
+  var wo = String(cfg.weekendsOff == null ? 'on' : cfg.weekendsOff).toLowerCase();
+  cfg.weekendsOff = !(wo === 'off' || wo === 'false' || wo === 'no' || wo === '0');
   cfg.reminderCheckInAfter = timeToSec_(cfg.reminderCheckInAfter || '') >= 0 ? cfg.reminderCheckInAfter : '';
   cfg.reminderCheckOutAfter = timeToSec_(cfg.reminderCheckOutAfter || '') >= 0 ? cfg.reminderCheckOutAfter : '';
 
@@ -525,7 +531,8 @@ function publicConfig_(cfg, ss) {
     offices: offices,
     selfieMode: cfg.selfieMode,
     reminderCheckInAfter: cfg.reminderCheckInAfter,
-    reminderCheckOutAfter: cfg.reminderCheckOutAfter
+    reminderCheckOutAfter: cfg.reminderCheckOutAfter,
+    weekendsOff: !!cfg.weekendsOff
   };
 }
 
@@ -938,9 +945,10 @@ function adminData_(payload, cfg, now, tz, ss) {
   }
 
   var isHolidayToday = !!holidayDates[today];
+  var weekendToday = cfg.weekendsOff && isWeekend_(today);
   var absent = [];
   var staff = expectedStaff_(ss);
-  if (!isHolidayToday) {
+  if (!isHolidayToday && !weekendToday) {
     for (var s = 0; s < staff.length; s++) {
       if (checkedInSet[staff[s].email]) continue;
       if (leaveCoversDay_(staff[s].email, today)) continue;
@@ -958,7 +966,7 @@ function adminData_(payload, cfg, now, tz, ss) {
     person.leaveDays = 0;
     for (var lv = 0; lv < leaves.length; lv++) {
       if (leaves[lv].email !== person.email) continue;
-      person.leaveDays += daysOverlapCount_(from, to, leaves[lv].start, leaves[lv].end);
+      person.leaveDays += daysOverlapCount_(from, to, leaves[lv].start, leaves[lv].end, cfg.weekendsOff);
     }
     if (!person.statusToday && leaveCoversDay_(person.email, today)) {
       person.statusToday = 'leave';
@@ -999,6 +1007,7 @@ function adminData_(payload, cfg, now, tz, ss) {
         onBreakNames: onBreakNames,
         isHolidayToday: isHolidayToday,
         holidayToday: holidayDates[today] || '',
+        isWeekendToday: weekendToday,
         absent: absent
       },
       summary: report.summary,
@@ -1279,7 +1288,11 @@ function weekData_(payload, cfg, now, tz, ss) {
   var days = [];
   for (var k = 0; k < 7; k++) {
     var ds = dateStr_(new Date(fromDate.getTime() + k * 86400000), tz);
-    days.push({ date: ds, hours: Math.round((byDate[ds] || 0) * 100) / 100 });
+    days.push({
+      date: ds,
+      hours: Math.round((byDate[ds] || 0) * 100) / 100,
+      working: !(cfg.weekendsOff && isWeekend_(ds))
+    });
   }
 
   return { ok: true, week: days };
@@ -1287,18 +1300,46 @@ function weekData_(payload, cfg, now, tz, ss) {
 
 /* ================= Employees ================= */
 
+/**
+ * Map column names to 0-based indices from the Employees sheet header row.
+ * Older installs may only have Name/Email/Department/Created; newer ones add
+ * ShiftStart/ShiftEnd/ShiftEnd and bio fields (Role, Phone, BirthDate, Photo).
+ * Missing columns resolve to -1 so readers fall back to ''/existing values.
+ */
+function employeeColumns_(sheet) {
+  var cols = { name: -1, email: -1, department: -1, created: -1, shiftStart: -1, shiftEnd: -1, role: -1, phone: -1, birth: -1, photo: -1 };
+  if (!sheet) return cols;
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  for (var i = 0; i < header.length; i++) {
+    switch (String(header[i] || '').trim().toLowerCase()) {
+      case 'name': cols.name = i; break;
+      case 'email': cols.email = i; break;
+      case 'department': cols.department = i; break;
+      case 'created': cols.created = i; break;
+      case 'shiftstart': cols.shiftStart = i; break;
+      case 'shiftend': cols.shiftEnd = i; break;
+      case 'role': cols.role = i; break;
+      case 'phone': cols.phone = i; break;
+      case 'birthdate': cols.birth = i; break;
+      case 'photo': cols.photo = i; break;
+    }
+  }
+  return cols;
+}
+
 function findEmployee_(ss, email) {
   var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
   if (!sheet) return null;
   var rows = sheet.getDataRange().getValues();
   email = String(email || '').trim().toLowerCase();
+  var c = employeeColumns_(sheet);
   for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][1] || '').trim().toLowerCase() === email) {
+    if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() === email) {
       return {
-        name: String(rows[i][0] || ''),
-        department: String(rows[i][2] || ''),
-        shiftStart: String(rows[i][4] || ''),
-        shiftEnd: String(rows[i][5] || '')
+        name: String(rows[i][c.name < 0 ? 0 : c.name] || ''),
+        department: String(rows[i][c.department < 0 ? 2 : c.department] || ''),
+        shiftStart: String(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart] || ''),
+        shiftEnd: String(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd] || '')
       };
     }
   }
@@ -1336,16 +1377,21 @@ function employeesData_(payload, cfg, now, tz, ss) {
   var list = [];
   if (sheet) {
     var rows = sheet.getDataRange().getValues();
+    var c = employeeColumns_(sheet);
     for (var i = 1; i < rows.length; i++) {
-      var email = String(rows[i][1] || '').trim().toLowerCase();
+      var email = String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase();
       if (!email) continue;
       list.push({
-        name: String(rows[i][0] || ''),
+        name: String(rows[i][c.name < 0 ? 0 : c.name] || ''),
         email: email,
-        department: String(rows[i][2] || ''),
-        created: String(rows[i][3] || ''),
-        shiftStart: String(rows[i][4] || ''),
-        shiftEnd: String(rows[i][5] || '')
+        department: String(rows[i][c.department < 0 ? 2 : c.department] || ''),
+        created: String(rows[i][c.created < 0 ? 3 : c.created] || ''),
+        shiftStart: String(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart] || ''),
+        shiftEnd: String(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd] || ''),
+        role: String(rows[i][c.role] || ''),
+        phone: String(rows[i][c.phone] || ''),
+        birth: String(rows[i][c.birth] || ''),
+        photo: String(rows[i][c.photo] || '')
       });
     }
   }
@@ -1368,18 +1414,110 @@ function employeeAdd_(payload, cfg, now, tz, ss) {
   var shiftEnd = normShiftTime_(payload.shiftEnd);
   if (String(payload.shiftStart || '').trim() && !shiftStart) return error_('ShiftStart must be HH:MM.');
   if (String(payload.shiftEnd || '').trim() && !shiftEnd) return error_('ShiftEnd must be HH:MM.');
+  var role = safeCell_(String(payload.role || '').trim());
+  var phone = safeCell_(String(payload.phone || '').trim());
+  var birth = safeCell_(String(payload.birth || '').trim());
+  var photo = normalizePhoto_(payload.photo);
 
   var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
+  ensureEmployeeBioCols_(sheet);
+  var c = employeeColumns_(sheet);
   var rows = sheet.getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][1] || '').trim().toLowerCase() === email) {
-      var created = String(rows[i][3] || Utilities.formatDate(now, tz, 'yyyy-MM-dd'));
-      sheet.getRange(i + 1, 1, 1, 6).setValues([[name, email, department, created, shiftStart, shiftEnd]]);
-      return { ok: true, employee: { name: name, email: email, department: department } };
+    if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() === email) {
+      var created = String(rows[i][c.created < 0 ? 3 : c.created] || Utilities.formatDate(now, tz, 'yyyy-MM-dd'));
+      var row = [name, email, department, created];
+      // extend row to full width, preserving existing shiftEnd/photo when columns exist
+      row[4] = shiftStart;
+      row[5] = shiftEnd;
+      row[c.role < 0 ? 6 : c.role] = role;
+      row[c.phone < 0 ? 7 : c.phone] = phone;
+      row[c.birth < 0 ? 8 : c.birth] = birth;
+      row[c.photo < 0 ? 9 : c.photo] = photo;
+      writeEmployeeRow_(sheet, i + 1, row);
+      return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo } };
     }
   }
-  sheet.appendRow([name, email, department, Utilities.formatDate(now, tz, 'yyyy-MM-dd'), shiftStart, shiftEnd]);
-  return { ok: true, employee: { name: name, email: email, department: department } };
+  var row = [name, email, department, Utilities.formatDate(now, tz, 'yyyy-MM-dd')];
+  row[c.role < 0 ? 6 : c.role] = role;
+  row[c.phone < 0 ? 7 : c.phone] = phone;
+  row[c.birth < 0 ? 8 : c.birth] = birth;
+  row[c.photo < 0 ? 9 : c.photo] = photo;
+  if (shiftStart) row[c.shiftStart < 0 ? 4 : c.shiftStart] = shiftStart;
+  if (shiftEnd) row[c.shiftEnd < 0 ? 5 : c.shiftEnd] = shiftEnd;
+  sheet.appendRow(padRow_(row, Math.max(6, c.role < 0 ? 6 : 10)));
+  return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo } };
+}
+
+/** Update bio/photo (+ optional shift times) for an existing employee row. */
+function employeeBioUpdate_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  var email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return error_('Email required');
+  var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
+  if (!sheet) return error_('Employees sheet not found');
+  ensureEmployeeBioCols_(sheet);
+  var c = employeeColumns_(sheet);
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() !== email) continue;
+    var cols = Math.max(10, sheet.getLastColumn());
+    var row = new Array(cols).fill('');
+    for (var k = 0; k < rows[i].length; k++) row[k] = rows[i][k];
+    if (payload.name !== undefined) row[c.name < 0 ? 0 : c.name] = safeCell_(String(payload.name || '').trim());
+    if (payload.department !== undefined) row[c.department < 0 ? 2 : c.department] = safeCell_(String(payload.department || '').trim());
+    if (payload.role !== undefined) row[c.role < 0 ? 6 : c.role] = safeCell_(String(payload.role || '').trim());
+    if (payload.phone !== undefined) row[c.phone < 0 ? 7 : c.phone] = safeCell_(String(payload.phone || '').trim());
+    if (payload.birth !== undefined) row[c.birth < 0 ? 8 : c.birth] = safeCell_(String(payload.birth || '').trim());
+    if (payload.photo !== undefined) row[c.photo < 0 ? 9 : c.photo] = normalizePhoto_(payload.photo);
+    if (payload.shiftStart !== undefined) row[c.shiftStart < 0 ? 4 : c.shiftStart] = normShiftTime_(payload.shiftStart);
+    if (payload.shiftEnd !== undefined) row[c.shiftEnd < 0 ? 5 : c.shiftEnd] = normShiftTime_(payload.shiftEnd);
+    writeEmployeeRow_(sheet, i + 1, row);
+    return { ok: true, employee: { name: row[c.name < 0 ? 0 : c.name], email: email } };
+  }
+  return error_('Employee not found: ' + email);
+}
+
+/** Ensure the bio columns exist (append headers if missing) without disturbing existing rows. */
+function ensureEmployeeBioCols_(sheet) {
+  if (!sheet) return;
+  var last = sheet.getLastColumn();
+  var headers = sheet.getRange(1, 1, 1, last).getValues()[0];
+  var add = [];
+  if (!headersContains_(headers, 'Role')) add.push('Role');
+  if (!headersContains_(headers, 'Phone')) add.push('Phone');
+  if (!headersContains_(headers, 'BirthDate')) add.push('BirthDate');
+  if (!headersContains_(headers, 'Photo')) add.push('Photo');
+  if (!headersContains_(headers, 'ShiftStart')) add.push('ShiftStart');
+  if (!headersContains_(headers, 'ShiftEnd')) add.push('ShiftEnd');
+  if (!add.length) return;
+  var start = last + 1;
+  for (var i = 0; i < add.length; i++) {
+    sheet.getRange(1, start + i).setValue(add[i]);
+  }
+}
+function headersContains_(headers, name) {
+  for (var i = 0; i < headers.length; i++) {
+    if (String(headers[i] || '').trim().toLowerCase() === name.toLowerCase()) return true;
+  }
+  return false;
+}
+function padRow_(row, width) {
+  while (row.length < width) row.push('');
+  return row;
+}
+function writeEmployeeRow_(sheet, r, row) {
+  var width = Math.max(10, row.length);
+  sheet.getRange(r, 1, 1, width).setValues([padRow_(row, width)]);
+}
+/** Accept a photo as a small data URL, or '' / DataURL: prefix only. Reject oversized values. */
+function normalizePhoto_(v) {
+  var p = String(v || '').trim();
+  if (!p || p === 'null' || p === 'undefined') return '';
+  if (p.indexOf('data:') !== 0 && p.indexOf('http') !== 0) return '';
+  if (p.length > 60000) return p.slice(0, 60000);
+  return p;
 }
 
 /** Normalize an HH:MM (or H:MM) string; returns '' when invalid. */
@@ -1445,13 +1583,32 @@ function getHolidaysInRange_(ss, from, to) {
   return out;
 }
 
-/** Number of calendar days in the intersection of two inclusive ranges. */
-function daysOverlapCount_(aFrom, aTo, bFrom, bTo) {
+/** True when the date string (YYYY-MM-DD) falls on Saturday or Sunday. */
+function isWeekend_(dateStr) {
+  var d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00Z');
+  var w = d.getUTCDay();
+  return w === 0 || w === 6;
+}
+
+/**
+ * Number of days in the intersection of two inclusive ranges.
+ * When workingOnly is true, Saturday/Sunday are excluded from the count.
+ */
+function daysOverlapCount_(aFrom, aTo, bFrom, bTo, workingOnly) {
   var s = aFrom > bFrom ? aFrom : bFrom;
   var e = aTo < bTo ? aTo : bTo;
   if (e < s) return 0;
   var ms = new Date(e + 'T00:00:00Z') - new Date(s + 'T00:00:00Z');
-  return Math.floor(ms / 86400000) + 1;
+  var total = Math.floor(ms / 86400000) + 1;
+  if (!workingOnly) return total;
+  var count = 0;
+  for (var i = 0; i < total; i++) {
+    var d = new Date(s + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + i);
+    var w = d.getUTCDay();
+    if (w !== 0 && w !== 6) count++;
+  }
+  return count;
 }
 
 function leaveList_(payload, cfg, now, tz, ss) {

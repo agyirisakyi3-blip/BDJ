@@ -83,3 +83,39 @@ export function avatarInitials(name, email) {
   else if (parts.length === 1) initials = parts[0].slice(0, 2);
   return initials.toUpperCase();
 }
+
+/**
+ * Read an image File, center-crop it to a square, downscale it and return a
+ * small JPEG data URL (default ~160px) ready to store per employee.
+ * Rejects non-image files and files that fail to decode.
+ */
+export function compressImage(file, size = 160) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type)) { reject(new Error('Fichier image invalide.')); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const side = Math.min(img.width, img.height);
+        const sw = (img.width - side) / 2;
+        const sh = (img.height - side) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, sw, sh, side, side, 0, 0, size, size);
+        let data = canvas.toDataURL('image/jpeg', 0.82);
+        if (data.length > 55000) data = canvas.toDataURL('image/jpeg', 0.6);
+        URL.revokeObjectURL(url);
+        resolve(data);
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Impossible de lire cette image.')); };
+    img.src = url;
+  });
+}

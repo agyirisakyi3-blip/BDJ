@@ -3,7 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "jest --forceExit --maxWorkers=50%"
+    "test": "jest --forceExit --maxWorkers=50%",
+    "clasp:login": "clasp login",
+    "clasp:logout": "clasp logout",
+    "clasp:push": "clasp push --force",
+    "clasp:deploy": "clasp deploy",
+    "clasp:status": "clasp status",
+    "deploy:backend": "clasp push --force && clasp deploy"
   },
   "devDependencies": {
     "express": "^4.19.2",
