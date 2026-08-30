@@ -35,6 +35,7 @@ export function AppProvider({ children }) {
   const [recentLoading, setRecentLoading] = useState(false);
   const [week, setWeek] = useState([]);
   const [weekLoading, setWeekLoading] = useState(false);
+  const [shift, setShift] = useState(null);
   const [monthSummary, setMonthSummary] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [admins, setAdmins] = useState([]);
@@ -182,8 +183,10 @@ export function AppProvider({ children }) {
     setWeekLoading(true);
     apiCall({ action: 'week', email: profile.email }).then((res) => {
       setWeekLoading(false);
-      if (res.ok) setWeek(res.week || []);
-      else if (res.message && !privacyNoticeShown) {
+      if (res.ok) {
+        setWeek(res.week || []);
+        setShift(res.shift && (res.shift.start || res.shift.end) ? res.shift : null);
+      } else if (res.message && !privacyNoticeShown) {
         setPrivacyNoticeShown(true);
         showFeedback('warn', res.message);
       }
@@ -234,7 +237,7 @@ export function AppProvider({ children }) {
     feedback, showFeedback,
     recent, recentLoading, loadRecent,
     week, weekLoading, loadWeek,
-    monthSummary, loadMonth,
+    shift, monthSummary, loadMonth,
     employees, setEmployees,
     admins, setAdmins,
     leaves, setLeaves,
@@ -246,7 +249,7 @@ export function AppProvider({ children }) {
   }), [
     profile, profileLoaded, status, statusLoaded, config, consent, onboarded, themeMode,
     isAdmin, adminToken, adminEmail, feedback, recent, recentLoading, week, weekLoading,
-    monthSummary, employees, admins, leaves, holidays, adminData, privacyNoticeShown,
+    shift, monthSummary, employees, admins, leaves, holidays, adminData, privacyNoticeShown,
     setProfile, setStatus, setConfig, setConsent, setOnboarded, cycleTheme, setIsAdmin,
     setAdminToken, setAdminEmail, showFeedback, loadRecent, loadWeek, loadMonth,
     setEmployees, setAdmins, setLeaves, setHolidays, setAdminData,

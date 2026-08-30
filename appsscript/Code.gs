@@ -1295,7 +1295,13 @@ function weekData_(payload, cfg, now, tz, ss) {
     });
   }
 
-  return { ok: true, week: days };
+  var emp = findEmployee_(ss, email);
+  var shift = {};
+  if (emp && (String(emp.shiftStart || '').trim() || String(emp.shiftEnd || '').trim())) {
+    shift = { start: String(emp.shiftStart || '').trim(), end: String(emp.shiftEnd || '').trim() };
+  }
+
+  return { ok: true, week: days, shift: shift };
 }
 
 /* ================= Employees ================= */

@@ -5,6 +5,7 @@ import { parseQr, todayStr } from '../utils';
 import { lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import TopBar from '../components/layout/TopBar';
 import StatusCard from '../components/home/StatusCard';
+import ScheduleCard from '../components/home/ScheduleCard';
 import ScanButton from '../components/home/ScanButton';
 import BreakControls from '../components/home/BreakControls';
 import RecentActivity from '../components/home/RecentActivity';
@@ -165,6 +166,7 @@ export default function HomePage() {
       />
       <SetupBanner />
       <StatusCard />
+      <ScheduleCard />
       <ScanButton onScan={() => {
         if (!config) { showFeedback('warn', 'Parametres en cours de chargement.'); return; }
         if (!profile) { setShowProfile(true); return; }

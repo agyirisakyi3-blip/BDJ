@@ -325,6 +325,38 @@ html, body {
 .elapsed-timer { font-size: 15px; font-weight: 700; color: var(--success); font-variant-numeric: tabular-nums; font-family: inherit; }
 .elapsed-wrap.hidden { display: none; }
 
+/* ============ Schedule / overtime card ============ */
+.schedule-card { padding: 16px; }
+.schedule-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.schedule-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+.ot-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 999px; padding: 4px 12px;
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--stroke-strong);
+  color: var(--muted);
+}
+.ot-chip.on {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fde68a;
+}
+.ot-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.ot-chip.on .ot-dot { background: #fb923c; animation: pulse 2s ease-in-out infinite; }
+.schedule-row { display: flex; align-items: center; gap: 12px; }
+.schedule-box {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.schedule-box-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
+.schedule-box-val { font-size: 16px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.schedule-arrow { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted); }
+
 /* ============ Buttons ============ */
 .primary-btn {
   position: relative;
