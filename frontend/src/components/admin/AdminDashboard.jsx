@@ -48,12 +48,23 @@ const PAYROLL_SORT_KEYS = {
   missing: (r) => Number(r.missing || 0),
 };
 
+const DEPT_SORT_KEYS = {
+  name: (r) => r.name || '',
+  employees: (r) => Number(r.employees || 0),
+  hours: (r) => r.hours == null ? -1 : Number(r.hours),
+  avgHours: (r) => r.avgHours == null ? -1 : Number(r.avgHours),
+  breakMin: (r) => Number(r.breakMin || 0),
+  late: (r) => Number(r.late || 0),
+  missing: (r) => Number(r.missing || 0),
+};
+
 const VIEW_TITLES = {
   dashboard: 'Tableau de bord',
   effectif: 'Effectif',
   annuaire: 'Annuaire (bios)',
   rapport: 'Rapport',
   paie: 'Paie (synthese)',
+  departements: 'Departements (analytique)',
   alertes: 'Alertes & anomalies',
   gestion: 'Gestion',
   qr: 'QR & acces',
@@ -184,6 +195,9 @@ export default function AdminDashboard() {
   // Payroll table state
   const [payrollQuery, setPayrollQuery] = useState('');
   const [payrollSort, setPayrollSort] = useState({ key: 'hours', dir: -1 });
+  // Department table state
+  const [deptQuery, setDeptQuery] = useState('');
+  const [deptSort, setDeptSort] = useState({ key: 'hours', dir: -1 });
   // Live refresh
   const [liveRefresh, setLiveRefresh] = useState(true);
 
@@ -345,6 +359,45 @@ export default function AdminDashboard() {
   }, { days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
   payrollTotals.hours = Math.round(payrollTotals.hours * 100) / 100;
 
+  // Department analytics: aggregate attendance per department over period
+  const deptOf = {};
+  allPeople.forEach((p) => { if (p && p.email) deptOf[String(p.email).toLowerCase()] = (p.department || '').trim(); });
+  const deptMap = {};
+  pairs.forEach((p) => {
+    if (!p.email) return;
+    const dept = deptOf[String(p.email).toLowerCase()] || 'Sans departement';
+    if (!deptMap[dept]) deptMap[dept] = { name: dept, emails: {}, hours: 0, days: 0, breakMin: 0, late: 0, missing: 0 };
+    const row = deptMap[dept];
+    row.emails[p.email.toLowerCase()] = 1;
+    row.days += 1;
+    if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
+    if (p.breakMin != null) row.breakMin += p.breakMin;
+    if (p.late) row.late += 1;
+    if (p.missing) row.missing += 1;
+  });
+  let depts = Object.keys(deptMap).map((k) => {
+    const r = deptMap[k];
+    return {
+      name: r.name,
+      employees: Object.keys(r.emails).length,
+      hours: Math.round(r.hours * 100) / 100,
+      avgHours: r.days ? Math.round((r.hours / r.days) * 100) / 100 : 0,
+      breakMin: Math.round(r.breakMin),
+      late: r.late,
+      missing: r.missing,
+    };
+  });
+  const dql = deptQuery.trim().toLowerCase();
+  if (dql) depts = depts.filter((r) => r.name.toLowerCase().includes(dql));
+  if (deptSort.key && DEPT_SORT_KEYS[deptSort.key]) {
+    depts.sort((x, y) => cmpVals(DEPT_SORT_KEYS[deptSort.key](x), DEPT_SORT_KEYS[deptSort.key](y)) * deptSort.dir);
+  }
+  const deptTotals = depts.reduce((acc, r) => {
+    acc.employees += r.employees; acc.days += r.days; acc.hours += r.hours; acc.breakMin += r.breakMin; acc.late += r.late; acc.missing += r.missing;
+    return acc;
+  }, { employees: 0, days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
+  deptTotals.hours = Math.round(deptTotals.hours * 100) / 100;
+
   // Presence donut (today's status breakdown)
   const onBreakCount = (live.onBreakNames || []).length;
   const statusBuckets = [
@@ -493,6 +546,20 @@ export default function AdminDashboard() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'paie-' + dateFrom + '_' + dateTo + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  const downloadDeptCsv = () => {
+    const head = ['Departement', 'Employes (pointe)', 'Total heures', 'Moyenne/jour', 'Pause (min)', 'Retards', 'Sorties manquantes'];
+    const lines = [head.join(',')];
+    depts.forEach((r) => {
+      const row = [r.name, r.employees, r.hours, r.avgHours, r.breakMin, r.late, r.missing];
+      lines.push(row.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(','));
+    });
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'departements-' + dateFrom + '_' + dateTo + '.csv';
     document.body.appendChild(a); a.click(); a.remove();
   };
 
@@ -865,6 +932,94 @@ export default function AdminDashboard() {
             <Reveal delay={40}>
               <div className="btn-row">
                 <button className="ghost-btn" onClick={downloadPayrollCsv}>Exporter (CSV)</button>
+                <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
+              </div>
+            </Reveal>
+          </>
+        )}
+
+        {activeView === 'departements' && (
+          <>
+            {/* Department analytics */}
+            <Reveal delay={40}>
+              <div className="kpi-grid">
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-blue" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21h18 M5 21V7a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v14 M10 21V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v17 M14 21v-9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v9"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Departements</span>
+                    <AnimatedNumber value={depts.length} suffix=" " />
+                    <span className="kpi-sub muted">{dateFrom} → {dateTo}</span>
+                  </div>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-green" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10 M18 20V4 M6 20v-4"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Total heures</span>
+                    <AnimatedNumber value={Math.round(deptTotals.hours * 10) / 10} decimals={1} suffix=" h" />
+                    <span className="kpi-sub muted">sur {deptTotals.days} jour(s) pre</span>
+                  </div>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-violet" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z M5 22a7 7 0 0 1 14 0"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Pause totale</span>
+                    <AnimatedNumber value={Math.round(deptTotals.breakMin)} suffix=" min" />
+                    <span className="kpi-sub muted">{deptTotals.late} retard(s) · {deptTotals.missing} s. manquante(s)</span>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Department table */}
+            <Reveal delay={40}>
+              <div className="card block">
+                <div className="block-head">
+                  <h3>Analytique par departement</h3>
+                  <span className="pill">{depts.length} dept(s)</span>
+                </div>
+                <div className="block-body">
+                  <div className="table-tools">
+                    <div className="search-wrap">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input type="search" placeholder="Rechercher un departement..." value={deptQuery} onChange={(e) => setDeptQuery(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          {[{key:'name',label:'Departement'},{key:'employees',label:'Employes'},{key:'hours',label:'Total h'},{key:'avgHours',label:'Moyenne'},{key:'breakMin',label:'Pause'},{key:'late',label:'Retards'},{key:'missing',label:'S. manq'}].map((col) => (
+                          <th key={col.key} className="sortable" onClick={() => setDeptSort((s) => s.key === col.key ? { key: col.key, dir: -s.dir } : { key: col.key, dir: 1 })}>
+                            {col.label}{deptSort.key === col.key ? (deptSort.dir === 1 ? ' \u2191' : ' \u2193') : ''}
+                          </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {depts.length === 0 ? (
+                          <tr><td className="empty" colSpan={7}>Aucun departement dans cette periode.</td></tr>
+                        ) : depts.map((r, i) => (
+                          <tr key={i}>
+                            <td>{r.name}</td>
+                            <td className="num">{r.employees}</td>
+                            <td className="num">{fmtHours(r.hours)}</td>
+                            <td className="num">{fmtHours(r.avgHours)}</td>
+                            <td className="num">{Math.round(r.breakMin)} min</td>
+                            <td className="num"><span className={'tag ' + (r.late ? 'out' : 'in')}>{r.late}</span></td>
+                            <td className="num"><span className={'tag ' + (r.missing ? 'neutral' : 'in')}>{r.missing}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Department export */}
+            <Reveal delay={40}>
+              <div className="btn-row">
+                <button className="ghost-btn" onClick={downloadDeptCsv}>Exporter (CSV)</button>
                 <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
               </div>
             </Reveal>
