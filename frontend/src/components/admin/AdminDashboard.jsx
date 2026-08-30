@@ -10,7 +10,7 @@ import HoursChart from './HoursChart';
 import PresenceDonut from './PresenceDonut';
 import PhotoAvatar from './PhotoAvatar';
 import AdminSidebar from './AdminSidebar';
-import { compressImage } from '../../utils';
+import { compressImage, printReportPDF } from '../../utils';
 
 const PEOPLE_STATUS = {
   onsite: { label: 'Sur place', cls: 'in' },
@@ -58,6 +58,17 @@ const DEPT_SORT_KEYS = {
   missing: (r) => Number(r.missing || 0),
 };
 
+const ATT_SORT_KEYS = {
+  name: (r) => r.name || r.email || '',
+  days: (r) => Number(r.days || 0),
+  percent: (r) => Number(r.percent || 0),
+  hours: (r) => r.hours == null ? -1 : Number(r.hours),
+  late: (r) => Number(r.late || 0),
+  missing: (r) => Number(r.missing || 0),
+  currentStreak: (r) => Number(r.currentStreak || 0),
+  bestStreak: (r) => Number(r.bestStreak || 0),
+};
+
 const VIEW_TITLES = {
   dashboard: 'Tableau de bord',
   effectif: 'Effectif',
@@ -65,9 +76,11 @@ const VIEW_TITLES = {
   rapport: 'Rapport',
   paie: 'Paie (synthese)',
   departements: 'Departements (analytique)',
+  assiduite: 'Assiduite & series',
   alertes: 'Alertes & anomalies',
   gestion: 'Gestion',
   qr: 'QR & acces',
+  annonces: 'Annonces',
 };
 
 const ANOMALY_MIN_HOURS = 2;      // days under this number of net hours
@@ -185,6 +198,10 @@ export default function AdminDashboard() {
   const [admins, setAdmins] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [annTitle, setAnnTitle] = useState('');
+  const [annBody, setAnnBody] = useState('');
+  const [annPinned, setAnnPinned] = useState(false);
 
   // People table state
   const [peopleQuery, setPeopleQuery] = useState('');
@@ -198,6 +215,9 @@ export default function AdminDashboard() {
   // Department table state
   const [deptQuery, setDeptQuery] = useState('');
   const [deptSort, setDeptSort] = useState({ key: 'hours', dir: -1 });
+  // Attendance table state
+  const [attQuery, setAttQuery] = useState('');
+  const [attSort, setAttSort] = useState({ key: 'percent', dir: -1 });
   // Live refresh
   const [liveRefresh, setLiveRefresh] = useState(true);
 
@@ -234,6 +254,7 @@ export default function AdminDashboard() {
     apiCall({ action: 'admins_list', token: t }).then((r) => setAdmins(r.ok ? r.admins || [] : [])).catch(() => {});
     apiCall({ action: 'leave_list', token: t }).then((r) => setLeaves(r.ok ? r.leaves || [] : [])).catch(() => {});
     apiCall({ action: 'holiday_list', token: t }).then((r) => setHolidays(r.ok ? r.holidays || [] : [])).catch(() => {});
+    apiCall({ action: 'announcement_list', token: t }).then((r) => setAnnouncements(r.ok ? r.announcements || [] : [])).catch(() => {});
   }, [apiCall, token]);
 
   const handleLogin = ({ token: tkn, email, data }) => {
@@ -398,6 +419,79 @@ export default function AdminDashboard() {
   }, { employees: 0, days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
   deptTotals.hours = Math.round(deptTotals.hours * 100) / 100;
 
+  // Attendance: presence %, current & best consecutive-day streak per employee
+  const isWeekday = (ds) => { const p = ds.split('-'); const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])); const dw = d.getDay(); return dw !== 0 && dw !== 6; };
+  const parseD = (ds) => new Date(Number(ds.slice(0, 4)), Number(ds.slice(5, 7)) - 1, Number(ds.slice(8, 10)));
+  const diffDays = (b, a) => Math.round((parseD(b) - parseD(a)) / 86400000);
+  const expectedDays = (() => {
+    if (!dateFrom || !dateTo) return 0;
+    let n = 0;
+    const cur = new Date(parseD(dateFrom));
+    const end = parseD(dateTo);
+    while (cur <= end) {
+      const dw = cur.getDay();
+      if (dw !== 0 && dw !== 6) n++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return n;
+  })();
+  const attMap = {};
+  pairs.forEach((p) => {
+    if (!p.email || !p.date || !isWeekday(p.date)) return;
+    const e = p.email.toLowerCase();
+    if (!attMap[e]) attMap[e] = { email: e, name: p.name || e, days: 0, hours: 0, late: 0, missing: 0, dates: [] };
+    const row = attMap[e];
+    row.days += 1;
+    if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
+    if (p.late) row.late += 1;
+    if (p.missing) row.missing += 1;
+    row.dates.push(p.date);
+  });
+  let attendance = Object.keys(attMap).map((k) => {
+    const r = attMap[k];
+    const uniq = Array.from(new Set(r.dates)).sort();
+    if (!uniq.length) return null;
+    let currentStreak = 0, bestStreak = 0;
+    for (let i = 0; i < uniq.length; i++) {
+      if (i === 0) { currentStreak = 1; bestStreak = 1; continue; }
+      const gap = diffDays(uniq[i], uniq[i - 1]);
+      if (gap <= 3) currentStreak += 1;
+      else currentStreak = 1;
+      if (currentStreak > bestStreak) bestStreak = currentStreak;
+    }
+    return {
+      email: r.email,
+      name: r.name,
+      days: r.days,
+      percent: expectedDays ? Math.round((r.days / expectedDays) * 100) : 0,
+      hours: Math.round(r.hours * 100) / 100,
+      late: r.late,
+      missing: r.missing,
+      currentStreak,
+      bestStreak,
+    };
+  }).filter(Boolean);
+  const attSettings = (() => {
+    const bucket = (p) => p.percent >= 95 ? 'haute' : p.percent >= 75 ? 'moyenne' : p.percent >= 50 ? 'faible' : 'critique';
+    const zero = { count: 0, sum: 0, high: 0, med: 0, low: 0, crit: 0 };
+    const agg = attendance.reduce((acc, r) => {
+      acc.count += 1; acc.sum += r.percent;
+      const b = bucket(r);
+      if (b === 'haute') acc.high += 1; else if (b === 'moyenne') acc.med += 1; else if (b === 'faible') acc.low += 1; else acc.crit += 1;
+      return acc;
+    }, zero);
+    agg.avg = agg.count ? Math.round(agg.sum / agg.count) : 0;
+    return agg;
+  })();
+  const atql = attQuery.trim().toLowerCase();
+  if (atql) attendance = attendance.filter((r) => [r.name, r.email].filter(Boolean).join(' ').toLowerCase().includes(atql));
+  if (attSort.key && ATT_SORT_KEYS[attSort.key]) {
+    attendance.sort((x, y) => cmpVals(ATT_SORT_KEYS[attSort.key](x), ATT_SORT_KEYS[attSort.key](y)) * attSort.dir);
+  } else {
+    attendance.sort((x, y) => y.percent - x.percent);
+  }
+  const attTopStreak = attendance.reduce((m, r) => (r.bestStreak > m ? r.bestStreak : m), 0);
+
   // Presence donut (today's status breakdown)
   const onBreakCount = (live.onBreakNames || []).length;
   const statusBuckets = [
@@ -511,6 +605,32 @@ export default function AdminDashboard() {
     } catch (err) { showFeedback('error', err.message); }
   };
 
+  const handleAnnouncementAdd = async (e) => {
+    e.preventDefault();
+    const title = annTitle.trim();
+    const body = annBody.trim();
+    if (!title && !body) { showFeedback('error', 'Titre ou message requis.'); return; }
+    try {
+      const res = await apiCall({ action: 'announcement_add', token, title, body, pinned: annPinned, adminEmail });
+      if (!res.ok) throw new Error(res.message);
+      showFeedback('success', 'Annonce publiee.');
+      setAnnTitle('');
+      setAnnBody('');
+      setAnnPinned(false);
+      loadSubData();
+    } catch (err) { showFeedback('error', err.message); }
+  };
+
+  const handleAnnouncementDelete = async (index) => {
+    if (!window.confirm('Supprimer cette annonce ?')) return;
+    try {
+      const res = await apiCall({ action: 'announcement_delete', token, index, adminEmail });
+      if (!res.ok) throw new Error(res.message);
+      showFeedback('success', 'Annonce supprimee.');
+      loadSubData();
+    } catch (err) { showFeedback('error', err.message); }
+  };
+
   const handleCorrection = async (data) => {
     try {
       const res = await apiCall({ action: 'correction_apply', token, ...data, adminEmail });
@@ -561,6 +681,45 @@ export default function AdminDashboard() {
     a.href = URL.createObjectURL(blob);
     a.download = 'departements-' + dateFrom + '_' + dateTo + '.csv';
     document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  const downloadAttendanceCsv = () => {
+    const head = ['Nom', 'Email', 'Jours presents', 'Assiduite (%)', 'Total heures', 'Retards', 'Sorties manquantes', 'Serie actuelle', 'Meilleure serie'];
+    const lines = [head.join(',')];
+    attendance.forEach((r) => {
+      const row = [r.name || '', r.email, r.days, r.percent + '%', r.hours, r.late, r.missing, r.currentStreak, r.bestStreak];
+      lines.push(row.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(','));
+    });
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'assiduite-' + dateFrom + '_' + dateTo + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  const period = dateFrom + ' \u2192 ' + dateTo;
+  const printReportPdf = () => {
+    const columns = ['Date', 'Nom', 'Email', 'Entree', 'Sortie', 'Heures', 'Statut'];
+    const rows = pairs.map((p) => [p.date, p.name, p.email, p.in || '\u2014', p.out || '\u2014', p.hours != null ? fmtHours(p.hours) : '', p.missing ? 'Pas de sortie' : p.late ? 'Retard' : 'OK']);
+    printReportPDF('Rapport de presence', period, columns, rows);
+  };
+
+  const printPayrollPdf = () => {
+    const columns = ['Nom', 'Email', 'Jours', 'Total heures', 'Moyenne/jour', 'Pause (min)', 'Retards', 'Sorties manquantes'];
+    const rows = payroll.map((r) => [r.name || r.email, r.email, r.days, fmtHours(r.hours), fmtHours(r.avgHours), Math.round(r.breakMin), r.late, r.missing]);
+    printReportPDF('Synthese paie', period, columns, rows);
+  };
+
+  const printDeptPdf = () => {
+    const columns = ['Departement', 'Employes', 'Total heures', 'Moyenne/jour', 'Pause (min)', 'Retards', 'Sorties manquantes'];
+    const rows = depts.map((r) => [r.name, r.employees, fmtHours(r.hours), fmtHours(r.avgHours), Math.round(r.breakMin), r.late, r.missing]);
+    printReportPDF('Analytique par departement', period, columns, rows);
+  };
+
+  const printAttendancePdf = () => {
+    const columns = ['Nom', 'Email', 'Jours', 'Assiduite (%)', 'Total heures', 'Retards', 'Sorties manquantes', 'Serie act.', 'Meilleure'];
+    const rows = attendance.map((r) => [r.name || r.email, r.email, r.days, r.percent + '%', fmtHours(r.hours), r.late, r.missing, r.currentStreak, r.bestStreak]);
+    printReportPDF('Assiduite & series', period, columns, rows);
   };
 
   const downloadPeopleCsv = () => {
@@ -843,6 +1002,7 @@ export default function AdminDashboard() {
             <Reveal delay={40}>
               <div className="btn-row">
                 <button className="ghost-btn" onClick={downloadReportCsv}>CSV</button>
+                <button className="ghost-btn" onClick={printReportPdf}>PDF</button>
                 <a className="ghost-btn" href={a.sheetUrl || '#'} target="_blank" rel="noopener">Feuille</a>
                 <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
               </div>
@@ -932,6 +1092,7 @@ export default function AdminDashboard() {
             <Reveal delay={40}>
               <div className="btn-row">
                 <button className="ghost-btn" onClick={downloadPayrollCsv}>Exporter (CSV)</button>
+                <button className="ghost-btn" onClick={printPayrollPdf}>PDF</button>
                 <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
               </div>
             </Reveal>
@@ -1020,6 +1181,100 @@ export default function AdminDashboard() {
             <Reveal delay={40}>
               <div className="btn-row">
                 <button className="ghost-btn" onClick={downloadDeptCsv}>Exporter (CSV)</button>
+                <button className="ghost-btn" onClick={printDeptPdf}>PDF</button>
+                <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
+              </div>
+            </Reveal>
+          </>
+        )}
+
+        {activeView === 'assiduite' && (
+          <>
+            {/* Attendance summary */}
+            <Reveal delay={40}>
+              <div className="kpi-grid">
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-blue" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Assiduite moyenne</span>
+                    <AnimatedNumber value={attSettings.avg} suffix=" %" />
+                    <span className="kpi-sub muted">sur {expectedDays} jour(s) ouvres</span>
+                  </div>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-emerald" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Haute assiduite</span>
+                    <AnimatedNumber value={attSettings.high} suffix=" " />
+                    <span className="kpi-sub muted">{'>='} 95% &middot; {attSettings.med} moyenne &middot; {attSettings.low} faible</span>
+                  </div>
+                </div>
+                <div className="kpi">
+                  <span className="kpi-icon lg kpi-amber" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4 M4.93 4.93l2.83 2.83 M2 12h4 M4.93 19.07l2.83-2.83 M12 22v-4 M19.07 19.07l-2.83-2.83 M22 12h-4 M19.07 4.93l-2.83 2.83"/><circle cx="12" cy="12" r="4"/></svg></span>
+                  <div className="kpi-txt">
+                    <span className="kpi-label">Meilleure serie</span>
+                    <AnimatedNumber value={attTopStreak} suffix=" j" />
+                    <span className="kpi-sub muted">consecutifs &middot; {attSettings.crit} critique(s)</span>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Attendance table */}
+            <Reveal delay={40}>
+              <div className="card block">
+                <div className="block-head">
+                  <h3>Presence par employe</h3>
+                  <span className="pill">{attendance.length} salarie(s)</span>
+                </div>
+                <div className="block-body">
+                  <div className="table-tools">
+                    <div className="search-wrap">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input type="search" placeholder="Rechercher un salarie..." value={attQuery} onChange={(e) => setAttQuery(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          {[{key:'name',label:'Nom'},{key:'days',label:'Jours'},{key:'percent',label:'Assiduite'},{key:'hours',label:'Heures'},{key:'late',label:'Retards'},{key:'missing',label:'S. manq'},{key:'currentStreak',label:'Serie act.'},{key:'bestStreak',label:'Meilleure'}].map((col) => (
+                          <th key={col.key} className="sortable" onClick={() => setAttSort((s) => s.key === col.key ? { key: col.key, dir: -s.dir } : { key: col.key, dir: 1 })}>
+                            {col.label}{attSort.key === col.key ? (attSort.dir === 1 ? ' \u2191' : ' \u2193') : ''}
+                          </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendance.length === 0 ? (
+                          <tr><td className="empty" colSpan={8}>Aucune presence dans cette periode.</td></tr>
+                        ) : attendance.map((r, i) => (
+                          <tr key={i}>
+                            <td>{r.name || r.email}</td>
+                            <td className="num">{r.days}</td>
+                            <td className="num">
+                              <span className={'tag ' + (r.percent >= 95 ? 'in' : r.percent >= 75 ? 'pause' : r.percent >= 50 ? 'out' : 'neutral')}>{r.percent}%</span>
+                              <div className="mini-bar" aria-hidden="true"><span style={{ width: Math.max(2, Math.min(100, r.percent)) + '%' }}></span></div>
+                            </td>
+                            <td className="num">{fmtHours(r.hours)}</td>
+                            <td className="num"><span className={'tag ' + (r.late ? 'out' : 'in')}>{r.late}</span></td>
+                            <td className="num"><span className={'tag ' + (r.missing ? 'neutral' : 'in')}>{r.missing}</span></td>
+                            <td className="num">{r.currentStreak}</td>
+                            <td className="num">{r.bestStreak}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Attendance export */}
+            <Reveal delay={40}>
+              <div className="btn-row">
+                <button className="ghost-btn" onClick={downloadAttendanceCsv}>Exporter (CSV)</button>
+                <button className="ghost-btn" onClick={printAttendancePdf}>PDF</button>
                 <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
               </div>
             </Reveal>
@@ -1087,6 +1342,63 @@ export default function AdminDashboard() {
             <p className="stat-caption">Acces</p>
             <QRGenerator />
             <OfficeScreenLink />
+          </>
+        )}
+
+        {activeView === 'annonces' && (
+          <>
+            <Reveal delay={40}>
+              <div className="card block">
+                <div className="block-head"><h3>Publier une annonce</h3></div>
+                <div className="block-body">
+                  <form className="ann-form" onSubmit={handleAnnouncementAdd}>
+                    <input type="text" placeholder="Titre (optionnel)" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} maxLength={120} />
+                    <textarea placeholder="Message..." value={annBody} onChange={(e) => setAnnBody(e.target.value)} maxLength={2000} />
+                    <label className="ann-pin-toggle">
+                      <input type="checkbox" checked={annPinned} onChange={(e) => setAnnPinned(e.target.checked)} />
+                      Epingler en haut (important)
+                    </label>
+                    <button className="primary-btn range-btn" type="submit">Publier</button>
+                  </form>
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={40}>
+              <div className="card block">
+                <div className="block-head">
+                  <h3>Annonces publiees</h3>
+                  <span className="pill">{announcements.length}</span>
+                </div>
+                <div className="block-body">
+                  {announcements.length === 0 ? (
+                    <p className="empty">Aucune annonce pour l'instant.</p>
+                  ) : (
+                    <div className="ann-list">
+                      {announcements.map((an, i) => (
+                        <div key={i} className={'ann-item' + (an.pinned ? ' ann-pinned' : '')}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              {an.pinned && <span className="ann-pin">Epingl&eacute;</span>}
+                              {an.title && <h4>{an.title}</h4>}
+                              {an.body && <p>{an.body}</p>}
+                              {an.postedOn && <span className="ann-meta">{an.postedOn}</span>}
+                            </div>
+                            <button type="button" className="ghost-btn sm" onClick={() => handleAnnouncementDelete(i + 1)}>Supprimer</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={40}>
+              <div className="btn-row">
+                <button className="ghost-btn" onClick={handleRefresh}>Actualiser</button>
+              </div>
+            </Reveal>
           </>
         )}
       </div>

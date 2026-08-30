@@ -15,6 +15,7 @@ const NAV_GROUPS = [
       { key: 'rapport', label: 'Rapport', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8' },
       { key: 'paie', label: 'Paie', icon: 'M17 15.5a2.5 2.5 0 0 0 2.5 2.5h2a2.5 2.5 0 0 0 0-5h-3a2.5 2.5 0 0 1 0-5h3a2.5 2.5 0 0 1 2.5 2.5 M12 3v18' },
       { key: 'departements', label: 'Departements', icon: 'M3 21h18 M5 21V5a2 2 0 0 0-2-2h2a2 2 0 0 1 2 2v16 M9 21V9a2 2 0 0 0-2-2h2a2 2 0 0 1 2 2v12 M13 21V13a2 2 0 0 0-2-2h2a2 2 0 0 1 2 2v8 M17 21v-6a2 2 0 0 0-2-2h2a2 2 0 0 1 2 2v6' },
+      { key: 'assiduite', label: 'Assiduite', icon: 'M12 2v4 M4.93 4.93l2.83 2.83 M2 12h4 M4.93 19.07l2.83-2.83 M12 22v-4 M19.07 19.07l-2.83-2.83 M22 12h-4 M19.07 4.93l-2.83 2.83 M12 6a6 6 0 0 1 0 12' },
       { key: 'alertes', label: 'Alertes & anomalies', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z M12 8v4 M12 16h.01' },
     ],
   },
@@ -23,6 +24,7 @@ const NAV_GROUPS = [
     items: [
       { key: 'gestion', label: 'Gestion', icon: 'M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01z' },
       { key: 'qr', label: 'QR & acces', icon: 'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z M7 7h3v3H7z M17 7h3v3h-3z M17 17h3v3h-3z M7 17h3v3H7z' },
+      { key: 'annonces', label: 'Annonces', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
     ],
   },
 ];

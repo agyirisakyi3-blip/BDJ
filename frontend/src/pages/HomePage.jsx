@@ -6,6 +6,7 @@ import { lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import TopBar from '../components/layout/TopBar';
 import StatusCard from '../components/home/StatusCard';
 import ScheduleCard from '../components/home/ScheduleCard';
+import AnnouncementsCard from '../components/home/AnnouncementsCard';
 import ScanButton from '../components/home/ScanButton';
 import BreakControls from '../components/home/BreakControls';
 import RecentActivity from '../components/home/RecentActivity';
@@ -167,6 +168,7 @@ export default function HomePage() {
       <SetupBanner />
       <StatusCard />
       <ScheduleCard />
+      <AnnouncementsCard />
       <ScanButton onScan={() => {
         if (!config) { showFeedback('warn', 'Parametres en cours de chargement.'); return; }
         if (!profile) { setShowProfile(true); return; }

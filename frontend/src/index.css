@@ -1155,6 +1155,9 @@ html[data-theme] body.admin-view .login-split { box-shadow: 0 20px 48px -20px rg
 :root[data-theme="light"] .table-wrap tbody tr:hover td { background: rgba(15, 23, 42, 0.04); }
 .table-wrap td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+.mini-bar { height: 5px; border-radius: 999px; background: rgba(127, 141, 166, 0.18); overflow: hidden; margin-top: 5px; min-width: 60px; }
+.mini-bar > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent-light), var(--accent)); }
+
 .block-head.collapsible { border-radius: 8px; transition: opacity 0.15s ease; }
 .block-head.collapsible:hover h3 { color: var(--accent-light); }
 
@@ -1871,3 +1874,18 @@ html[data-theme] body.admin-view .sidebar-toggle { box-shadow: var(--shadow-sm);
   .admin-sidebar { transform: translateX(0); }
   .sidebar-overlay { display: none; }
 }
+
+/* ============ Announcements ============ */
+
+.ann-list { display: flex; flex-direction: column; gap: 12px; }
+.ann-item { border: 1px solid rgba(127, 141, 166, 0.2); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; }
+.ann-item h4 { margin: 0 0 4px; font-size: 14px; }
+.ann-item p { margin: 0; font-size: 13px; color: var(--text-dim, inherit); }
+.ann-item.ann-pinned { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+.ann-pin { display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: #b45309; margin-bottom: 4px; }
+.ann-meta { display: block; margin-top: 6px; font-size: 11px; color: var(--text-dim, inherit); opacity: .7; }
+
+.ann-form { display: grid; gap: 10px; }
+.ann-form input[type="text"], .ann-form textarea { width: 100%; }
+.ann-form textarea { min-height: 72px; resize: vertical; }
+.ann-pin-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }

@@ -29,6 +29,7 @@ var SHEET_EMPLOYEES = 'Employees';
 var SHEET_ADMINS = 'Admins';
 var SHEET_LEAVE = 'Leave';
 var SHEET_HOLIDAYS = 'Holidays';
+var SHEET_ANNOUNCEMENTS = 'Announcements';
 
 /* Break state machine: OUT -> Check-in -> Break-out -> Break-in -> Check-out.
    A scan while on break resumes work (Break-in); a second button press while
@@ -220,6 +221,18 @@ function handleRequest_(e) {
     }
     if (action === 'holiday_delete') {
       return json_(holidayDelete_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'announcements') {
+      return json_(announcements_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'announcement_list') {
+      return json_(announcementList_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'announcement_add') {
+      return json_(announcementAdd_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'announcement_delete') {
+      return json_(announcementDelete_(payload, cfg, now, tz, ss));
     }
     if (action === 'correction_apply') {
       return json_(correctionApply_(payload, cfg, now, tz, ss));
@@ -433,6 +446,11 @@ function ensureSheets_(ss) {
     var ho = ss.insertSheet(SHEET_HOLIDAYS);
     ho.appendRow(['Date', 'Name']);
     ho.getRange('A1:B1').setFontWeight('bold');
+  }
+  if (!ss.getSheetByName(SHEET_ANNOUNCEMENTS)) {
+    var an = ss.insertSheet(SHEET_ANNOUNCEMENTS);
+    an.appendRow(['Title', 'Body', 'PostedOn', 'PostedBy', 'Pinned']);
+    an.getRange('A1:E1').setFontWeight('bold');
   }
   migrateAttendanceSheet_(ss);
   migrateEmployeesSheet_(ss);
@@ -1691,6 +1709,73 @@ function holidayDelete_(payload, cfg, now, tz, ss) {
   var removed = rows[idx];
   sheet.deleteRow(idx + 1);
   logAudit_(ss, String(payload.adminEmail || 'admin'), 'Holiday removed: ' + removed[0] + ' ' + removed[1], 'HOLIDAY_REMOVED', now, tz);
+  return { ok: true };
+}
+
+/* ================= Announcements ================= */
+
+/** Public, active announcements (no auth) for the employee home screen. */
+function announcements_(payload, cfg, now, tz, ss) {
+  var sheet = ss.getSheetByName(SHEET_ANNOUNCEMENTS);
+  var out = [];
+  if (sheet) {
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      var title = safeCell_(String(rows[i][0] || '').trim());
+      var body = safeCell_(String(rows[i][1] || '').trim());
+      if (!title && !body) continue;
+      out.push({
+        title: String(rows[i][0] || ''),
+        body: String(rows[i][1] || ''),
+        postedOn: String(rows[i][2] || ''),
+        postedBy: String(rows[i][3] || ''),
+        pinned: String(rows[i][4] || '') === 'true',
+      });
+    }
+  }
+  out.sort(function (a, b) {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return (b.postedOn || '').localeCompare(a.postedOn || '');
+  });
+  return { ok: true, announcements: out };
+}
+
+function announcementList_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  var res = announcements_(payload, cfg, now, tz, ss);
+  return { ok: true, announcements: res.announcements };
+}
+
+function announcementAdd_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var title = safeCell_(String(payload.title || '').trim());
+  var body = safeCell_(String(payload.body || '').trim());
+  if (!title && !body) return error_('Titre ou message requis.');
+  var pinned = payload.pinned ? String(payload.pinned) === 'true' : false;
+
+  ss.getSheetByName(SHEET_ANNOUNCEMENTS).appendRow([
+    title, body,
+    Utilities.formatDate(now, tz, 'yyyy-MM-dd'),
+    safeCell_(String(payload.adminEmail || 'admin')),
+    pinned ? 'true' : 'false'
+  ]);
+  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Announcement added: ' + (title || body), 'ANNOUNCEMENT_ADDED', now, tz);
+  return { ok: true };
+}
+
+function announcementDelete_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  var idx = Number(payload.index);
+  var sheet = ss.getSheetByName(SHEET_ANNOUNCEMENTS);
+  var rows = sheet.getDataRange().getValues();
+  if (!isFinite(idx) || idx < 1 || idx >= rows.length) return error_('Annonce introuvable.');
+  var removed = rows[idx];
+  sheet.deleteRow(idx + 1);
+  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Announcement removed: ' + (removed[0] || removed[1]), 'ANNOUNCEMENT_REMOVED', now, tz);
   return { ok: true };
 }
 

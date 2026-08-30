@@ -85,6 +85,35 @@ export function avatarInitials(name, email) {
 }
 
 /**
+ * Open a printable window with an HTML table and invoke the browser's
+ * print dialog (user can "Save as PDF"). Falls back to a modal-less alert
+ * if popups are blocked. Returns nothing.
+ */
+export function printReportPDF(title, period, columns, rows) {
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const head = columns.map((c) => '<th>' + esc(c) + '</th>').join('');
+  const body = rows.map((r) => '<tr>' + r.map((cell) => '<td>' + esc(cell) + '</td>').join('') + '</tr>').join('');
+  const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(title) + '</title>' +
+    '<style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111;margin:24px}' +
+    '.h{display:flex;justify-content:space-between;border-bottom:2px solid #333;padding-bottom:8px;margin-bottom:16px}' +
+    '.h h1{font-size:18px;margin:0}.h p{margin:0;color:#555;font-size:13px}' +
+    'table{width:100%;border-collapse:collapse;font-size:12px}' +
+    'th{background:#f1f3f5;text-align:left;padding:7px 8px;border-bottom:2px solid #ccc;font-size:11px;text-transform:uppercase;letter-spacing:.3px}' +
+    'td{padding:6px 8px;border-bottom:1px solid #e5e7eb}' +
+    'tr:nth-child(even) td{background:#fafafa}' +
+    '.f{margin-top:12px;color:#777;font-size:11px}@media print{.no-print{display:none}}</style></head><body>' +
+    '<div class="h"><div><h1>' + esc(title) + '</h1><p>' + esc(period) + '</p></div></div>' +
+    '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
+    '<p class="f">Genere le ' + new Date().toLocaleString() + ' \u00b7 ' + esc(title) + '</p>' +
+    '<button class="no-print" onclick="window.print()">Imprimer / Enregistrer en PDF</button>' +
+    '<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>';
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) { alert('Autorisez les fenetres pop-up pour exporter en PDF.'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
+/**
  * Read an image File, center-crop it to a square, downscale it and return a
  * small JPEG data URL (default ~160px) ready to store per employee.
  * Rejects non-image files and files that fail to decode.
