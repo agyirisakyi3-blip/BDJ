@@ -1431,12 +1431,10 @@ export default function AdminDashboard() {
         )}
 
         {activeView === 'aide' && (
-          <Reveal delay={40}>
-            <AdminHelp
-              onOpenView={openAdminView}
-              onStartTour={() => setTourOpen(true)}
-            />
-          </Reveal>
+          <AdminHelp
+            onOpenView={openAdminView}
+            onStartTour={() => setTourOpen(true)}
+          />
         )}
       </div>
 
