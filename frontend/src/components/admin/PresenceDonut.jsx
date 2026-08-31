@@ -1,5 +1,3 @@
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
-
 const COLORS = {
   onsite: '#10b981',
   break: '#f59e0b',
@@ -16,52 +14,75 @@ const LABELS = {
   absent: 'Absent',
 };
 
+const R_IN = 62;
+const R_OUT = 90;
+const CX = 100;
+const CY = 100;
+
+function polar(cx, cy, r, angleDeg) {
+  const a = ((angleDeg - 90) * Math.PI) / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+}
+
+function arcPath(cx, cy, rIn, rOut, start, end) {
+  const large = end - start > 180 ? 1 : 0;
+  const [x1, y1] = polar(cx, cy, rOut, start);
+  const [x2, y2] = polar(cx, cy, rOut, end);
+  const [x3, y3] = polar(cx, cy, rIn, end);
+  const [x4, y4] = polar(cx, cy, rIn, start);
+  return [
+    `M ${x1} ${y1}`,
+    `A ${rOut} ${rOut} 0 ${large} 1 ${x2} ${y2}`,
+    `L ${x3} ${y3}`,
+    `A ${rIn} ${rIn} 0 ${large} 0 ${x4} ${y4}`,
+    'Z',
+  ].join(' ');
+}
+
 export default function PresenceDonut({ data, total }) {
+  if (total === 0) return <p className="hint empty">Aucun personnel.</p>;
+
+  const sum = data.reduce((s, b) => s + b.value, 0);
+  const { segments } = data
+    .filter((b) => b.value > 0)
+    .reduce(
+      ({ segments, acc }, b) => {
+        const start = (acc / sum) * 360;
+        const end = ((acc + b.value) / sum) * 360;
+        return { segments: segments.concat([{ ...b, start, end }]), acc: acc + b.value };
+      },
+      { segments: [], acc: 0 }
+    );
+
   return (
     <div className="donut-wrap">
-      {total === 0 ? (
-        <p className="hint empty">Aucun personnel.</p>
-      ) : (
-        <div className="donut-row">
-          <div className="donut-main">
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={data} dataKey="value" nameKey="key" cx="50%" cy="50%" innerRadius={62} outerRadius={90}
-                  paddingAngle={data.length > 1 ? 3 : 0} cornerRadius={6}
-                  stroke="none" animationDuration={900}>
-                  {data.map((e) => (
-                    <Cell key={e.key} fill={COLORS[e.key]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--surface)',
-                    border: '1px solid var(--stroke-strong)',
-                    borderRadius: 10,
-                    color: 'var(--text)',
-                    fontSize: 12,
-                    boxShadow: 'var(--shadow-card)',
-                  }}
-                  formatter={(v, name) => [v + ' personne' + (v > 1 ? 's' : ''), LABELS[name]]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="donut-center">
-              <b>{total}</b>
-              <span>au total</span>
-            </div>
+      <div className="donut-row">
+        <div className="donut-main">
+          <svg viewBox="0 0 200 200" width="100%" height={200} role="img" aria-label="Repartition de la presence">
+            {segments.length === 1 ? (
+              <circle cx={CX} cy={CY} r={(R_IN + R_OUT) / 2} fill="none" stroke={COLORS[segments[0].key]} strokeWidth={R_OUT - R_IN} />
+            ) : (
+              segments.map((s) => (
+                <path key={s.key} d={arcPath(CX, CY, R_IN, R_OUT, s.start, s.end)} fill={COLORS[s.key]} />
+              ))
+            )}
+            <circle cx={CX} cy={CY} r={R_IN - 1} fill="var(--surface)" />
+          </svg>
+          <div className="donut-center">
+            <b>{total}</b>
+            <span>au total</span>
           </div>
-          <ul className="donut-legend">
-            {data.map((e) => (
-              <li key={e.key}>
-                <span className="donut-dot" style={{ background: COLORS[e.key] }} />
-                <span className="donut-label">{LABELS[e.key]}</span>
-                <span className="donut-value">{e.value}</span>
-              </li>
-            ))}
-          </ul>
         </div>
-      )}
+        <ul className="donut-legend">
+          {segments.map((b) => (
+            <li key={b.key}>
+              <span className="donut-dot" style={{ background: COLORS[b.key] }} />
+              <span className="donut-label">{LABELS[b.key]}</span>
+              <span className="donut-value">{b.value}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

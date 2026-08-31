@@ -1753,10 +1753,9 @@ html[data-theme] body.admin-view .reveal { will-change: auto; }
   .donut-legend { flex: 1; }
 }
 
-/* Recharts axis text uses theme-agnostic fill; force admin theme contrast */
-html[data-theme] body.admin-view .recharts-text { fill: var(--muted-2); }
-html[data-theme] body.admin-view .recharts-cartesian-grid-horizontal line,
-html[data-theme] body.admin-view .recharts-cartesian-grid-vertical line { stroke: rgba(15, 23, 42, 0.08); }
+.hours-chart-svg { width: 100%; height: auto; display: block; }
+.hours-chart-svg text { user-select: none; }
+html[data-theme] body.admin-view .hours-chart-svg line { stroke: rgba(15, 23, 42, 0.08); }
 
 /* KPI soft lift + tabular numbers */
 html[data-theme] body.admin-view .kpi { transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
