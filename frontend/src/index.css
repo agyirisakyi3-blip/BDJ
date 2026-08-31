@@ -176,15 +176,14 @@ html, body {
 /* Action zone: Scan is the dominant primary action, grouped with secondary actions */
 .action-zone {
   display: flex; flex-direction: column; gap: 4px;
-  padding: 16px 14px 14px;
+  padding: 20px 14px 16px;
   margin: 0 0 16px;
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
-  background: linear-gradient(160deg, rgba(14, 134, 196, 0.10), rgba(14, 134, 196, 0.03));
+  background: linear-gradient(160deg, rgba(14, 134, 196, 0.12), rgba(14, 134, 196, 0.04));
   box-shadow: var(--shadow-card);
 }
-.action-zone .big-btn { margin-top: 6px; }
-.action-zone .hint { text-align: center; margin: 10px 0 0; }
+.action-zone .big-btn { margin-top: 0; }
 
 /* Info zone: secondary, read-only content recedes below the action */
 .info-zone .card, .info-zone .block { margin-bottom: 12px; }
@@ -300,6 +299,9 @@ html, body {
   stroke-dashoffset: 219.9;
   transition: stroke-dashoffset 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
+.status-avatar-ring.complete .ring-fill {
+  stroke: var(--success);
+}
 
 .status-avatar {
   width: 60px; height: 60px; flex-shrink: 0;
@@ -411,12 +413,12 @@ html, body {
 
 .big-btn {
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 18px; font-size: 16px; margin-top: 8px;
-  box-shadow: 0 4px 16px -4px rgba(14, 134, 196, 0.4), 0 0 0 0 rgba(14, 134, 196, 0);
+  padding: 20px; font-size: 16px; margin-top: 8px;
+  box-shadow: 0 6px 20px -4px rgba(14, 134, 196, 0.45), 0 0 0 0 rgba(14, 134, 196, 0);
   transition: transform var(--transition), box-shadow var(--transition), filter var(--transition);
 }
-.big-btn:hover { box-shadow: 0 6px 24px -4px rgba(14, 134, 196, 0.5), 0 0 32px -8px rgba(14, 134, 196, 0.25); }
-.big-btn .btn-icon { width: 22px; height: 22px; }
+.big-btn:hover { box-shadow: 0 8px 28px -4px rgba(14, 134, 196, 0.55), 0 0 40px -8px rgba(14, 134, 196, 0.3); }
+.big-btn .btn-icon { width: 24px; height: 24px; }
 
 .ghost-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -1367,11 +1369,17 @@ html[data-theme] body.admin-view .login-split { box-shadow: 0 20px 48px -20px rg
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
-.break-btn { min-height: 44px; font-weight: 600; }
-.break-btn svg { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
+.break-btn {
+  min-height: 36px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 999px;
+}
+.break-btn svg { width: 14px; height: 14px; margin-right: 5px; vertical-align: -2px; }
 
 .tag.pause {
   background: rgba(245, 158, 11, 0.15);

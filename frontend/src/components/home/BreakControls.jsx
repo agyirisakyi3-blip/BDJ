@@ -12,7 +12,7 @@ export default function BreakControls({ onFeedback }) {
   const mins = status && status.breakMinToday;
 
   const handleBreak = () => {
-    api({
+    apiCall({
       action: 'attendance',
       tenant: tenantFromProfile(),
       qr: '',

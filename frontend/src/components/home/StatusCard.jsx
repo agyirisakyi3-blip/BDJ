@@ -27,6 +27,7 @@ function computeStreak(week) {
 export default memo(function StatusCard() {
   const { profile, status, week } = useApp();
   const [elapsed, setElapsed] = useState('0h 0m 0s');
+  const [ringPct, setRingPct] = useState(0);
   const intervalRef = useRef(null);
 
   const act = status ? String(status.action || '') : '';
@@ -50,6 +51,9 @@ export default memo(function StatusCard() {
       const m = Math.floor((diff % 3600) / 60);
       const s = diff % 60;
       setElapsed(h + 'h ' + m + 'm ' + s + 's');
+      const breakSec = (Number(status.breakMinToday || 0) || 0) * 60;
+      const netSec = Math.max(0, diff - breakSec);
+      setRingPct(Math.min(1, netSec / (8 * 3600)));
     };
     tick();
     intervalRef.current = setInterval(tick, 1000);
@@ -86,11 +90,12 @@ export default memo(function StatusCard() {
     time = '--:--';
   }
 
-  const ringFraction = checkedIn ? 0.5 : 0;
+  const ringFraction = checkedIn ? ringPct : 0;
+  const ringComplete = ringFraction >= 1;
 
   return (
     <div className={'card status-card' + (checkedIn ? ' checked-in' : '')}>
-      <div className={'status-avatar-ring' + (ringFraction > 0 ? ' on' : '')} id="avatar-ring">
+      <div className={'status-avatar-ring' + (ringFraction > 0 ? ' on' : '') + (ringComplete ? ' complete' : '')} id="avatar-ring">
         <svg className="ring-svg" viewBox="0 0 76 76" aria-hidden="true">
           <circle className="ring-track" cx="38" cy="38" r="35"/>
           <circle className="ring-fill" cx="38" cy="38" r="35"

@@ -175,7 +175,6 @@ export default function HomePage() {
           setShowScanner(true);
         }} />
         <BreakControls onFeedback={showFeedback} />
-        <p className="hint">Scannez le QR code a l'entree du bureau</p>
       </div>
 
       <div className="info-zone">
