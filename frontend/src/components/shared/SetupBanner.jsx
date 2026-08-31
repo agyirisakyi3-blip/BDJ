@@ -1,11 +1,7 @@
-import { useApp } from '../../contexts/AppContext';
+import { isConfigured } from '../../api';
 
 export default function SetupBanner() {
-  const { config } = useApp();
-  const url = config?.API_URL || '';
-  const isConfigured = /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url) && url.indexOf('YOUR_SCRIPT_ID') === -1;
-  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/exec(\?|$)/.test(url);
-  if (isConfigured || isLocal) return null;
+  if (isConfigured()) return null;
 
   return (
     <div className="banner warn">
