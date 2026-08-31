@@ -184,7 +184,7 @@ function SortableTable({ columns, data, sortKey, sortDir, onSort, renderRow }) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const { showFeedback, apiCall, config, setAdminToken: contextSetToken, setAdminEmail: contextSetEmail } = useApp();
+  const { showFeedback, apiCall, config, setAdminToken: contextSetToken, setAdminEmail: contextSetEmail, cycleTheme, themeMode } = useApp();
   const [token, setToken] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminData, setAdminData] = useState(null);
@@ -777,6 +777,8 @@ export default function AdminDashboard() {
         onToggle={(val) => { if (typeof val === 'boolean') setSidebarOpen(val); else setSidebarOpen((s) => !s); }}
         onLogout={() => { setToken(''); setAdminData(null); contextSetToken(''); }}
         adminEmail={adminEmail}
+        themeMode={themeMode}
+        onToggleTheme={cycleTheme}
       />
 
       <div className="admin-content">
