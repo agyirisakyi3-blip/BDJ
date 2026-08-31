@@ -16,21 +16,39 @@ export default function AnnouncementsCard() {
 
   if (!profile || list.length === 0) return null;
 
+  const pinned = list.filter((an) => an.pinned);
+  const regular = list.filter((an) => !an.pinned);
+
   return (
     <section className="card block" id="announcements-card">
       <div className="block-head collapsible">
         <h3>Annonces</h3>
         <span className="pill">{list.length}</span>
       </div>
-      <div className="block-body ann-list">
-        {list.map((an, i) => (
-          <article key={i} className={'ann-item' + (an.pinned ? ' ann-pinned' : '')}>
-            {an.pinned && <span className="ann-pin">Epingl&eacute;</span>}
-            {an.title && <h4>{an.title}</h4>}
-            {an.body && <p>{an.body}</p>}
-            {an.postedOn && <span className="ann-meta">{an.postedOn}</span>}
-          </article>
-        ))}
+      <div className="block-body ann-body">
+        {pinned.length > 0 && (
+          <div className="ann-pinned-block">
+            {pinned.map((an, i) => (
+              <article key={i} className="ann-item ann-pinned">
+                <span className="ann-pin">Épinglé</span>
+                {an.title && <h4>{an.title}</h4>}
+                {an.body && <p>{an.body}</p>}
+                {an.postedOn && <span className="ann-meta">{an.postedOn}</span>}
+              </article>
+            ))}
+          </div>
+        )}
+        {regular.length > 0 && (
+          <div className="ann-list">
+            {regular.map((an, i) => (
+              <article key={i} className="ann-item">
+                {an.title && <h4>{an.title}</h4>}
+                {an.body && <p>{an.body}</p>}
+                {an.postedOn && <span className="ann-meta">{an.postedOn}</span>}
+              </article>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

@@ -1998,12 +1998,22 @@ html[data-theme] body.admin-view .sidebar-toggle { box-shadow: var(--shadow-sm);
 /* ============ Announcements ============ */
 
 .ann-list { display: flex; flex-direction: column; gap: 12px; }
+.ann-body { display: flex; flex-direction: column; gap: 14px; }
 .ann-item { border: 1px solid rgba(127, 141, 166, 0.2); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; }
 .ann-item h4 { margin: 0 0 4px; font-size: 14px; }
 .ann-item p { margin: 0; font-size: 13px; color: var(--text-dim, inherit); }
-.ann-item.ann-pinned { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+.ann-item.ann-pinned { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.06); }
 .ann-pin { display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: #b45309; margin-bottom: 4px; }
 .ann-meta { display: block; margin-top: 6px; font-size: 11px; color: var(--text-dim, inherit); opacity: .7; }
+.ann-pinned-block {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 10px; margin: -6px 0 0;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02));
+}
+:root[data-theme="light"] .ann-pinned-block { background: linear-gradient(160deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.05)); border-color: rgba(245, 158, 11, 0.35); }
+.ann-pinned-block + .ann-list { border-top: 1px dashed var(--stroke-strong); padding-top: 12px; }
 
 .ann-form { display: grid; gap: 10px; }
 .ann-form input[type="text"], .ann-form textarea { width: 100%; }
