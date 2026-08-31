@@ -34,7 +34,7 @@ export default memo(function WeekChart() {
               <div className="week-bar-wrap">
                 <div className="week-bar zero week-bar-off" title={d.date + ': week-end'} />
               </div>
-              <span className="week-label">{d.date === today ? "Aujourd'hui" : 'Week-end'}</span>
+              <span className="week-label">{d.date === today ? "aujourd'hui" : 'Week-end'}</span>
             </div>
           ) : (
             <div key={i} className="week-col">
@@ -46,7 +46,7 @@ export default memo(function WeekChart() {
                   style={d.hours > 0 ? { height: Math.max(8, Math.round((d.hours / max) * 100)) + '%' } : {}}
                 />
               </div>
-              <span className="week-label">{d.date === today ? "Aujourd'hui" : dayLabel(d.date)}</span>
+              <span className="week-label">{d.date === today ? "aujourd'hui" : dayLabel(d.date)}</span>
             </div>
           )
         ))}

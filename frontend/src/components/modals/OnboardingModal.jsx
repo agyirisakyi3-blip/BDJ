@@ -3,9 +3,9 @@ import { useApp } from '../../contexts/AppContext';
 import ProfileModal from './ProfileModal';
 
 const STEPS = [
-  { title: 'Bienvenue', text: "Cette application enregistre vos pointages au bureau grace au code QR a l'entree. Aucun telechargement necessaire - ouvrez-la depuis votre navigateur ou installez-la.", btn: 'Suivant' },
-  { title: 'Vos coordonnees', text: 'Commencez par definir votre nom et email. Vous ne le faites qu\'une seule fois - les donnees sont stockees sur cet appareil.', btn: 'Ouvrir le profil' },
-  { title: 'Scanner pour pointer', text: "Pointez votre camera vers le code QR a l'entree du bureau. C'est tout - vous etes pointe !", btn: 'Commencer' },
+  { title: 'Bienvenue', text: "Cette application enregistre vos pointages au bureau grâce au code QR à l'entrée. Aucun téléchargement nécessaire - ouvrez-la depuis votre navigateur ou installez-la.", btn: 'Suivant' },
+  { title: 'Vos coordonnées', text: "Commencez par définir votre nom et email. Vous ne le faites qu'une seule fois - les données sont stockées sur cet appareil.", btn: 'Ouvrir le profil' },
+  { title: 'Scanner pour pointer', text: "Pointez votre caméra vers le code QR à l'entrée du bureau. C'est tout - vous êtes pointé !", btn: 'Commencer' },
 ];
 
 export default function OnboardingModal({ isOpen, onClose }) {

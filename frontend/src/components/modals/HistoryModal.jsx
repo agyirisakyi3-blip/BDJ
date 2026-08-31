@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { fmtHours, todayStr } from '../../utils';
+import ConfirmModal from '../admin/ConfirmModal';
 
-const HEAT_MONTHS = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+const HEAT_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 function Heatmap({ pairs, rangeFrom }) {
   const cells = useMemo(() => {
@@ -65,6 +66,8 @@ export default function HistoryModal({ isOpen, onClose }) {
   const { profile, apiCall, showFeedback } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !profile) return;
@@ -91,19 +94,21 @@ export default function HistoryModal({ isOpen, onClose }) {
       a.href = URL.createObjectURL(blob);
       a.download = 'ma-presence-' + profile.email + '.csv';
       document.body.appendChild(a); a.click(); a.remove();
-      showFeedback('success', (res.rows || []).length + ' enregistrement(s) exporte(s).');
+      showFeedback('success', (res.rows || []).length + ' enregistrement(s) exporté(s).');
     } catch (err) { showFeedback('error', err.message); }
   };
 
   const handleDelete = async () => {
     if (!profile) return;
-    if (!window.confirm('Effacer TOUS vos enregistrements de presence ?')) return;
+    setDeleting(true);
     try {
       const res = await apiCall({ action: 'mydelete', email: profile.email });
       if (!res.ok) throw new Error(res.message);
+      setShowConfirmDelete(false);
       onClose();
-      showFeedback('success', (res.deleted || 0) + ' enregistrement(s) efface(s).');
+      showFeedback('success', (res.deleted || 0) + ' enregistrement(s) effacé(s).');
     } catch (err) { showFeedback('error', err.message); }
+    setDeleting(false);
   };
 
   if (!isOpen) return null;
@@ -112,31 +117,31 @@ export default function HistoryModal({ isOpen, onClose }) {
   const pairs = h ? (h.pairs || []).slice().sort((x, y) => (y.date + y.in).localeCompare(x.date + x.in)) : [];
 
   return (
-    <div className="modal" role="dialog" aria-modal="true" aria-label="Mon historique de presence">
+    <div className="modal" role="dialog" aria-modal="true" aria-label="Mon historique de présence">
       <div className="modal-card card">
         <div className="modal-head">
           <span className="brand-mark sm" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </span>
           <div>
-            <h3>Votre presence</h3>
+            <h3>Votre présence</h3>
             <p className="muted">{h ? h.range.from + ' \u2192 ' + h.range.to : ''}</p>
           </div>
         </div>
         {h && <Heatmap pairs={h.pairs} rangeFrom={h.range.from} />}
         {h && (
           <div className="report-summary stat-row">
-            <div className="stat stat-in"><b>{h.summary.daysPresent}</b><span>Jours presents</span></div>
+            <div className="stat stat-in"><b>{h.summary.daysPresent}</b><span>Jours présents</span></div>
             <div className="stat stat-on"><b>{fmtHours(h.summary.totalHours)}</b><span>Total heures</span></div>
             <div className="stat stat-out"><b>{h.summary.lateCount}</b><span>Retards</span></div>
           </div>
         )}
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Entree</th><th>Sortie</th><th>Heures</th><th>Statut</th></tr></thead>
+            <thead><tr><th>Date</th><th>Entrée</th><th>Sortie</th><th>Heures</th><th>Statut</th></tr></thead>
             <tbody>
               {pairs.length === 0 ? (
-                <tr><td className="empty" colSpan="5">Aucune presence ce mois-ci.</td></tr>
+                <tr><td className="empty" colSpan="5">Aucune présence ce mois-ci.</td></tr>
               ) : pairs.map((p, i) => (
                 <tr key={i} className={p.missing ? 'row-missing' : p.late ? 'row-late' : ''}>
                   <td>{p.date}</td>
@@ -154,11 +159,21 @@ export default function HistoryModal({ isOpen, onClose }) {
           </table>
         </div>
         <div className="btn-row">
-          <button className="ghost-btn" onClick={handleExport}>Telecharger mes donnees (CSV)</button>
-          <button className="ghost-btn" onClick={handleDelete}>Effacer mes donnees</button>
+          <button className="ghost-btn" onClick={handleExport}>Télécharger mes données (CSV)</button>
+          <button className="ghost-btn danger-text" onClick={() => setShowConfirmDelete(true)}>Effacer mes données</button>
           <button className="ghost-btn" onClick={onClose}>Fermer</button>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={showConfirmDelete}
+        title="Effacer mes données"
+        message="Cette action effacera TOUS vos enregistrements de présence sur la feuille de l'entreprise. Cette suppression est définitive."
+        confirmLabel="Tout effacer"
+        danger
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setShowConfirmDelete(false)}
+      />
     </div>
   );
 }

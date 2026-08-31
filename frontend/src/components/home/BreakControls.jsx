@@ -30,7 +30,7 @@ export default function BreakControls({ onFeedback }) {
         tenant: tenantFromProfile(),
         breakMinToday: res.breakMinToday || 0,
       });
-      onFeedback('success', onBreak ? 'Reprise !' : 'Pause demarree a ' + res.time + '.');
+      onFeedback('success', onBreak ? 'Reprise !' : 'Pause démarrée à ' + res.time + '.');
     }).catch((err) => {
       onFeedback('error', 'Erreur: ' + err.message);
     });
@@ -42,7 +42,7 @@ export default function BreakControls({ onFeedback }) {
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
         <span id="btn-break-label">{onBreak ? 'Reprendre' : 'Pause'}</span>
       </button>
-      <span className="hint">{mins ? 'Pause cumulee aujourd\'hui : ' + fmtHours(mins / 60) : ''}</span>
+      <span className="hint">{mins ? 'Pause cumulée aujourd\'hui : ' + fmtHours(mins / 60) : ''}</span>
     </div>
   );
 }

@@ -58,6 +58,7 @@
 
 :root[data-theme="light"] .icon-btn,
 :root[data-theme="light"] .ghost-btn { background: rgba(15, 23, 42, 0.04); color: #334155; }
+:root[data-theme="light"] .ghost-btn.danger-text { color: #dc2626; border-color: rgba(220, 38, 38, 0.4); background: rgba(220, 38, 38, 0.06); }
 :root[data-theme="light"] .icon-btn:hover,
 :root[data-theme="light"] .ghost-btn:hover { background: rgba(15, 23, 42, 0.08); }
 
@@ -441,6 +442,8 @@ html, body {
 
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-row .ghost-btn { flex: 1; min-width: 100px; }
+.ghost-btn.danger-text { color: #f87171; border-color: rgba(248, 113, 113, 0.4); }
+.ghost-btn.danger-text:hover { background: rgba(248, 113, 113, 0.12); }
 
 /* ============ Offline pill ============ */
 .offline-pill {

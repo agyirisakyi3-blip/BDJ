@@ -6,9 +6,9 @@ export default memo(function ScanButton({ onScan }) {
   const act = status ? String(status.action || '') : '';
   const onBreakNow = act === 'Break-out';
 
-  let label = 'Scanner QR pour pointer';
-  if (onBreakNow) label = 'Scanner QR pour reprendre';
-  else if (act === 'Check-in' || act === 'Break-in') label = 'Scanner QR pour la sortie';
+  let label = 'Scanner le QR pour pointer';
+  if (onBreakNow) label = 'Scanner le QR pour reprendre';
+  else if (act === 'Check-in' || act === 'Break-in') label = 'Scanner le QR pour la sortie';
 
   return (
     <button className="primary-btn big-btn" type="button" onClick={onScan}>

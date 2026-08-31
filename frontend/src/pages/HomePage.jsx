@@ -68,7 +68,7 @@ export default function HomePage() {
           setShowSelfie(true);
           return;
         }
-        showFeedback('error', res.message || 'Echec du pointage.');
+        showFeedback('error', res.message || 'Échec du pointage.');
         return;
       }
       const prev = status;
@@ -85,12 +85,12 @@ export default function HomePage() {
       setStatus(newStatus);
       loadRecent(); loadWeek(); loadMonth();
       showScanSuccess(res.action, res.time, profile?.name);
-      const loc = res.office ? ' a ' + res.office : '';
+      const loc = res.office ? ' à ' + res.office : '';
       let msg;
-      if (res.action === 'Check-in') msg = 'Vous etes passe' + (loc || '') + ' a ' + res.time + '.';
-      else if (res.action === 'Check-out') msg = 'Vous etes sorti' + loc + ' a ' + res.time + '.';
-      else if (res.action === 'Break-out') msg = 'Pause demarree a ' + res.time + '.';
-      else msg = 'On reprend le travail a ' + res.time + '.';
+      if (res.action === 'Check-in') msg = 'Vous êtes passé' + (loc || '') + ' à ' + res.time + '.';
+      else if (res.action === 'Check-out') msg = 'Vous êtes sorti' + loc + ' à ' + res.time + '.';
+      else if (res.action === 'Break-out') msg = 'Pause démarrée à ' + res.time + '.';
+      else msg = 'On reprend le travail à ' + res.time + '.';
       showFeedback('success', msg);
     } catch (err) {
       setProcessing(false);
@@ -101,7 +101,7 @@ export default function HomePage() {
         try { const raw = await lsGet(LS_QUEUE); q = raw ? JSON.parse(raw) : []; } catch { q = []; }
         q.push(queueItem);
         await lsSet(LS_QUEUE, JSON.stringify(q.slice(0, 20)));
-        showFeedback('info', 'Hors ligne. Votre pointage sera synchronise automatiquement.');
+        showFeedback('info', 'Hors ligne. Votre pointage sera synchronisé automatiquement.');
       } else {
         showFeedback('error', 'Impossible de joindre le serveur : ' + err.message);
       }
@@ -115,15 +115,15 @@ export default function HomePage() {
 
     if (!text) {
       setProcessing(false);
-      showFeedback('error', 'Aucun QR code detecte.');
+      showFeedback('error', 'Aucun QR code détecté.');
       return;
     }
 
     if (navigator.vibrate) try { navigator.vibrate(18); } catch {}
 
     setTimeout(() => {
-      if (!config) { showFeedback('warn', 'Parametres en cours de chargement.'); setProcessing(false); return; }
-      if (!profile) { showFeedback('warn', 'Definissez vos coordonnees.'); setShowProfile(true); setProcessing(false); return; }
+      if (!config) { showFeedback('warn', 'Paramètres en cours de chargement.'); setProcessing(false); return; }
+      if (!profile) { showFeedback('warn', 'Définissez vos coordonnées.'); setShowProfile(true); setProcessing(false); return; }
 
       const parsed = parseQr(text);
       const tenant = parsed.tenant || tenantFromProfile();
@@ -170,7 +170,7 @@ export default function HomePage() {
 
       <div className="action-zone">
         <ScanButton onScan={() => {
-          if (!config) { showFeedback('warn', 'Parametres en cours de chargement.'); return; }
+          if (!config) { showFeedback('warn', 'Paramètres en cours de chargement.'); return; }
           if (!profile) { setShowProfile(true); return; }
           setShowScanner(true);
         }} />

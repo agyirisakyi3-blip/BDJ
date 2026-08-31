@@ -8,7 +8,7 @@ export default memo(function RecentActivity() {
   return (
     <section className="card block" id="recent-card">
       <div className="block-head">
-        <h3>Activite recente</h3>
+        <h3>Activité récente</h3>
       </div>
       <ul className="recent-list">
         {recentLoading ? (

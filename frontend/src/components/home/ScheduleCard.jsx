@@ -72,7 +72,7 @@ export default memo(function ScheduleCard() {
       <div className="schedule-head">
         <span className="schedule-title">Mon planning</span>
         {overtime !== null && (
-          <span className={'ot-chip' + (active ? ' on' : '')} title="Heures au-dela du creneau prevu">
+          <span className={'ot-chip' + (active ? ' on' : '')} title="Heures au-delà du créneau prévu">
             <span className="ot-dot" aria-hidden="true"></span>
             {active ? 'Heures sup. ' + fmtDur(overtime) : 'En heures sup?'}
           </span>
@@ -80,7 +80,7 @@ export default memo(function ScheduleCard() {
       </div>
       <div className="schedule-row">
         <div className="schedule-box">
-          <span className="schedule-box-label">Entree</span>
+          <span className="schedule-box-label">Entrée</span>
           <span className="schedule-box-val">{fmtClock(shift.start)}</span>
         </div>
         <svg className="schedule-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -90,7 +90,7 @@ export default memo(function ScheduleCard() {
         </div>
         {sched > 0 && (
           <div className="schedule-box">
-            <span className="schedule-box-label">Duree</span>
+            <span className="schedule-box-label">Durée</span>
             <span className="schedule-box-val">{fmtDur(sched)}</span>
           </div>
         )}
