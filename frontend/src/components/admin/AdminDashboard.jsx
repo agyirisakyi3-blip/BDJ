@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../contexts/AppContext';
 import { fmtHours, todayStr, shiftDateStr, cmpVals } from '../../utils';
@@ -11,6 +11,8 @@ import PresenceDonut from './PresenceDonut';
 import PhotoAvatar from './PhotoAvatar';
 import AdminSidebar from './AdminSidebar';
 import AdminHelp from './AdminHelp';
+import AdminTour from './AdminTour';
+import ConfirmModal from './ConfirmModal';
 import { compressImage, printReportPDF } from '../../utils';
 
 const PEOPLE_STATUS = {
@@ -194,6 +196,22 @@ export default function AdminDashboard() {
     try { return sessionStorage.getItem('adminView') || 'dashboard'; } catch (e) { return 'dashboard'; }
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+
+  const openAdminView = (v) => {
+    setActiveView(v);
+    try { sessionStorage.setItem('adminView', v); } catch (e) {}
+  };
+
+  // Confirm dialog state (replaces native window.confirm)
+  const confirmResolveRef = useRef(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmBody, setConfirmBody] = useState({});
+  const requestConfirm = useCallback((settings) => new Promise((resolve) => {
+    confirmResolveRef.current = (val) => { resolve(val); setConfirmOpen(false); };
+    setConfirmBody(settings);
+    setConfirmOpen(true);
+  }), []);
 
   // Sub-section data
   const [employees, setEmployees] = useState([]);
@@ -524,7 +542,7 @@ export default function AdminDashboard() {
   };
 
   const handleEmployeeDelete = async (email) => {
-    if (!window.confirm('Supprimer ' + email + ' ?')) return;
+    if (!(await requestConfirm({ title: 'Supprimer cet employe', message: 'Supprimer ' + email + ' ? Cette action est irreversible.', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
       const res = await apiCall({ action: 'employee_delete', token, email });
       if (!res.ok) throw new Error(res.message);
@@ -560,7 +578,7 @@ export default function AdminDashboard() {
   };
 
   const handleAdminRemove = async (email) => {
-    if (!window.confirm('Retirer l\'acces admin de ' + email + ' ?')) return;
+    if (!(await requestConfirm({ title: 'Retirer un admin', message: 'Retirer l\'acces admin de ' + email + ' ?', confirmLabel: 'Retirer', danger: true }))) return;
     try {
       const res = await apiCall({ action: 'admin_remove', token, email, adminEmail });
       if (!res.ok) throw new Error(res.message);
@@ -579,7 +597,7 @@ export default function AdminDashboard() {
   };
 
   const handleLeaveDelete = async (index) => {
-    if (!window.confirm('Supprimer cette periode de conge ?')) return;
+    if (!(await requestConfirm({ title: 'Supprimer le conge', message: 'Supprimer cette periode de conge ?', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
       const res = await apiCall({ action: 'leave_delete', token, index, adminEmail });
       if (!res.ok) throw new Error(res.message);
@@ -598,7 +616,7 @@ export default function AdminDashboard() {
   };
 
   const handleHolidayDelete = async (index) => {
-    if (!window.confirm('Supprimer ce jour ferie ?')) return;
+    if (!(await requestConfirm({ title: 'Supprimer le jour ferie', message: 'Supprimer ce jour ferie ?', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
       const res = await apiCall({ action: 'holiday_delete', token, index, adminEmail });
       if (!res.ok) throw new Error(res.message);
@@ -624,7 +642,7 @@ export default function AdminDashboard() {
   };
 
   const handleAnnouncementDelete = async (index) => {
-    if (!window.confirm('Supprimer cette annonce ?')) return;
+    if (!(await requestConfirm({ title: 'Supprimer l\'annonce', message: 'Supprimer cette annonce ? Elle disparaitra aussi pour les employes.', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
       const res = await apiCall({ action: 'announcement_delete', token, index, adminEmail });
       if (!res.ok) throw new Error(res.message);
@@ -634,6 +652,14 @@ export default function AdminDashboard() {
   };
 
   const handleCorrection = async (data) => {
+    const typeLabel =
+      data.fixMode === 'set_out' ? 'forcer une sortie' :
+      data.fixMode === 'add_pair' ? 'ajouter une paire complete' :
+      'supprimer le dernier pointage';
+    const detail = (data.email || '') + ' le ' + (data.date || '') +
+      (data.fixMode !== 'remove_last' && data.out ? ' a ' + data.out + ' (sortie)' : '') +
+      (data.fixMode === 'add_pair' && data.inTime ? ' / entree ' + data.inTime : '');
+    if (!(await requestConfirm({ title: 'Appliquer une correction', message: 'Voulez-vous ' + typeLabel + ' pour ' + detail + ' ?', confirmLabel: 'Appliquer', danger: true }))) return;
     try {
       const res = await apiCall({ action: 'correction_apply', token, ...data, adminEmail });
       if (!res.ok) throw new Error(res.message);
@@ -1406,10 +1432,30 @@ export default function AdminDashboard() {
 
         {activeView === 'aide' && (
           <Reveal delay={40}>
-            <AdminHelp />
+            <AdminHelp
+              onOpenView={openAdminView}
+              onStartTour={() => setTourOpen(true)}
+            />
           </Reveal>
         )}
       </div>
+
+      {tourOpen && (
+        <AdminTour
+          onOpenView={openAdminView}
+          onClose={() => setTourOpen(false)}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title={confirmBody.title}
+        message={confirmBody.message}
+        confirmLabel={confirmBody.confirmLabel}
+        danger={confirmBody.danger}
+        onConfirm={() => confirmResolveRef.current && confirmResolveRef.current(true)}
+        onCancel={() => confirmResolveRef.current && confirmResolveRef.current(false)}
+      />
     </div>
   );
 }

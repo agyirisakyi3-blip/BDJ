@@ -167,18 +167,24 @@ export default function HomePage() {
       />
       <SetupBanner />
       <StatusCard />
-      <ScheduleCard />
-      <AnnouncementsCard />
-      <ScanButton onScan={() => {
-        if (!config) { showFeedback('warn', 'Parametres en cours de chargement.'); return; }
-        if (!profile) { setShowProfile(true); return; }
-        setShowScanner(true);
-      }} />
-      <BreakControls onFeedback={showFeedback} />
-      <p className="hint">Scannez le QR code a l'entree du bureau</p>
-      <RecentActivity />
-      <WeekChart />
-      <MonthSummary />
+
+      <div className="action-zone">
+        <ScanButton onScan={() => {
+          if (!config) { showFeedback('warn', 'Parametres en cours de chargement.'); return; }
+          if (!profile) { setShowProfile(true); return; }
+          setShowScanner(true);
+        }} />
+        <BreakControls onFeedback={showFeedback} />
+        <p className="hint">Scannez le QR code a l'entree du bureau</p>
+      </div>
+
+      <div className="info-zone">
+        <ScheduleCard />
+        <AnnouncementsCard />
+        <RecentActivity />
+        <WeekChart />
+        <MonthSummary />
+      </div>
 
       <Suspense fallback={null}>
         <ScannerModal isOpen={showScanner} onClose={() => setShowScanner(false)} onScan={handleScan} />

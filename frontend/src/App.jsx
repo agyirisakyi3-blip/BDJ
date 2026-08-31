@@ -6,6 +6,7 @@ import BottomNav from './components/layout/BottomNav';
 import OfflinePill from './components/layout/OfflinePill';
 import Feedback from './components/shared/Feedback';
 import ConsentBanner from './components/shared/ConsentBanner';
+import PageLoader from './components/shared/PageLoader';
 
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const EmployeeDetailPage = lazy(() => import('./pages/EmployeeDetailPage'));
@@ -47,7 +48,7 @@ function AppContent() {
       </div>
       <OfflinePill />
       <main className="app">
-        <Suspense fallback={null}>
+        <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/admin" element={<AdminPage />} />
