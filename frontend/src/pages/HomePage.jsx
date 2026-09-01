@@ -79,6 +79,7 @@ export default function HomePage() {
         office: res.office,
         tenant: payload.tenant || tenantFromProfile(),
         breakMinToday: res.breakMinToday || 0,
+        late: !!(res.late && res.action === 'Check-in'),
       };
       if (res.action === 'Check-in') newStatus.checkinTime = res.time;
       else newStatus.checkinTime = (prev && prev.checkinTime) || null;
@@ -87,11 +88,14 @@ export default function HomePage() {
       showScanSuccess(res.action, res.time, profile?.name);
       const loc = res.office ? ' à ' + res.office : '';
       let msg;
-      if (res.action === 'Check-in') msg = 'Vous êtes passé' + (loc || '') + ' à ' + res.time + '.';
+      if (res.action === 'Check-in' && res.late) {
+        msg = 'Vous êtes passé à ' + res.time + ': vous êtes en retard.';
+        showFeedback('warn', msg);
+      } else if (res.action === 'Check-in') msg = 'Vous êtes passé' + (loc || '') + ' à ' + res.time + '.';
       else if (res.action === 'Check-out') msg = 'Vous êtes sorti' + loc + ' à ' + res.time + '.';
       else if (res.action === 'Break-out') msg = 'Pause démarrée à ' + res.time + '.';
       else msg = 'On reprend le travail à ' + res.time + '.';
-      showFeedback('success', msg);
+      if (!(res.action === 'Check-in' && res.late)) showFeedback('success', msg);
     } catch (err) {
       setProcessing(false);
       if (err && err.offline) {

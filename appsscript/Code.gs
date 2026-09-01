@@ -509,7 +509,7 @@ function getConfig_(ss) {
   cfg.appName = cfg.appName || 'Liste Des Presences';
   cfg.officeName = cfg.officeName || 'Head Office';
   cfg.adminEmail = cfg.adminEmail || '';
-  cfg.lateAfter = cfg.lateAfter || '';
+  cfg.lateAfter = cfg.lateAfter || '08:30';
   cfg.officeLat = Number(cfg.officeLat);
   cfg.officeLng = Number(cfg.officeLng);
   cfg.radiusMeters = Number(cfg.radiusMeters);
@@ -707,7 +707,7 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
   for (var i = data.length - 1; i > 0; i--) {
     var row = data[i];
     if (row[3] && String(row[3]).toLowerCase() === email && cellDateStr_(row[0], tz) === dateStr) {
-      todayRows.push({ action: String(row[4]), sec: timeToSec_(String(row[1])), office: String(row[10] || '') });
+      todayRows.push({ action: String(row[4]), sec: timeToSec_(cellTimeStr_(row[1], tz)), office: String(row[10] || '') });
     }
   }
 
@@ -766,6 +766,14 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
     office = { name: (todayRows[0] && todayRows[0].office) || cfg.officeName || '' };
   }
 
+  /* Late alert at check-in: late when the scan lands after the employee's
+     cutoff (per-person shiftStart, falling back to the 08:30 lateAfter). */
+  var isLate = false;
+  if (action === 'Check-in') {
+    var cutoffSec = lateResolver_(ss, cfg)(email);
+    isLate = cutoffSec >= 0 && nowSec > cutoffSec;
+  }
+
   /* Selfie proof at check-in (config selfieMode: off | optional | required). */
   var selfieFileId = '';
   var photo = String(payload.photoDataUrl || '');
@@ -800,6 +808,7 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
     time: timeStr,
     status: status,
     office: office.name || '',
+    late: isLate,
     selfieSaved: !!selfieFileId,
     breakMinToday: computeBreakMinutes_(todayRows.concat([{ action: action, sec: nowSec }]))
   };
@@ -1196,7 +1205,7 @@ function myExport_(payload, cfg, now, tz, ss) {
     if (String(r[3] || '').trim().toLowerCase() !== email) continue;
     rows.push({
       date: cellDateStr_(r[0], tz),
-      time: String(r[1] || ''),
+      time: cellTimeStr_(r[1], tz),
       name: String(r[2] || ''),
       action: String(r[4] || ''),
       status: String(r[5] || ''),
@@ -1265,8 +1274,8 @@ function recentAttendance_(payload, cfg, now, tz, ss) {
     var r = data[i];
     if (String(r[3] || '').trim().toLowerCase() === email) {
       out.push({
-        date: cellDateStr_(r[0], tz),
-        time: String(r[1] || ''),
+date: cellDateStr_(r[0], tz),
+        time: cellTimeStr_(r[1], tz),
         action: String(r[4] || ''),
         office: String(r[10] || '')
       });
@@ -2135,14 +2144,14 @@ function computeReport_(rows, from, to, lateAfterSec, tz) {
     var email = String(r[3] || '').toLowerCase();
     if (!email) continue;
     var action = String(r[4] || '');
-    var sec = timeToSec_(String(r[1] || ''));
+    var sec = timeToSec_(cellTimeStr_(r[1], tz));
     if (sec < 0) continue;
     var key = email + '|' + d;
     if (!byKey[key]) {
       byKey[key] = { email: email, name: String(r[2] || ''), date: d, rows: [] };
       order.push(key);
     }
-    byKey[key].rows.push({ time: String(r[1] || ''), sec: sec, action: action });
+    byKey[key].rows.push({ time: cellTimeStr_(r[1], tz), sec: sec, action: action });
   }
 
   var pairs = [];
@@ -2684,5 +2693,18 @@ function cellDateStr_(cell, tz) {
   if (cell instanceof Date) return Utilities.formatDate(cell, tz, 'yyyy-MM-dd');
   var s = String(cell || '').trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return s;
+}
+
+/**
+ * Extract an HH:mm:ss string from a spreadsheet cell that may be a Date object
+ * (Sheets stores pure times as dates on the 1899-12-30 base day) or a plain
+ * string like "08:30" / "08:30:00".
+ */
+function cellTimeStr_(cell, tz) {
+  if (cell instanceof Date) return Utilities.formatDate(cell, tz, 'HH:mm:ss');
+  var s = String(cell || '').trim();
+  if (!s) return s;
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s + ':00';
   return s;
 }
