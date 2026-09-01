@@ -314,6 +314,12 @@ html, body {
 }
 .status-avatar.in  { background: linear-gradient(135deg, #0763a0, #0e86c4); box-shadow: 0 6px 24px -4px rgba(14, 134, 196, 0.5); transform: scale(1.02); }
 .status-avatar.out { background: linear-gradient(135deg, #475569, #64748b); }
+.status-avatar.has-photo {
+  background-size: cover;
+  background-position: center;
+}
+.status-avatar.has-photo.in,
+.status-avatar.has-photo.out { background-size: cover; background-position: center; box-shadow: 0 6px 24px -4px rgba(0, 0, 0, 0.35); }
 
 .status-info { flex: 1; min-width: 0; }
 .status-label-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1409,6 +1415,34 @@ html[data-theme] body.admin-view .login-split { box-shadow: 0 20px 48px -20px rg
   transform: scaleX(-1); /* mirror like a real mirror */
 }
 .selfie-frame img { transform: none; }
+
+/* Profile photo (avatar) in the profile modal */
+.profile-photo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 16px;
+}
+.profile-photo-avatar {
+  width: 64px; height: 64px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 22px; color: #fff;
+  overflow: hidden;
+  box-shadow: 0 4px 14px -3px rgba(0, 0, 0, 0.35);
+}
+.profile-photo-avatar.photo {
+  object-fit: cover;
+  background-size: cover;
+  background-position: center;
+}
+.profile-photo-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.profile-photo-controls .ghost-btn { justify-content: flex-start; }
 
 /* Profile reminders checkbox */
 .check-row {

@@ -101,7 +101,9 @@ export default memo(function StatusCard() {
           <circle className="ring-fill" cx="38" cy="38" r="35"
             style={{ strokeDashoffset: RING_CIRC * (1 - ringFraction) }}/>
         </svg>
-        <div className={avatarClass} style={avatarStyle}>{avatarText}</div>
+        <div className={avatarClass + (profile && profile.photo && profile.photo.indexOf('data:') === 0 ? ' has-photo' : '')} style={profile && profile.photo && profile.photo.indexOf('data:') === 0 ? { backgroundImage: `url(${profile.photo})` } : avatarStyle}>
+          {profile && profile.photo && profile.photo.indexOf('data:') === 0 ? null : avatarText}
+        </div>
       </div>
       <div className="status-info">
         <div className="status-label-row">
