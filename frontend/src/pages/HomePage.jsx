@@ -9,6 +9,7 @@ import ScheduleCard from '../components/home/ScheduleCard';
 import AnnouncementsCard from '../components/home/AnnouncementsCard';
 import ScanButton from '../components/home/ScanButton';
 import BreakControls from '../components/home/BreakControls';
+import BreakPrompt from '../components/home/BreakPrompt';
 import RecentActivity from '../components/home/RecentActivity';
 import WeekChart from '../components/home/WeekChart';
 import MonthSummary from '../components/home/MonthSummary';
@@ -196,6 +197,7 @@ export default function HomePage() {
         <OnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
       </Suspense>
       <ScanSuccess {...scanSuccess} />
+      <BreakPrompt onBreak={handleBreak} />
     </>
   );
 }
