@@ -2,6 +2,7 @@ import { useState, useEffect, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './contexts/AppContext';
 import HomePage from './pages/HomePage';
+import EmployeeLogin from './components/EmployeeLogin';
 import BottomNav from './components/layout/BottomNav';
 import OfflinePill from './components/layout/OfflinePill';
 import Feedback from './components/shared/Feedback';
@@ -14,7 +15,7 @@ const HelpModal = lazy(() => import('./components/modals/HelpModal'));
 const HistoryModal = lazy(() => import('./components/modals/HistoryModal'));
 
 function AppContent() {
-  const { consent } = useApp();
+  const { consent, authenticated, authLoaded } = useApp();
   const [showHelp, setShowHelp] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -36,6 +37,22 @@ function AppContent() {
         <ConsentBanner />
       </>
     );
+  }
+
+  if (!authLoaded) {
+    return (
+      <div className="bg-decor" aria-hidden="true">
+        <div className="blob blob-1"></div>
+        <div className="blob blob-2"></div>
+        <div className="blob blob-3"></div>
+        <div className="grain"></div>
+        <PageLoader />
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <EmployeeLogin />;
   }
 
   return (

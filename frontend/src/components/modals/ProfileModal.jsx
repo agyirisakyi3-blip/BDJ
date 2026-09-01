@@ -5,12 +5,13 @@ import { avatarHue, avatarInitials } from '../../utils';
 import PhotoModal from './PhotoModal';
 
 export default function ProfileModal({ isOpen, onClose }) {
-  const { profile, setProfile, showFeedback, refreshAdminAccess, loadRecent, loadWeek, loadMonth, config, setStatus } = useApp();
+  const { profile, setProfile, showFeedback, refreshAdminAccess, loadRecent, loadWeek, loadMonth, config, setStatus, authenticated, logout } = useApp();
   const [name, setName] = useState(profile?.name || '');
   const [email, setEmail] = useState(profile?.email || '');
   const [tenant, setTenant] = useState(profile?.tenant || config?.DEFAULT_TENANT || '');
   const [photo, setPhoto] = useState(profile?.photo || '');
   const [photoOpen, setPhotoOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [remind, setRemind] = useState(() => {
     try { return localStorage.getItem('att.remind.v1') === '1'; } catch { return false; }
   });
@@ -37,9 +38,15 @@ export default function ProfileModal({ isOpen, onClose }) {
     loadMonth();
   };
 
+  const handleLogout = () => {
+    logout();
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const hue = avatarHue(name || email || '?');
+  const locked = !!authenticated;
 
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-label="Vos coordonnees">
@@ -64,10 +71,10 @@ export default function ProfileModal({ isOpen, onClose }) {
             {photo && <button className="ghost-btn sm danger-text" type="button" onClick={() => setPhoto('')}>Retirer</button>}
           </div>
         </div>
-        <label>Nom</label>
-        <input type="text" placeholder="Nom complet" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
-        <label>Email</label>
-        <input type="email" placeholder="vous@entreprise.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <label>Nom {locked && <span className="opt">(verifié)</span>}</label>
+        <input type="text" placeholder="Nom complet" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} disabled={locked} />
+        <label>Email {locked && <span className="opt">(verifié)</span>}</label>
+        <input type="email" placeholder="vous@entreprise.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={locked} />
         <label>Code espace <span className="opt">(facultatif)</span></label>
         <input type="text" placeholder="ex. acme" autoComplete="off" value={tenant} onChange={(e) => setTenant(e.target.value)} />
         <p className="hint">Laissez vide pour l'espace par défaut.</p>
@@ -77,7 +84,20 @@ export default function ProfileModal({ isOpen, onClose }) {
         </label>
         <p className="hint">Votre nom, email et historique de pointage sont enregistrés dans la feuille Google de l'entreprise.</p>
         {error && <p className="feedback error">{error}</p>}
-        <button className="primary-btn" type="button" onClick={handleSave}>Enregistrer</button>
+        {confirmLogout ? (
+          <div className="confirm-actions profile-logout-actions">
+            <button className="ghost-btn" type="button" onClick={() => setConfirmLogout(false)}>Annuler</button>
+            <button className="primary-btn danger-btn confirm-submit" type="button" onClick={handleLogout}>Se déconnecter</button>
+          </div>
+        ) : (
+          <button className="primary-btn" type="button" onClick={handleSave}>Enregistrer</button>
+        )}
+        {!confirmLogout && (
+          <button className="ghost-btn danger-text profile-logout-btn" type="button" onClick={() => setConfirmLogout(true)}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{width:15,height:15,marginRight:6}}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Se déconnecter
+          </button>
+        )}
       </div>
       <PhotoModal isOpen={photoOpen} onClose={() => setPhotoOpen(false)} onCapture={(d) => { if (d !== undefined) setPhoto(d); }} existing={photo} />
     </div>

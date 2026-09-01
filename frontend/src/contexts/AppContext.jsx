@@ -11,11 +11,13 @@ const LS_ONBOARDED = 'att.onboarded.v1';
 const LS_THEME = 'att.theme.v1';
 const LS_CONSENT = 'att.consent.v1';
 const LS_REMIND = 'att.remind.v1';
+const LS_AUTH = 'att.auth.v1';
 
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
   const [profile, setProfileRaw, profileLoaded] = useEncryptedStorage(LS_PROFILE, null);
+  const [auth, setAuthRaw, authLoaded] = useEncryptedStorage(LS_AUTH, null);
   const [status, setStatusRaw, statusLoaded] = useEncryptedStorage(LS_STATUS, null);
   const [config, setConfig] = useState({ appName: CONFIG.APP_NAME });
   const [consent, setConsentRaw] = useState(() => {
@@ -86,6 +88,26 @@ export function AppProvider({ children }) {
     setOnboardedRaw(true);
     try { localStorage.setItem(LS_ONBOARDED, '1'); } catch {}
   }, []);
+
+  const login = useCallback(async (user, sessionToken) => {
+    await setAuthRaw({ user, sessionToken, ts: Date.now() });
+    await setProfileRaw({
+      name: user && user.name ? user.name : (profile && profile.name) || '',
+      email: user && user.email ? user.email : (profile && profile.email) || '',
+      tenant: (user && user.tenant ? String(user.tenant).trim() : '') || (profile && profile.tenant) || '',
+      photo: (profile && profile.photo) || '',
+    });
+  }, [setAuthRaw, setProfileRaw, profile]);
+
+  const logout = useCallback(async () => {
+    await setAuthRaw(null);
+    await setProfileRaw(null);
+    setStatusRaw(null);
+    setRecent([]); setWeek([]); setMonthSummary(null);
+    setIsAdmin(false);
+    setAdminToken('');
+    setAdminEmail('');
+  }, [setAuthRaw, setProfileRaw, setStatusRaw]);
 
   // Theme
   useEffect(() => {
@@ -226,6 +248,8 @@ export function AppProvider({ children }) {
 
   const value = useMemo(() => ({
     profile, setProfile, profileLoaded,
+    auth, authLoaded, authenticated: !!(auth && auth.user),
+    login, logout,
     status, setStatus, statusLoaded,
     config, setConfig,
     consent, setConsent,
@@ -250,6 +274,7 @@ export function AppProvider({ children }) {
     profile, profileLoaded, status, statusLoaded, config, consent, onboarded, themeMode,
     isAdmin, adminToken, adminEmail, feedback, recent, recentLoading, week, weekLoading,
     shift, monthSummary, employees, admins, leaves, holidays, adminData, privacyNoticeShown,
+    auth, authLoaded, login, logout,
     setProfile, setStatus, setConfig, setConsent, setOnboarded, cycleTheme, setIsAdmin,
     setAdminToken, setAdminEmail, showFeedback, loadRecent, loadWeek, loadMonth,
     setEmployees, setAdmins, setLeaves, setHolidays, setAdminData,

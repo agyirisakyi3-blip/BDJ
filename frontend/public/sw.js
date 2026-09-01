@@ -1,4 +1,4 @@
-var CACHE = 'att-v32';
+var CACHE = 'att-v34';
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
@@ -20,8 +20,25 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
 
-  // For same-origin requests: stale-while-revalidate
+  // Same-origin requests
   if (e.request.url.indexOf(self.location.origin) === 0) {
+    // Page navigations: network-first so updates always win
+    if (e.request.mode === 'navigate') {
+      e.respondWith(
+        fetch(e.request).then(function (resp) {
+          if (resp && resp.status === 200) {
+            var copy = resp.clone();
+            caches.open(CACHE).then(function (cache) { cache.put('./index.html', copy); });
+          }
+          return resp;
+        }).catch(function () {
+          return caches.match('./index.html');
+        })
+      );
+      return;
+    }
+
+    // Sub-resources: stale-while-revalidate
     e.respondWith(
       caches.open(CACHE).then(function (cache) {
         return cache.match(e.request).then(function (hit) {
@@ -32,7 +49,6 @@ self.addEventListener('fetch', function (e) {
             return resp;
           }).catch(function () {
             if (hit) return hit;
-            if (e.request.mode === 'navigate') return cache.match('./index.html');
             return new Response('', { status: 504, statusText: 'Offline' });
           });
           return hit || fetchPromise;
