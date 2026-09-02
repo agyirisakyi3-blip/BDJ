@@ -242,6 +242,9 @@ function handleRequest_(e) {
     if (action === 'correction_apply') {
       return json_(correctionApply_(payload, cfg, now, tz, ss));
     }
+    if (action === 'send_codes') {
+      return json_(sendCodes_(payload, cfg, now, tz, ss));
+    }
     if (action === 'user_login') {
       return json_(userLogin_(payload, cfg, now, tz, ss));
     }
@@ -1693,6 +1696,72 @@ function employeeDelete_(payload, cfg, now, tz, ss) {
     }
   }
   return error_('Employee not found: ' + email);
+}
+
+/**
+ * Email every roster member (Employees + Roster sheets) their personal 6-digit
+ * sign-in code. Any member without a code gets one generated and saved first.
+ * Admin-gated. Returns a summary of how many codes were sent / failed.
+ */
+function sendCodes_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+
+  var staff = expectedStaff_(ss);
+  if (!staff.length) return error_('No one in the roster yet (Employees / Roster).');
+
+  // Backfill missing codes (e.g. names without a 6-digit code).
+  ensureEmployeeCodes_(ss);
+
+  var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
+  var c = sheet ? employeeColumns_(sheet) : { email: 1, code: 10, name: 0 };
+  var codeByEmail = {};
+  if (sheet) {
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      var em = String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase();
+      var cd = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
+      if (em && cd) codeByEmail[em] = cd;
+    }
+  }
+
+  var sent = 0;
+  var failed = [];
+  var appName = cfg.appName || 'Attendance';
+
+  for (var s = 0; s < staff.length; s++) {
+    var email = String(staff[s].email || '').trim().toLowerCase();
+    if (!email) continue;
+    // Roster-only entries have no Employees row, so no code to send.
+    if (!codeByEmail[email]) {
+      failed.push(email + ' (no code on Employees)');
+      continue;
+    }
+    var name = staff[s].name || email.split('@')[0] || email;
+    try {
+      MailApp.sendEmail({
+        to: email,
+        subject: 'Your ' + appName + ' sign-in code',
+        body: 'Hello ' + name + ',\n\n' +
+          'Your personal sign-in code for ' + appName + ' is: ' + codeByEmail[email] + '\n\n' +
+          'Keep it private. It is used to clock in and out, and can be changed by an administrator.\n\n' +
+          'If you did not expect this email, please ignore it.'
+      });
+      sent++;
+      logAudit_(ss, String(payload.adminEmail || 'admin'), 'Sign-in code emailed to ' + email, 'CODE_SENT', now, tz);
+    } catch (e) {
+      failed.push(email);
+    }
+  }
+
+  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Bulk codes sent to ' + sent + ' roster member(s)' + (failed.length ? ' (' + failed.length + ' failed)' : ''), 'CODES_SENT', now, tz);
+  return {
+    ok: true,
+    sent: sent,
+    total: staff.length,
+    failed: failed,
+    message: sent + ' sign-in code' + (sent === 1 ? '' : 's') + ' sent to ' + sent + ' email' + (sent === 1 ? '' : 's') + '.'
+  };
 }
 
 /* ================= Leave & holidays ================= */

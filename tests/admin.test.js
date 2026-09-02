@@ -313,6 +313,39 @@ describe('Employee Management', () => {
     await page.waitForFunction(() => document.getElementById('feedback').textContent.indexOf('supprime') !== -1, { timeout: 5000 });
     await page.close();
   });
+
+  test('send codes to all emails in the roster', async () => {
+    const list = [
+      { name: 'Alice Dubois', email: 'alice@bdj.com', department: 'IT', code: '111111', shiftStart: '', shiftEnd: '' },
+      { name: 'Bob Martin', email: 'bob@bdj.com', department: '', code: '222222', shiftStart: '', shiftEnd: '' }
+    ];
+    const cap = apiCapture(apiRoutes({
+      admin_check: { ok: true, isAdmin: true },
+      admin: body => ({
+        ok: true,
+        sessionToken: 'tok-123',
+        admin: adminFixture({ range: { from: body.from || todayStr(), to: body.to || todayStr() } })
+      }),
+      employees: () => ({ ok: true, employees: list }),
+      send_codes: () => ({ ok: true, sent: 2, total: 2, failed: [] })
+    }));
+    const page = await bootPage(browser, { profile: true, api: b => cap.handler(b), hash: '#admin' });
+    await page.waitForFunction(() => !document.getElementById('view-admin').classList.contains('hidden'), { timeout: 10000 });
+    await loginAdmin(page);
+    await expandAdminSection(page, 'Employes');
+    await page.waitForFunction(() => document.querySelectorAll('#emp-table tbody tr').length === 2, { timeout: 10000 });
+
+    page.once('dialog', d => d.accept());
+    await page.click('#btn-emp-send-codes');
+    await page.waitForFunction(() => document.getElementById('feedback').textContent.indexOf('codes') !== -1, { timeout: 10000 });
+
+    const call = cap.ofAction('send_codes')[0];
+    expect(call).toBeTruthy();
+    expect(call.token).toBe('tok-123');
+    const fb = await page.$eval('#feedback', el => el.textContent);
+    expect(fb).toContain('2 codes');
+    await page.close();
+  });
 });
 
 /* ==========================================

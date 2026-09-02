@@ -616,6 +616,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14, 134, 1
 .emp-form .range-field input { margin-top: 5px; }
 .emp-form .range-btn { grid-column: 1 / -1; width: 100%; }
 .emp-table { margin-top: 4px; }
+.codes-action { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 
 .ghost-btn.sm { padding: 5px 10px; font-size: 11px; border-radius: 8px; }
 

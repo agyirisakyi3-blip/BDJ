@@ -561,6 +561,18 @@ export default function AdminDashboard() {
     } catch (err) { showFeedback('error', err.message); }
   };
 
+  const handleSendCodes = async () => {
+    if (!(await requestConfirm({ title: 'Envoyer les codes', message: 'Envoyer le code personnel a chaque membre du personnel par email ? Seuls les membres avec un code configur\u00e9 dans la feuille Employees seront contactes.', confirmLabel: 'Envoyer' }))) return;
+    try {
+      const res = await apiCall({ action: 'send_codes', token, adminEmail });
+      if (!res.ok) throw new Error(res.message);
+      const msg = res.sent + ' code' + (res.sent === 1 ? '' : 's') + ' envoye' + (res.sent === 1 ? '' : 's') +
+        (res.failed && res.failed.length ? ' (' + res.failed.length + ' echec' + (res.failed.length > 1 ? 's' : '') + ')' : '') + '.';
+      showFeedback(res.failed && res.failed.length ? 'warn' : 'success', msg);
+      loadSubData();
+    } catch (err) { showFeedback('error', err.message); }
+  };
+
   const handleBulkImport = async (rows) => {
     let added = 0, updated = 0, failed = 0;
     for (const r of rows) {
@@ -1369,7 +1381,7 @@ export default function AdminDashboard() {
         {activeView === 'gestion' && (
           <>
             <p className="stat-caption">Gestion</p>
-            <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} onCodeReset={handleCodeReset} onBulkImport={handleBulkImport} />
+            <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} onCodeReset={handleCodeReset} onBulkImport={handleBulkImport} onSendCodes={handleSendCodes} />
             <AdminSection admins={admins} onAdd={handleAdminAdd} onRemove={handleAdminRemove} />
             <LeaveSection leaves={leaves} onAdd={handleLeaveAdd} onDelete={handleLeaveDelete} />
             <HolidaySection holidays={holidays} onAdd={handleHolidayAdd} onDelete={handleHolidayDelete} />
@@ -1470,7 +1482,7 @@ export default function AdminDashboard() {
   );
 }
 
-function EmployeeSection({ employees, onAdd, onDelete, onCodeReset, onBulkImport }) {
+function EmployeeSection({ employees, onAdd, onDelete, onCodeReset, onBulkImport, onSendCodes }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -1582,6 +1594,10 @@ function EmployeeSection({ employees, onAdd, onDelete, onCodeReset, onBulkImport
         </div>
         <button className="primary-btn range-btn" onClick={handleBulk} disabled={bulkLoading || !bulkText.trim()}>{bulkLoading ? 'Import...' : 'Importer en masse'}</button>
         {bulkMsg && <p className="hint">{bulkMsg}</p>}
+      </div>
+      <div className="bulk-row codes-action">
+        <p className="hint">Envoyez a chaque membre son code personnel (6 chiffres) par email. Chacun reçoit uniquement son propre code.</p>
+        <button className="ghost-btn range-btn" onClick={onSendCodes}>Envoyer les codes a tous</button>
       </div>
       <div className="table-wrap emp-table">
         <table>

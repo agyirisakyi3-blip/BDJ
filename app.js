@@ -229,6 +229,7 @@ import {
     setupSortable('report-table', 'reportView', renderReportTable);
     $('btn-provision').addEventListener('click', onProvision);
     $('btn-emp-add').addEventListener('click', onEmployeeAdd);
+    $('btn-emp-send-codes').addEventListener('click', onSendCodes);
     $('btn-adm-add').addEventListener('click', onAdminAdd);
     $('btn-lv-add').addEventListener('click', onLeaveAdd);
     $('btn-hf-add').addEventListener('click', onHolidayAdd);
@@ -2432,6 +2433,30 @@ import {
       loadEmployees();
       showFeedback('success', email + ' supprime.');
     }).catch(function (err) {
+      handleAdminAuthFail(err);
+      showError('emp-error', err.message);
+    });
+  }
+
+  function onSendCodes() {
+    if (!state.adminToken) { showError('emp-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
+    if (!window.confirm('Envoyer le code personnel a chaque membre du personnel par email ? Seuls les membres avec un code configure dans la feuille Employees seront contactes.')) return;
+    hideError('emp-error');
+    var btn = $('btn-emp-send-codes');
+    var original = btn.textContent;
+    btn.textContent = 'Envoi...';
+    btn.disabled = true;
+    api({ action: 'send_codes', token: state.adminToken, adminEmail: state.adminEmail }).then(function (res) {
+      btn.textContent = original;
+      btn.disabled = false;
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'envoyer les codes');
+      var msg = res.sent + ' code' + (res.sent === 1 ? '' : 's') + ' envoye' + (res.sent === 1 ? '' : 's');
+      if (res.failed && res.failed.length) msg += ' (' + res.failed.length + ' echec' + (res.failed.length > 1 ? 's' : '') + ')';
+      showFeedback(res.failed && res.failed.length ? 'warn' : 'success', msg + '.');
+      loadEmployees();
+    }).catch(function (err) {
+      btn.textContent = original;
+      btn.disabled = false;
       handleAdminAuthFail(err);
       showError('emp-error', err.message);
     });
