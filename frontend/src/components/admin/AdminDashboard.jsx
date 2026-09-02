@@ -551,6 +551,16 @@ export default function AdminDashboard() {
     } catch (err) { showFeedback('error', err.message); }
   };
 
+  const handleCodeReset = async (email) => {
+    if (!(await requestConfirm({ title: 'Regenerer le code', message: 'Generer un nouveau code pour ' + email + ' ? L\'ancien cessera de fonctionner.', confirmLabel: 'Regenerer' }))) return;
+    try {
+      const res = await apiCall({ action: 'employee_code_reset', token, email });
+      if (!res.ok) throw new Error(res.message);
+      showFeedback('success', 'Nouveau code pour ' + email + ' : ' + res.code);
+      loadSubData();
+    } catch (err) { showFeedback('error', err.message); }
+  };
+
   const handleBulkImport = async (rows) => {
     let added = 0, updated = 0, failed = 0;
     for (const r of rows) {
@@ -1359,7 +1369,7 @@ export default function AdminDashboard() {
         {activeView === 'gestion' && (
           <>
             <p className="stat-caption">Gestion</p>
-            <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} onBulkImport={handleBulkImport} />
+            <EmployeeSection employees={employees} onAdd={handleEmployeeAdd} onDelete={handleEmployeeDelete} onCodeReset={handleCodeReset} onBulkImport={handleBulkImport} />
             <AdminSection admins={admins} onAdd={handleAdminAdd} onRemove={handleAdminRemove} />
             <LeaveSection leaves={leaves} onAdd={handleLeaveAdd} onDelete={handleLeaveDelete} />
             <HolidaySection holidays={holidays} onAdd={handleHolidayAdd} onDelete={handleHolidayDelete} />
@@ -1460,9 +1470,10 @@ export default function AdminDashboard() {
   );
 }
 
-function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
+function EmployeeSection({ employees, onAdd, onDelete, onCodeReset, onBulkImport }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
   const [dept, setDept] = useState('');
   const [role, setRole] = useState('');
   const [phone, setPhone] = useState('');
@@ -1479,10 +1490,13 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
   const handleAdd = async () => {
     if (!name.trim()) { setError('Saisissez le nom.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setError('Email invalide.'); return; }
+    if (code.trim() && !/^\d{6}$/.test(code.trim())) { setError('Le code doit comporter 6 chiffres.'); return; }
     setLoading(true); setError('');
-    await onAdd({ name: name.trim(), email: email.trim(), department: dept.trim(), role: role.trim(), phone: phone.trim(), birth: birth || '', photo, shiftStart, shiftEnd });
+    const data = { name: name.trim(), email: email.trim(), department: dept.trim(), role: role.trim(), phone: phone.trim(), birth: birth || '', photo, shiftStart, shiftEnd };
+    if (code.trim()) data.code = code.trim();
+    await onAdd(data);
     setLoading(false);
-    setName(''); setEmail(''); setDept(''); setRole(''); setPhone(''); setBirth(''); setPhoto('');
+    setName(''); setEmail(''); setCode(''); setDept(''); setRole(''); setPhone(''); setBirth(''); setPhoto('');
   };
 
   const handlePhotoFile = async (file) => {
@@ -1543,6 +1557,7 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
       <div className="emp-form">
         <label className="range-field">Nom<input type="text" placeholder="Nom complet" value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="range-field">Email<input type="email" placeholder="vous@entreprise.com" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+        <label className="range-field">Code personnel <span className="opt">(6 chiffres, facultatif)</span><input type="text" inputMode="numeric" maxLength={6} placeholder="Auto" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} /></label>
         <label className="range-field">Departement <span className="opt">(facultatif)</span><input type="text" placeholder="Informatique" value={dept} onChange={(e) => setDept(e.target.value)} /></label>
         <label className="range-field">Poste <span className="opt">(facultatif)</span><input type="text" placeholder="Developpeur" value={role} onChange={(e) => setRole(e.target.value)} /></label>
         <label className="range-field">Telephone <span className="opt">(facultatif)</span><input type="tel" placeholder="+33 6 12 34 56 78" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
@@ -1570,14 +1585,17 @@ function EmployeeSection({ employees, onAdd, onDelete, onBulkImport }) {
       </div>
       <div className="table-wrap emp-table">
         <table>
-          <thead><tr><th>Nom</th><th>Email</th><th>Departement</th><th>Horaires</th><th></th></tr></thead>
+          <thead><tr><th>Nom</th><th>Email</th><th>Code</th><th>Departement</th><th>Horaires</th><th></th></tr></thead>
           <tbody>
-            {employees.length === 0 ? <tr><td className="empty" colSpan={5}>Aucun employe.</td></tr> : employees.map((e) => (
+            {employees.length === 0 ? <tr><td className="empty" colSpan={6}>Aucun employe.</td></tr> : employees.map((e) => (
               <tr key={e.email}>
                 <td><div className="person-cell"><PhotoAvatar name={e.name} email={e.email} photo={e.photo} /><span className="person-name">{e.name}</span></div></td>
-                <td>{e.email}</td><td>{e.department || '\u2014'}</td>
+                <td>{e.email}</td><td>{e.code || '\u2014'}</td><td>{e.department || '\u2014'}</td>
                 <td>{(e.shiftStart || e.shiftEnd) ? ((e.shiftStart || '--:--') + ' - ' + (e.shiftEnd || '--:--')) : '\u2014'}</td>
-                <td><button className="ghost-btn sm" onClick={() => onDelete(e.email)}>Supprimer</button></td>
+                <td className="row-actions">
+                  {e.code && <button className="ghost-btn sm" onClick={() => onCodeReset(e.email)}>Regenerer</button>}
+                  <button className="ghost-btn sm" onClick={() => onDelete(e.email)}>Supprimer</button>
+                </td>
               </tr>
             ))}
           </tbody>

@@ -189,7 +189,8 @@ export function AppProvider({ children }) {
   const loadRecent = useCallback(() => {
     if (!profile || !isConfigured()) return;
     setRecentLoading(true);
-    apiCall({ action: 'recent', email: profile.email }).then((res) => {
+    const token = auth ? (auth.sessionToken || '') : '';
+    apiCall({ action: 'recent', email: profile.email, token }).then((res) => {
       setRecentLoading(false);
       if (res.ok) setRecent(res.recent || []);
       else if (res.message && !privacyNoticeShown) {
@@ -197,13 +198,14 @@ export function AppProvider({ children }) {
         showFeedback('warn', res.message);
       }
     }).catch(() => setRecentLoading(false));
-  }, [profile, apiCall, privacyNoticeShown, showFeedback]);
+  }, [profile, auth, apiCall, privacyNoticeShown, showFeedback]);
 
   // Load week
   const loadWeek = useCallback(() => {
     if (!profile || !isConfigured()) return;
     setWeekLoading(true);
-    apiCall({ action: 'week', email: profile.email }).then((res) => {
+    const token = auth ? (auth.sessionToken || '') : '';
+    apiCall({ action: 'week', email: profile.email, token }).then((res) => {
       setWeekLoading(false);
       if (res.ok) {
         setWeek(res.week || []);
@@ -213,12 +215,13 @@ export function AppProvider({ children }) {
         showFeedback('warn', res.message);
       }
     }).catch(() => setWeekLoading(false));
-  }, [profile, apiCall, privacyNoticeShown, showFeedback]);
+  }, [profile, auth, apiCall, privacyNoticeShown, showFeedback]);
 
   // Load month
   const loadMonth = useCallback(() => {
     if (!profile || !isConfigured()) return;
-    apiCall({ action: 'myattendance', email: profile.email }).then((res) => {
+    const token = auth ? (auth.sessionToken || '') : '';
+    apiCall({ action: 'myattendance', email: profile.email, token }).then((res) => {
       if (res.ok) {
         const prefix = todayStr().slice(0, 7);
         let days = 0, hours = 0, breakMin = 0, late = 0;
@@ -232,7 +235,7 @@ export function AppProvider({ children }) {
         setMonthSummary({ days, hours, breakMin, late });
       }
     }).catch(() => setMonthSummary(null));
-  }, [profile, apiCall]);
+  }, [profile, auth, apiCall]);
 
   // Refresh admin access
   const refreshAdminAccess = useCallback(() => {

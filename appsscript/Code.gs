@@ -52,6 +52,8 @@ function onOpen() {
   try {
     SpreadsheetApp.getUi()
       .createMenu('Attendance')
+      .addItem('Restrict login to roster emails', 'enableRosterMode')
+      .addItem('Allow any email to login', 'disableRosterMode')
       .addItem('Enable daily digest (17:00)', 'enableDailyDigest')
       .addItem('Send digest now', 'sendDailyDigestNow')
       .addItem('Enable check-out reminders', 'enableCheckoutReminders')
@@ -185,6 +187,9 @@ function handleRequest_(e) {
     }
     if (action === 'employee_bio_update') {
       return json_(employeeBioUpdate_(payload, cfg, now, tz, ss));
+    }
+    if (action === 'employee_code_reset') {
+      return json_(employeeCodeReset_(payload, cfg, now, tz, ss));
     }
     if (action === 'admin_login') {
       return json_(adminLogin_(payload, cfg, now, tz, ss));
@@ -387,7 +392,7 @@ function ensureSheets_(ss) {
     c.appendRow(['qrSecret', 'ATT' + randomToken_()]);
     c.appendRow(['adminPin', '1234']);
     c.appendRow(['adminEmail', '']);
-    c.appendRow(['rosterMode', 'open']);
+    c.appendRow(['rosterMode', 'roster']);
     c.appendRow(['rosterDomain', '']);
     c.appendRow(['minScanIntervalSec', '60']);
     c.appendRow(['replayMaxAgeMs', '300000']);
@@ -414,8 +419,8 @@ function ensureSheets_(ss) {
   }
   if (!ss.getSheetByName(SHEET_EMPLOYEES)) {
     var e = ss.insertSheet(SHEET_EMPLOYEES);
-    e.appendRow(['Name', 'Email', 'Department', 'Created', 'ShiftStart', 'ShiftEnd', 'Role', 'Phone', 'BirthDate', 'Photo']);
-    e.getRange('A1:J1').setFontWeight('bold');
+    e.appendRow(['Name', 'Email', 'Department', 'Created', 'ShiftStart', 'ShiftEnd', 'Role', 'Phone', 'BirthDate', 'Photo', 'Code']);
+    e.getRange('A1:K1').setFontWeight('bold');
   }
   if (!ss.getSheetByName(SHEET_OFFICES)) {
     var o = ss.insertSheet(SHEET_OFFICES);
@@ -454,6 +459,7 @@ function ensureSheets_(ss) {
   }
   migrateAttendanceSheet_(ss);
   migrateEmployeesSheet_(ss);
+  ensureEmployeeCodes_(ss);
 }
 
 /**
@@ -538,7 +544,7 @@ function getConfig_(ss) {
 
 function publicConfig_(cfg, ss) {
   var offices = (getOffices_(ss, cfg) || []).map(function (o) {
-    return { name: o.name, token: o.token, lat: o.lat, lng: o.lng, radius: o.radius };
+    return { name: o.name, lat: o.lat, lng: o.lng, radius: o.radius };
   });
   return {
     appName: cfg.appName,
@@ -1163,6 +1169,7 @@ function aggregatePeople_(pairs, staff, onSite, checkedInSet, onBreakSet) {
 function myAttendance_(payload, cfg, now, tz, ss) {
   var email = String(payload.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Email required');
+  if (!ownsEmail_(ss, email, String(payload.token || ''))) return sessionError_(ss, email, now, tz);
   var gate = privacyGate_(ss, email, now, tz);
   if (gate) return gate;
 
@@ -1194,6 +1201,7 @@ function myAttendance_(payload, cfg, now, tz, ss) {
 function myExport_(payload, cfg, now, tz, ss) {
   var email = String(payload.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Email required');
+  if (!ownsEmail_(ss, email, String(payload.token || ''))) return sessionError_(ss, email, now, tz);
   var gate = privacyGate_(ss, email, now, tz);
   if (gate) return gate;
 
@@ -1219,6 +1227,7 @@ function myExport_(payload, cfg, now, tz, ss) {
 function myDelete_(payload, cfg, now, tz, ss) {
   var email = String(payload.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Email required');
+  if (!ownsEmail_(ss, email, String(payload.token || ''))) return sessionError_(ss, email, now, tz);
   var gate = privacyGate_(ss, email, now, tz);
   if (gate) return gate;
 
@@ -1265,6 +1274,7 @@ function enableAutoPurge() {
 function recentAttendance_(payload, cfg, now, tz, ss) {
   var email = String(payload.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Email required');
+  if (!ownsEmail_(ss, email, String(payload.token || ''))) return sessionError_(ss, email, now, tz);
   var gate = privacyGate_(ss, email, now, tz);
   if (gate) return gate;
   var att = ss.getSheetByName(SHEET_ATT);
@@ -1287,6 +1297,7 @@ date: cellDateStr_(r[0], tz),
 function weekData_(payload, cfg, now, tz, ss) {
   var email = String(payload.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Email required');
+  if (!ownsEmail_(ss, email, String(payload.token || ''))) return sessionError_(ss, email, now, tz);
   var gate = privacyGate_(ss, email, now, tz);
   if (gate) return gate;
 
@@ -1340,7 +1351,7 @@ function weekData_(payload, cfg, now, tz, ss) {
  * Missing columns resolve to -1 so readers fall back to ''/existing values.
  */
 function employeeColumns_(sheet) {
-  var cols = { name: -1, email: -1, department: -1, created: -1, shiftStart: -1, shiftEnd: -1, role: -1, phone: -1, birth: -1, photo: -1 };
+  var cols = { name: -1, email: -1, department: -1, created: -1, shiftStart: -1, shiftEnd: -1, role: -1, phone: -1, birth: -1, photo: -1, code: -1 };
   if (!sheet) return cols;
   var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   for (var i = 0; i < header.length; i++) {
@@ -1355,6 +1366,7 @@ function employeeColumns_(sheet) {
       case 'phone': cols.phone = i; break;
       case 'birthdate': cols.birth = i; break;
       case 'photo': cols.photo = i; break;
+      case 'code': cols.code = i; break;
     }
   }
   return cols;
@@ -1372,7 +1384,8 @@ function findEmployee_(ss, email) {
         name: String(rows[i][c.name < 0 ? 0 : c.name] || ''),
         department: String(rows[i][c.department < 0 ? 2 : c.department] || ''),
         shiftStart: String(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart] || ''),
-        shiftEnd: String(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd] || '')
+        shiftEnd: String(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd] || ''),
+        code: String(rows[i][c.code < 0 ? 10 : c.code] || '')
       };
     }
   }
@@ -1424,7 +1437,8 @@ function employeesData_(payload, cfg, now, tz, ss) {
         role: String(rows[i][c.role] || ''),
         phone: String(rows[i][c.phone] || ''),
         birth: String(rows[i][c.birth] || ''),
-        photo: String(rows[i][c.photo] || '')
+        photo: String(rows[i][c.photo] || ''),
+        code: String(rows[i][c.code < 0 ? 10 : c.code] || '')
       });
     }
   }
@@ -1451,35 +1465,43 @@ function employeeAdd_(payload, cfg, now, tz, ss) {
   var phone = safeCell_(String(payload.phone || '').trim());
   var birth = safeCell_(String(payload.birth || '').trim());
   var photo = normalizePhoto_(payload.photo);
+  var code = normEmployeeCode_(payload.code);
+  if (String(payload.code || '').trim() && !code) return error_('Code must be exactly 6 digits.');
 
   var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
   ensureEmployeeBioCols_(sheet);
   var c = employeeColumns_(sheet);
   var rows = sheet.getDataRange().getValues();
+  var usedCodes = collectEmployeeCodes_(rows, c);
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() === email) {
+      var existingCode = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
+      if (code && code === existingCode) { /* unchanged */ }
+      else if (code && usedCodes.hasOwnProperty(code)) return error_('This code is already used by another employee.');
       var created = String(rows[i][c.created < 0 ? 3 : c.created] || Utilities.formatDate(now, tz, 'yyyy-MM-dd'));
       var row = [name, email, department, created];
-      // extend row to full width, preserving existing shiftEnd/photo when columns exist
       row[4] = shiftStart;
       row[5] = shiftEnd;
       row[c.role < 0 ? 6 : c.role] = role;
       row[c.phone < 0 ? 7 : c.phone] = phone;
       row[c.birth < 0 ? 8 : c.birth] = birth;
       row[c.photo < 0 ? 9 : c.photo] = photo;
+      row[c.code < 0 ? 10 : c.code] = code || generateUniqueEmployeeCode_(ss, usedCodes);
       writeEmployeeRow_(sheet, i + 1, row);
-      return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo } };
+      return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo, code: row[c.code < 0 ? 10 : c.code] } };
     }
   }
+  if (code && usedCodes.hasOwnProperty(code)) return error_('This code is already used by another employee.');
   var row = [name, email, department, Utilities.formatDate(now, tz, 'yyyy-MM-dd')];
   row[c.role < 0 ? 6 : c.role] = role;
   row[c.phone < 0 ? 7 : c.phone] = phone;
   row[c.birth < 0 ? 8 : c.birth] = birth;
   row[c.photo < 0 ? 9 : c.photo] = photo;
+  row[c.code < 0 ? 10 : c.code] = code || generateUniqueEmployeeCode_(ss, usedCodes);
   if (shiftStart) row[c.shiftStart < 0 ? 4 : c.shiftStart] = shiftStart;
   if (shiftEnd) row[c.shiftEnd < 0 ? 5 : c.shiftEnd] = shiftEnd;
-  sheet.appendRow(padRow_(row, Math.max(6, c.role < 0 ? 6 : 10)));
-  return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo } };
+  sheet.appendRow(padRow_(row, Math.max(11, c.role < 0 ? 6 : 10)));
+  return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo, code: row[c.code < 0 ? 10 : c.code] } };
 }
 
 /** Update bio/photo (+ optional shift times) for an existing employee row. */
@@ -1506,6 +1528,17 @@ function employeeBioUpdate_(payload, cfg, now, tz, ss) {
     if (payload.photo !== undefined) row[c.photo < 0 ? 9 : c.photo] = normalizePhoto_(payload.photo);
     if (payload.shiftStart !== undefined) row[c.shiftStart < 0 ? 4 : c.shiftStart] = normShiftTime_(payload.shiftStart);
     if (payload.shiftEnd !== undefined) row[c.shiftEnd < 0 ? 5 : c.shiftEnd] = normShiftTime_(payload.shiftEnd);
+    if (payload.code !== undefined) {
+      var existingCode = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
+      var newCode = normEmployeeCode_(payload.code);
+      if (!String(payload.code || '').trim()) return error_('Code is required when updating it.');
+      if (!newCode) return error_('Code must be exactly 6 digits.');
+      if (newCode !== existingCode) {
+        var used = collectEmployeeCodes_(rows, c);
+        if (used.hasOwnProperty(newCode)) return error_('This code is already used by another employee.');
+      }
+      row[c.code < 0 ? 10 : c.code] = newCode;
+    }
     writeEmployeeRow_(sheet, i + 1, row);
     return { ok: true, employee: { name: row[c.name < 0 ? 0 : c.name], email: email } };
   }
@@ -1524,6 +1557,7 @@ function ensureEmployeeBioCols_(sheet) {
   if (!headersContains_(headers, 'Photo')) add.push('Photo');
   if (!headersContains_(headers, 'ShiftStart')) add.push('ShiftStart');
   if (!headersContains_(headers, 'ShiftEnd')) add.push('ShiftEnd');
+  if (!headersContains_(headers, 'Code')) add.push('Code');
   if (!add.length) return;
   var start = last + 1;
   for (var i = 0; i < add.length; i++) {
@@ -1541,8 +1575,87 @@ function padRow_(row, width) {
   return row;
 }
 function writeEmployeeRow_(sheet, r, row) {
-  var width = Math.max(10, row.length);
+  var width = Math.max(11, row.length);
   sheet.getRange(r, 1, 1, width).setValues([padRow_(row, width)]);
+}
+/** Validate employee code format (exactly 6 digits) or return '' when invalid. */
+function normEmployeeCode_(v) {
+  var s = String(v || '').trim();
+  return /^\d{6}$/.test(s) ? s : '';
+}
+/** Collect all non-empty employee codes from rows into a lookup map. */
+function collectEmployeeCodes_(rows, c) {
+  var codes = {};
+  for (var i = 1; i < rows.length; i++) {
+    var code = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
+    if (code) codes[code] = true;
+  }
+  return codes;
+}
+/** Return a unique 6-digit code not in the provided usedCodes map. */
+function generateUniqueEmployeeCode_(ss, usedCodes) {
+  var code;
+  do { code = String(Math.floor(100000 + Math.random() * 900000)); } while (usedCodes && usedCodes[code]);
+  return code;
+}
+/** Backfill missing codes for existing Employees rows (migration). */
+function ensureEmployeeCodes_(ss) {
+  var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
+  if (!sheet) return;
+  ensureEmployeeBioCols_(sheet);
+  var c = employeeColumns_(sheet);
+  if (c.code < 0) return;
+  var rows = sheet.getDataRange().getValues();
+  var usedCodes = {};
+  var updates = [];
+  for (var i = 1; i < rows.length; i++) {
+    var code = String(rows[i][c.code] || '').trim();
+    if (code) { usedCodes[code] = true; continue; }
+    var fresh = generateUniqueEmployeeCode_(ss, usedCodes);
+    usedCodes[fresh] = true;
+    updates.push({ row: i + 1, code: fresh });
+  }
+  for (var u = 0; u < updates.length; u++) {
+    sheet.getRange(updates[u].row, c.code + 1).setValue(updates[u].code);
+  }
+}
+/** Admin action: generate a new unique code for an employee. */
+function employeeCodeReset_(payload, cfg, now, tz, ss) {
+  var access = adminAccess_(payload, cfg, now, tz, ss);
+  if (!access.ok) return error_(access.message);
+  var email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return error_('Email required');
+  var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
+  if (!sheet) return error_('Employees sheet not found');
+  ensureEmployeeBioCols_(sheet);
+  var c = employeeColumns_(sheet);
+  if (c.code < 0) return error_('Code column not configured.');
+  var rows = sheet.getDataRange().getValues();
+  var usedCodes = collectEmployeeCodes_(rows, c);
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() !== email) continue;
+    var oldCode = String(rows[i][c.code] || '').trim();
+    if (oldCode) delete usedCodes[oldCode];
+    var newCode = generateUniqueEmployeeCode_(ss, usedCodes);
+    sheet.getRange(i + 1, c.code + 1).setValue(newCode);
+    logAudit_(ss, String(payload.adminEmail || 'admin'), 'Employee code reset: ' + email, 'CODE_RESET', now, tz);
+    return { ok: true, code: newCode };
+  }
+  return error_('Employee not found: ' + email);
+}
+/** Rate-limit fixed-code login attempts: max 5 failures then lockout 15 min. */
+function codeAttemptOk_(ss, email, attempt, expected, now) {
+  var cache = CacheService.getScriptCache();
+  var key = 'codetry:user:' + ss.getId() + ':' + email;
+  var state = { c: 0, until: 0 };
+  var entry = cache.get(key);
+  if (entry) { try { state = JSON.parse(entry); } catch (e) {} }
+  if (now.getTime() < Number(state.until || 0)) return false;
+  if (String(attempt).trim() === String(expected).trim()) { cache.remove(key); return true; }
+  state.c = Number(state.c || 0) + 1;
+  if (state.c >= 5) { state.c = 0; state.until = now.getTime() + 900000; }
+  cache.put(key, JSON.stringify(state), 900);
+  return false;
 }
 /** Accept a photo as a small data URL, or '' / DataURL: prefix only. Reject oversized values. */
 function normalizePhoto_(v) {
@@ -1918,15 +2031,29 @@ function adminLogin_(payload, cfg, now, tz, ss) {
   var guard = pinGuard_(cfg, now, ss);
   if (guard.locked) return { ok: false, message: guard.message };
 
+  if (!writeBudget_('otpq:a:' + ss.getId() + ':' + email, 3, 3600000)) {
+    logAudit_(ss, email, 'Admin OTP send rate limit hit', 'OTP_QUOTA', now, tz);
+    return error_('Too many admin codes requested this hour. Try again later.');
+  }
+
   var sent = sendOtpTo_(email, now, ss);
   logAudit_(ss, email, 'Admin OTP requested', 'ADMIN_OTP', now, tz);
   return {
     ok: true,
     needOtp: true,
     message: 'A one-time code was sent to ' + email + '.',
-    otpDev: sent.dev,
+    otpDev: devOtpOn_(cfg) ? sent.dev : undefined,
     email: email
   };
+}
+
+/**
+ * Expose the development OTP only when Config > otpDevMode is set to 'on'.
+ * In production this stays hidden so an emailed code cannot be read from the
+ * API response by someone who only knows the admin/employee email address.
+ */
+function devOtpOn_(cfg) {
+  return String((cfg && cfg.otpDevMode) || '').trim().toLowerCase() === 'on';
 }
 
 /**
@@ -1990,16 +2117,25 @@ function userLogin_(payload, cfg, now, tz, ss) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Adresse email invalide.');
 
   var otp = String(payload.otp || '').trim();
+  var code = String(payload.code || '').trim();
 
-  // Step 2: verify the code and hand back the signed-in profile.
-  if (otp) {
-    if (!verifyUserOtp_(email, otp, now, ss)) {
-      logAudit_(ss, email, 'Bad sign-in one-time code', 'BAD_OTP', now, tz);
-      return error_('Code invalide ou expire.');
+  // Fixed per-employee code login (single step). Takes priority when present.
+  if (code) {
+    if (!isEmailAllowed_(ss, email, cfg)) {
+      logAudit_(ss, email, 'Sign-in blocked by roster', 'LOGIN_DENIED', now, tz);
+      return error_('Cet email n\'est pas dans la liste autorisee. Demandez a votre administrateur de vous ajouter dans la feuille Employees.');
     }
-    logAudit_(ss, email, 'User signed in (email code)', 'USER_LOGIN', now, tz);
     var emp = findEmployee_(ss, email);
-    var name = (emp && emp.name) || email.split('@')[0] || email;
+    if (!emp || !String(emp.code || '').trim()) {
+      logAudit_(ss, email, 'No code configured for employee', 'LOGIN_NO_CODE', now, tz);
+      return error_('Aucun code n\'est associe a cet email. Demandez a votre administrateur.');
+    }
+    if (!codeAttemptOk_(ss, email, code, emp.code, now)) {
+      logAudit_(ss, email, 'Bad fixed sign-in code', 'BAD_CODE', now, tz);
+      return error_('Code incorrect. Veuillez reessayer.');
+    }
+    logAudit_(ss, email, 'User signed in (fixed code)', 'USER_LOGIN', now, tz);
+    var name = emp.name || email.split('@')[0] || email;
     var isAdmin = isAdmin_(ss, email);
     return {
       ok: true,
@@ -2009,14 +2145,45 @@ function userLogin_(payload, cfg, now, tz, ss) {
         tenant: String(payload.tenant || '').trim(),
         isAdmin: isAdmin
       },
-      sessionToken: isAdmin ? createSession_(ss, now) : (randomToken_() + randomToken_())
+      sessionToken: isAdmin ? createSession_(ss, now) : createUserSession_(ss, email, now)
+    };
+  }
+
+  // Step 2 (legacy OTP): verify the code and hand back the signed-in profile.
+  if (otp) {
+    if (!verifyUserOtp_(email, otp, now, ss)) {
+      logAudit_(ss, email, 'Bad sign-in one-time code', 'BAD_OTP', now, tz);
+      return error_('Code invalide ou expire.');
+    }
+    logAudit_(ss, email, 'User signed in (email code)', 'USER_LOGIN', now, tz);
+    var emp2 = findEmployee_(ss, email);
+    var name2 = (emp2 && emp2.name) || email.split('@')[0] || email;
+    var isAdmin2 = isAdmin_(ss, email);
+    return {
+      ok: true,
+      user: {
+        name: name2,
+        email: email,
+        tenant: String(payload.tenant || '').trim(),
+        isAdmin: isAdmin2
+      },
+      /* Admins get the admin session (gives dashboard access). Employees get a
+         user session token that is server-side bound to their email: employee
+         data actions (myattendance, myexport, mydelete, recent, week) require
+         it so one person cannot read or erase another person's records. */
+      sessionToken: isAdmin2 ? createSession_(ss, now) : createUserSession_(ss, email, now)
     };
   }
 
   // Step 1: roster gate, then send the code.
   if (!isEmailAllowed_(ss, email, cfg)) {
     logAudit_(ss, email, 'Sign-in blocked by roster', 'LOGIN_DENIED', now, tz);
-    return error_('Cet email n\'est pas autorise sur cet espace.');
+    return error_('Cet email n\'est pas dans la liste autorisee. Demandez a votre administrateur de vous ajouter dans la feuille Employees.');
+  }
+
+  if (!writeBudget_('otpq:' + ss.getId() + ':' + email, 3, 3600000)) {
+    logAudit_(ss, email, 'OTP send rate limit hit', 'OTP_QUOTA', now, tz);
+    return error_('Trop de codes envoyes a cet email cette heure. Reessayez plus tard.');
   }
 
   var sent = sendUserOtp_(email, now, ss);
@@ -2025,7 +2192,7 @@ function userLogin_(payload, cfg, now, tz, ss) {
     ok: true,
     needOtp: true,
     message: 'Un code a ete envoye a ' + email + '.',
-    otpDev: sent.dev,
+    otpDev: devOtpOn_(cfg) ? sent.dev : undefined,
     email: email
   };
 }
@@ -2231,6 +2398,22 @@ function sendDailyDigestNow() {
   var res = sendDailyDigest_();
   if (!res.ok) throw new Error(res.message);
   return 'Digest sent to ' + res.sent.length + ' tenant(s).';
+}
+
+/**
+ * Toggle roster mode so only emails in the Employees/Roster sheet can log in.
+ * Run from Attendance menu > Restrict login to roster emails.
+ */
+function enableRosterMode() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  setConfigValue_(ss, 'rosterMode', 'roster');
+  SpreadsheetApp.getUi().alert('Roster mode enabled.\n\nOnly emails listed in the Employees or Roster sheet can log in. Add employees via the Admin panel or the Employees sheet.');
+}
+
+function disableRosterMode() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  setConfigValue_(ss, 'rosterMode', 'open');
+  SpreadsheetApp.getUi().alert('Roster mode disabled.\n\nAny valid email can now log in.');
 }
 
 function enableDailyDigest() {
@@ -2615,7 +2798,7 @@ function adminAccess_(payload, cfg, now, tz, ss) {
     var msg = otpEmail
       ? 'A one-time code was emailed to ' + otpEmail + '.'
       : 'No admin email is configured, so a development code is shown below. Set adminEmail in Config for production.';
-    return { ok: false, code: 'NEED_OTP', needOtp: true, otpDev: sent.dev, message: msg };
+    return { ok: false, code: 'NEED_OTP', needOtp: true, otpDev: devOtpOn_(cfg) ? sent.dev : undefined, message: msg };
   }
 
   var otpOk = verifyOtp_(cfg, now, ss, otp);
@@ -2669,6 +2852,49 @@ function createSession_(ss, now) {
 function validSession_(ss, token) {
   if (!token) return false;
   return !!CacheService.getScriptCache().get('adminsess:' + ss.getId() + ':' + token);
+}
+
+/**
+ * Create a user session bound to an email address. Unlike the admin session
+ * (which proves "is an admin"), this proves "is this specific employee".
+ * TTL is capped at the script cache maximum (6h); the client just signs in
+ * again when it expires.
+ */
+function createUserSession_(ss, email, now) {
+  var token = randomToken_() + randomToken_();
+  CacheService.getScriptCache().put(
+    'usersess:' + ss.getId() + ':' + token,
+    String(email || '').trim().toLowerCase(),
+    Math.min(21600, 12 * 3600)
+  );
+  return token;
+}
+
+function validUserSession_(ss, email, token) {
+  if (!email || !token) return false;
+  var cached = CacheService.getScriptCache().get('usersess:' + ss.getId() + ':' + token);
+  return !!cached && String(cached).toLowerCase() === String(email).trim().toLowerCase();
+}
+
+/**
+ * Does this token authorize access to this employee's own data? A user session
+ * minted for the same email, or any valid admin session (admins already have
+ * full access through the admin panel, so accepting their token here does not
+ * expand the attack surface).
+ */
+function ownsEmail_(ss, email, token) {
+  if (validUserSession_(ss, email, token)) return true;
+  return validSession_(ss, token);
+}
+
+/** Standard "re-authenticate" error for employee-data actions. */
+function sessionError_(ss, email, now, tz) {
+  logAudit_(ss, email, 'Data access denied (no session for this email)', 'SESSION_REQUIRED', now, tz);
+  return {
+    ok: false,
+    code: 'SESSION_REQUIRED',
+    message: 'Votre session a expire. Reconnectez-vous pour voir vos donnees.'
+  };
 }
 
 function randomToken_() {

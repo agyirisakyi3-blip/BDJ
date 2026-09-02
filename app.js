@@ -243,6 +243,7 @@ import {
     $('btn-login-go').addEventListener('click', onLoginGo);
     $('login-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
     $('login-tenant').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
+    $('login-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
     $('btn-logout').addEventListener('click', onLogout);
     var pinToggle = $('pin-toggle');
     if (pinToggle) pinToggle.addEventListener('click', function () {
@@ -252,7 +253,6 @@ import {
       pinToggle.classList.toggle('on', show);
     });
     initOtpSegments('otp-seg', 'admin-otp', onAdminGo);
-    initOtpSegments('login-otp-seg', 'login-otp', onLoginGo);
     var consentAccept = $('consent-accept');
     var consentDecline = $('consent-decline');
     if (consentAccept) consentAccept.addEventListener('click', function () {
@@ -541,21 +541,20 @@ import {
     if (nav) nav.classList.remove('hidden');
   }
 
-  function resetLoginOtpState() {
-    var row = $('login-otp-row');
-    if (!row) return;
-    row.classList.add('hidden');
+  function resetLoginState() {
     var note = $('login-otp-note');
     if (note) { note.textContent = ''; note.classList.add('hidden'); }
-    $('login-otp').value = '';
-    $('btn-login-go').textContent = 'Se connecter';
+    var code = $('login-code');
+    if (code) code.value = '';
+    var btn = $('btn-login-go');
+    if (btn) btn.textContent = 'Se connecter';
   }
 
   function onLoginGo() {
     var btn = $('btn-login-go');
     var email = $('login-email').value.trim();
     var tenant = $('login-tenant').value.trim();
-    var otp = $('login-otp').value.trim();
+    var code = $('login-code').value.trim();
 
     if (!email) { showError('login-error', 'Saisissez votre email.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('login-error', 'Saisissez un email valide.'); return; }
@@ -563,32 +562,18 @@ import {
       showError('login-error', 'Code espace : 2-24 caracteres, lettres/chiffres/tirets.');
       return;
     }
-
-    var otpRow = $('login-otp-row');
-    var expectingOtp = otpRow && !otpRow.classList.contains('hidden');
-    if (expectingOtp && otp.length < 6) { showError('login-error', 'Le code comporte 6 chiffres.'); return; }
+    if (!code) { showError('login-error', 'Saisissez votre code personnel (6 chiffres).'); return; }
+    if (!/^\d{6}$/.test(code)) { showError('login-error', 'Le code comporte 6 chiffres.'); return; }
 
     hideError('login-error');
-    var body = { action: 'user_login', email: email };
+    var body = { action: 'user_login', email: email, code: code };
     if (tenant) body.tenant = tenant;
-    if (expectingOtp) body.otp = otp;
     btn.textContent = 'Chargement...';
 
     api(body).then(function (res) {
-      if (!res.ok || !res.needOtp) btn.textContent = 'Se connecter';
+      btn.textContent = 'Se connecter';
       if (res && res.needOtp) {
-        otpRow.classList.remove('hidden');
-        var note = $('login-otp-note');
-        if (note) {
-          note.textContent = res.message || 'Code envoye par email.';
-          if (res.otpDev) note.textContent += ' Code de developpement : ' + res.otpDev;
-          note.classList.remove('hidden');
-        }
-        btn.textContent = 'Verifier le code';
-        var firstBox = otpRow.querySelector('.otp-box');
-        if (firstBox) firstBox.focus();
-        else $('login-otp').focus();
-        return;
+        throw new Error('Votre version du serveur est obsolete. Reclamez le nouveau code.');
       }
       if (!res.ok) throw new Error((res && res.message) || 'Connexion refusee.');
       if (!res.user) throw new Error('Reponse invalide du serveur.');
@@ -611,7 +596,7 @@ import {
       saveSession();
       saveProfile();
       hideModal('modal-profile');
-      resetLoginOtpState();
+      resetLoginState();
       enterApp();
     }).catch(function (err) {
       btn.textContent = 'Se connecter';
@@ -631,7 +616,7 @@ import {
     state.status = null;
     $('login-email').value = '';
     $('login-tenant').value = '';
-    resetLoginOtpState();
+    resetLoginState();
     hideError('login-error');
     showLoginView();
     location.hash = '#home';
@@ -1228,7 +1213,7 @@ import {
     if (state.recentLoading) return;
     state.recentLoading = true;
     renderRecent();
-    api({ action: 'recent', email: state.profile.email }).then(function (res) {
+    api({ action: 'recent', email: state.profile.email, token: (state.session && state.session.token) || '' }).then(function (res) {
       state.recentLoading = false;
       if (!res.ok) {
         renderRecent();
@@ -1298,7 +1283,7 @@ import {
     if (state.weekLoading) return;
     state.weekLoading = true;
     renderWeek();
-    api({ action: 'week', email: state.profile.email }).then(function (res) {
+    api({ action: 'week', email: state.profile.email, token: (state.session && state.session.token) || '' }).then(function (res) {
       state.weekLoading = false;
       if (!res.ok) {
         renderWeek();
@@ -1399,7 +1384,7 @@ import {
     if (!hasProfile() || !isConfigured()) return;
     if (state.monthLoading) return;
     state.monthLoading = true;
-    api({ action: 'myattendance', email: state.profile.email }).then(function (res) {
+    api({ action: 'myattendance', email: state.profile.email, token: (state.session && state.session.token) || '' }).then(function (res) {
       state.monthLoading = false;
       state.monthSummary = null;
       if (res.ok) {
@@ -2346,7 +2331,7 @@ import {
     if (state.employees.length === 0) {
       var tr0 = document.createElement('tr');
       var td0 = document.createElement('td');
-      td0.colSpan = 5;
+      td0.colSpan = 6;
       td0.className = 'empty';
       td0.textContent = 'Aucun employe ajoute pour l\'instant.';
       tr0.appendChild(td0);
@@ -2358,20 +2343,31 @@ import {
       var shift = (e.shiftStart || e.shiftEnd)
         ? ((e.shiftStart || '--:--') + ' - ' + (e.shiftEnd || '--:--'))
         : '\u2014';
-      [e.name, e.email, e.department || '\u2014', shift].forEach(function (txt) {
+      [e.name, e.email, e.code || '\u2014', e.department || '\u2014', shift].forEach(function (txt) {
         var td = document.createElement('td');
         td.textContent = txt;
         tr.appendChild(td);
       });
-      var tdBtn = document.createElement('td');
+      var tdActions = document.createElement('td');
+      tdActions.className = 'row-actions';
+      if (e.code) {
+        var btnCode = document.createElement('button');
+        btnCode.type = 'button';
+        btnCode.className = 'ghost-btn sm';
+        btnCode.textContent = 'Regenerer le code';
+        btnCode.dataset.email = e.email;
+        btnCode.addEventListener('click', onEmployeeCodeReset);
+        tdActions.appendChild(btnCode);
+        tdActions.appendChild(document.createTextNode(' '));
+      }
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'ghost-btn sm';
       btn.textContent = 'Supprimer';
       btn.dataset.email = e.email;
       btn.addEventListener('click', onEmployeeDelete);
-      tdBtn.appendChild(btn);
-      tr.appendChild(tdBtn);
+      tdActions.appendChild(btn);
+      tr.appendChild(tdActions);
       tbody.appendChild(tr);
     });
   }
@@ -2380,29 +2376,48 @@ import {
     var name = $('emp-name').value.trim();
     var email = $('emp-email').value.trim();
     var dept = $('emp-dept').value.trim();
+    var code = $('emp-code').value.trim();
     var shiftStart = $('emp-shift-start').value;
     var shiftEnd = $('emp-shift-end').value;
     if (!name) { showError('emp-error', 'Saisissez le nom de l\'employe.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('emp-error', 'Saisissez un email valide.'); return; }
+    if (code && !/^\d{6}$/.test(code)) { showError('emp-error', 'Le code doit comporter 6 chiffres.'); return; }
     if (!state.adminToken) { showError('emp-error', 'Connectez-vous en tant qu\'admin d\'abord.'); return; }
     hideError('emp-error');
     $('btn-emp-add').textContent = 'Ajout...';
-    api({
+    var body = {
       action: 'employee_add', token: state.adminToken,
       name: name, email: email, department: dept,
       shiftStart: shiftStart, shiftEnd: shiftEnd
-    }).then(function (res) {
+    };
+    if (code) body.code = code;
+    api(body).then(function (res) {
       $('btn-emp-add').textContent = 'Ajouter';
       if (!res.ok) throw new Error(res.message || 'Impossible d\'ajouter l\'employe');
       $('emp-name').value = '';
       $('emp-email').value = '';
+      $('emp-code').value = '';
       $('emp-dept').value = '';
       $('emp-shift-start').value = '';
       $('emp-shift-end').value = '';
       loadEmployees();
-      showFeedback('success', 'Employe "' + res.employee.name + '" enregistre.');
+      showFeedback('success', 'Employe "' + res.employee.name + '" enregistre' + (res.employee.code ? ' (code ' + res.employee.code + ')' : '') + '.');
     }).catch(function (err) {
       $('btn-emp-add').textContent = 'Ajouter';
+      handleAdminAuthFail(err);
+      showError('emp-error', err.message);
+    });
+  }
+
+  function onEmployeeCodeReset(e) {
+    var email = e.target && e.target.dataset.email;
+    if (!email) return;
+    if (!window.confirm('Generer un nouveau code pour ' + email + ' ? Le code actuel cessera de fonctionner.')) return;
+    api({ action: 'employee_code_reset', token: state.adminToken, email: email }).then(function (res) {
+      if (!res.ok) throw new Error(res.message || 'Impossible de regenerer le code');
+      loadEmployees();
+      showFeedback('success', 'Nouveau code pour ' + email + ' : ' + res.code);
+    }).catch(function (err) {
       handleAdminAuthFail(err);
       showError('emp-error', err.message);
     });
@@ -2790,7 +2805,7 @@ import {
       return;
     }
     showFeedback('info', 'Chargement de votre historique...');
-    api({ action: 'myattendance', email: state.profile.email }).then(function (res) {
+    api({ action: 'myattendance', email: state.profile.email, token: (state.session && state.session.token) || '' }).then(function (res) {
       if (!res.ok) throw new Error(res.message || 'Impossible de charger l\'historique');
       renderHistory(res.attendance);
       showModal('modal-history');
@@ -2802,7 +2817,7 @@ import {
   function onHistoryExport() {
     if (!hasProfile()) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
     showFeedback('info', 'Preparation de vos donnees...');
-    api({ action: 'myexport', email: state.profile.email }).then(function (res) {
+    api({ action: 'myexport', email: state.profile.email, token: (state.session && state.session.token) || '' }).then(function (res) {
       if (!res.ok) throw new Error(res.message || 'Impossible d\'exporter');
       var csv = '\uFEFF' + ['Date,Heure,Nom,Action,Statut,Distance(m),Bureau'].concat((res.rows || []).map(function (r) {
         return [r.date, r.time, r.name, r.action, r.status, r.distance, r.office].map(function (c) {
@@ -2825,7 +2840,7 @@ import {
   function onHistoryDelete() {
     if (!hasProfile()) { showFeedback('warn', 'Definissez vos coordonnees d\'abord.'); return; }
     if (!window.confirm('Effacer TOUS vos enregistrements de presence de la feuille du bureau ? Cette action est irreversible.')) return;
-    api({ action: 'mydelete', email: state.profile.email }).then(function (res) {
+    api({ action: 'mydelete', email: state.profile.email, token: (state.session && state.session.token) || '' }).then(function (res) {
       if (!res.ok) throw new Error(res.message || 'Impossible d\'effacer les donnees');
       hideModal('modal-history');
       loadRecent();

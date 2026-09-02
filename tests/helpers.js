@@ -375,23 +375,11 @@ async function expandAdminSection(page, title) {
   }
 }
 
-/* Log in via the user login view. If OTP is provided, it enters the OTP into
-   the segmented boxes after the OTP step appears. */
-async function loginUser(page, email = 'test@bdj.com', tenant = '', otp = '') {
+async function loginUser(page, email = 'test@bdj.com', tenant = '', code = '123456') {
   await page.type('#login-email', email);
   if (tenant) await page.type('#login-tenant', tenant);
+  if (code) await page.type('#login-code', code);
   await page.click('#btn-login-go');
-  if (otp) {
-    await page.waitForSelector('#login-otp-row:not(.hidden)', { timeout: 5000 });
-    const boxes = await page.$$('#login-otp-seg .otp-box');
-    for (let i = 0; i < otp.length && i < boxes.length; i++) {
-      await boxes[i].type(otp[i]);
-    }
-    const loginHidden = await page.evaluate(() => document.getElementById('view-login').classList.contains('hidden'));
-    if (!loginHidden) {
-      await page.click('#btn-login-go');
-    }
-  }
   await page.waitForFunction(
     () => document.getElementById('view-login').classList.contains('hidden'),
     { timeout: 15000 }

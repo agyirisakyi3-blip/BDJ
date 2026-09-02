@@ -322,6 +322,7 @@ describe('No JavaScript Errors', () => {
       await bootExisting(page, {}, true);
       await page.waitForSelector('#view-login:not(.hidden)', { timeout: 10000 });
       await page.type('#login-email', 'flow@test.com');
+      await page.type('#login-code', '123456');
       await page.click('#btn-login-go');
       await page.waitForSelector('#modal-onboard:not(.hidden)', { timeout: 10000 });
       await page.click('#ob-skip');

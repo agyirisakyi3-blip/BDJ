@@ -447,6 +447,9 @@
               <label class="range-field">Email
                 <input id="emp-email" type="email" placeholder="vous@entreprise.com" autocomplete="off">
               </label>
+              <label class="range-field">Code personnel <span class="opt">(6 chiffres, facultatif)</span>
+                <input id="emp-code" type="text" inputmode="numeric" maxlength="6" placeholder="Auto" autocomplete="off">
+              </label>
               <label class="range-field">Departement <span class="opt">(facultatif)</span>
                 <input id="emp-dept" type="text" placeholder="Informatique" autocomplete="off">
               </label>
@@ -462,7 +465,7 @@
             <div class="table-wrap emp-table">
               <table id="emp-table">
                 <thead>
-                  <tr><th>Nom</th><th>Email</th><th>Departement</th><th>Horaires</th><th></th></tr>
+                  <tr><th>Nom</th><th>Email</th><th>Code</th><th>Departement</th><th>Horaires</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -628,18 +631,11 @@
           <input id="login-tenant" type="text" placeholder="ex. acme" autocomplete="off"
                  aria-describedby="login-tenant-hint">
           <p id="login-tenant-hint" class="hint">Laissez vide pour l'espace par defaut.</p>
-          <div id="login-otp-row" class="hidden">
-            <label for="login-otp">Code a usage unique</label>
-            <div id="login-otp-seg" class="otp-seg" role="group" aria-label="Code a 6 chiffres envoye par email">
-              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Chiffre 1">
-              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 2">
-              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 3">
-              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 4">
-              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 5">
-              <input class="otp-box" type="text" inputmode="numeric" maxlength="1" aria-label="Chiffre 6">
-            </div>
-            <input id="login-otp" type="text" class="sr-only" tabindex="-1" aria-hidden="true">
-          </div>
+          <label for="login-code">Code personnel</label>
+          <input id="login-code" type="password" inputmode="numeric" autocomplete="off"
+                 pattern="[0-9]*" maxlength="6" placeholder="6 chiffres"
+                 aria-describedby="login-code-hint">
+          <p id="login-code-hint" class="hint">Code de 6 chiffres remis par votre administrateur.</p>
           <button id="btn-login-go" class="primary-btn" type="button">Se connecter</button>
           <p id="login-otp-note" class="hint hidden"></p>
           <p id="login-error" class="feedback error hidden"></p>

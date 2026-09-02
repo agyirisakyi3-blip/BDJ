@@ -63,7 +63,7 @@ function Heatmap({ pairs, rangeFrom }) {
 }
 
 export default function HistoryModal({ isOpen, onClose }) {
-  const { profile, apiCall, showFeedback } = useApp();
+  const { profile, auth, apiCall, showFeedback } = useApp();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -72,7 +72,7 @@ export default function HistoryModal({ isOpen, onClose }) {
   useEffect(() => {
     if (!isOpen || !profile) return;
     setLoading(true);
-    apiCall({ action: 'myattendance', email: profile.email }).then((res) => {
+    apiCall({ action: 'myattendance', email: profile.email, token: auth ? (auth.sessionToken || '') : '' }).then((res) => {
       setLoading(false);
       if (res.ok) setData(res.attendance);
       else showFeedback('error', res.message || 'Impossible de charger');
@@ -82,7 +82,7 @@ export default function HistoryModal({ isOpen, onClose }) {
   const handleExport = async () => {
     if (!profile) return;
     try {
-      const res = await apiCall({ action: 'myexport', email: profile.email });
+      const res = await apiCall({ action: 'myexport', email: profile.email, token: auth ? (auth.sessionToken || '') : '' });
       if (!res.ok) throw new Error(res.message);
       const csv = '\uFEFF' + ['Date,Heure,Nom,Action,Statut,Distance(m),Bureau'].concat((res.rows || []).map((r) => {
         return [r.date, r.time, r.name, r.action, r.status, r.distance, r.office].map((c) =>
@@ -102,7 +102,7 @@ export default function HistoryModal({ isOpen, onClose }) {
     if (!profile) return;
     setDeleting(true);
     try {
-      const res = await apiCall({ action: 'mydelete', email: profile.email });
+      const res = await apiCall({ action: 'mydelete', email: profile.email, token: auth ? (auth.sessionToken || '') : '' });
       if (!res.ok) throw new Error(res.message);
       setShowConfirmDelete(false);
       onClose();

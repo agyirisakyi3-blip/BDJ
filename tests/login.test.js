@@ -78,13 +78,34 @@ describe('Login Validation', () => {
     expect(err.toLowerCase()).toContain('espace');
     await page.close();
   });
+
+  test('empty code displays error message', async () => {
+    const page = await bootPage(browser);
+    await page.type('#login-email', 'user@company.com');
+    await page.click('#btn-login-go');
+    await page.waitForFunction(() => !document.getElementById('login-error').classList.contains('hidden'));
+    const err = await page.$eval('#login-error', el => el.textContent);
+    expect(err.toLowerCase()).toContain('code');
+    await page.close();
+  });
+
+  test('short code displays error message', async () => {
+    const page = await bootPage(browser);
+    await page.type('#login-email', 'user@company.com');
+    await page.type('#login-code', '123');
+    await page.click('#btn-login-go');
+    await page.waitForFunction(() => !document.getElementById('login-error').classList.contains('hidden'));
+    const err = await page.$eval('#login-error', el => el.textContent);
+    expect(err.toLowerCase()).toContain('6 chiffres');
+    await page.close();
+  });
 });
 
 /* ==========================================
-   3. DIRECT LOGIN FLOW (NO OTP)
+   3. FIXED-CODE LOGIN FLOW
    ========================================== */
-describe('Direct Login Flow', () => {
-  test('successful direct login enters home view and saves session', async () => {
+describe('Fixed-Code Login Flow', () => {
+  test('successful code login enters home view and saves session', async () => {
     const cap = apiCapture(apiRoutes({
       user_login: body => ({
         ok: true,
@@ -100,6 +121,7 @@ describe('Direct Login Flow', () => {
     const page = await bootPage(browser, { api: body => cap.handler(body) });
     await page.type('#login-email', 'alice@company.com');
     await page.type('#login-tenant', 'acme');
+    await page.type('#login-code', '987654');
     await page.click('#btn-login-go');
 
     await page.waitForFunction(() => document.getElementById('view-login').classList.contains('hidden'), { timeout: 10000 });
@@ -114,39 +136,58 @@ describe('Direct Login Flow', () => {
     const loginCall = cap.ofAction('user_login')[0];
     expect(loginCall.email).toBe('alice@company.com');
     expect(loginCall.tenant).toBe('acme');
+    expect(loginCall.code).toBe('987654');
     await page.close();
   });
 
   test('server rejection displays error message', async () => {
     const page = await bootPage(browser, {
       api: apiRoutes({
-        user_login: { ok: false, message: 'Utilisateur introuvable.' }
+        user_login: { ok: false, message: 'Code incorrect.' }
       })
     });
 
     await page.type('#login-email', 'unknown@company.com');
+    await page.type('#login-code', '123456');
     await page.click('#btn-login-go');
 
     await page.waitForFunction(() => !document.getElementById('login-error').classList.contains('hidden'), { timeout: 10000 });
     const err = await page.$eval('#login-error', el => el.textContent);
-    expect(err).toContain('introuvable');
+    expect(err).toContain('incorrect');
     await page.close();
   });
-});
 
-/* ==========================================
-   4. TWO-STEP OTP LOGIN FLOW
-   ========================================== */
-describe('OTP Login Flow', () => {
-  test('requesting OTP displays 6 segmented boxes and completes verification', async () => {
-    let step = 1;
+  test('email not listed in the spreadsheet displays roster error', async () => {
+    const cap = apiCapture(apiRoutes({
+      user_login: { ok: false, message: "Cet email n'est pas dans la liste autorisee. Demandez a votre administrateur de vous ajouter dans la feuille Employees." }
+    }));
+
+    const page = await bootPage(browser, { api: body => cap.handler(body) });
+    await page.type('#login-email', 'outsider@company.com');
+    await page.type('#login-code', '123456');
+    await page.click('#btn-login-go');
+
+    await page.waitForFunction(() => !document.getElementById('login-error').classList.contains('hidden'), { timeout: 10000 });
+    const err = await page.$eval('#login-error', el => el.textContent);
+    expect(err).toContain('liste autorisee');
+
+    const logins = cap.ofAction('user_login');
+    expect(logins.length).toBe(1);
+    expect(logins[0].code).toBe('123456');
+    await page.close();
+  });
+
+  test('code field is a password input hiding the value', async () => {
+    const page = await bootPage(browser);
+    const inputType = await page.$eval('#login-code', el => el.type);
+    expect(inputType).toBe('password');
+    await page.close();
+  });
+
+  test('correct code sends it to the server and logs in', async () => {
     const cap = apiCapture(apiRoutes({
       user_login: body => {
-        if (!body.otp) {
-          step = 2;
-          return { ok: true, needOtp: true, message: 'Code envoye par email.' };
-        }
-        if (body.otp === '123456') {
+        if (body.code === '111111') {
           return {
             ok: true,
             user: { name: 'Bob Jones', email: body.email, tenant: '', isAdmin: false },
@@ -154,66 +195,45 @@ describe('OTP Login Flow', () => {
           };
         }
         return { ok: false, message: 'Code incorrect.' };
-      },
-      config: { ok: true, config: { appName: 'addredance' } },
-      recent: { ok: true, recent: [] },
-      week: { ok: true, week: [] },
-      myattendance: { ok: true, attendance: { range: {}, summary: {}, pairs: [] } }
+      }
     }));
 
     const page = await bootPage(browser, { api: body => cap.handler(body) });
     await page.type('#login-email', 'bob@company.com');
+    await page.type('#login-code', '111111');
     await page.click('#btn-login-go');
-
-    await page.waitForSelector('#login-otp-row:not(.hidden)', { timeout: 10000 });
-    const note = await page.$eval('#login-otp-note', el => el.textContent);
-    expect(note).toContain('Code envoye');
-
-    const boxes = await page.$$('#login-otp-seg .otp-box');
-    expect(boxes.length).toBe(6);
-
-    for (let i = 0; i < 6; i++) {
-      await boxes[i].type(String(i + 1));
-    }
 
     await page.waitForFunction(() => document.getElementById('view-login').classList.contains('hidden'), { timeout: 10000 });
     await page.waitForFunction(() => !document.getElementById('view-home').classList.contains('hidden'), { timeout: 10000 });
 
     const storedSession = await page.evaluate(() => localStorage.getItem('att.session.v1'));
     expect(storedSession).toBeTruthy();
+
+    const loginCall = cap.ofAction('user_login')[0];
+    expect(loginCall.code).toBe('111111');
     await page.close();
   });
 
-  test('incorrect OTP displays error', async () => {
+  test('incorrect code displays error', async () => {
     const page = await bootPage(browser, {
       api: apiRoutes({
-        user_login: body => {
-          if (!body.otp) {
-            return { ok: true, needOtp: true, message: 'Code envoye.' };
-          }
-          return { ok: false, message: 'Code OTP invalide.' };
-        }
+        user_login: { ok: false, message: 'Code incorrect.' }
       })
     });
 
     await page.type('#login-email', 'bob@company.com');
+    await page.type('#login-code', '999999');
     await page.click('#btn-login-go');
-
-    await page.waitForSelector('#login-otp-row:not(.hidden)', { timeout: 10000 });
-    const boxes = await page.$$('#login-otp-seg .otp-box');
-    for (let i = 0; i < 6; i++) {
-      await boxes[i].type('9');
-    }
 
     await page.waitForFunction(() => !document.getElementById('login-error').classList.contains('hidden'), { timeout: 10000 });
     const err = await page.$eval('#login-error', el => el.textContent);
-    expect(err).toContain('invalide');
+    expect(err).toContain('incorrect');
     await page.close();
   });
 });
 
 /* ==========================================
-   5. LOGOUT FLOW
+   4. LOGOUT FLOW
    ========================================== */
 describe('Logout Flow', () => {
   test('logout button in profile modal clears session and returns to login view', async () => {
