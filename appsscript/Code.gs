@@ -1339,10 +1339,10 @@ function weekData_(payload, cfg, now, tz, ss) {
     });
   }
 
-  var emp = findEmployee_(ss, email);
+  var emp = findEmployee_(ss, email, tz);
   var shift = {};
   if (emp && (String(emp.shiftStart || '').trim() || String(emp.shiftEnd || '').trim())) {
-    shift = { start: String(emp.shiftStart || '').trim(), end: String(emp.shiftEnd || '').trim() };
+    shift = { start: emp.shiftStart, end: emp.shiftEnd };
   }
 
   return { ok: true, week: days, shift: shift };
@@ -1378,19 +1378,20 @@ function employeeColumns_(sheet) {
   return cols;
 }
 
-function findEmployee_(ss, email) {
+function findEmployee_(ss, email, tz) {
   var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
   if (!sheet) return null;
   var rows = sheet.getDataRange().getValues();
   email = String(email || '').trim().toLowerCase();
   var c = employeeColumns_(sheet);
+  tz = tz || ss.getSpreadsheetTimeZone();
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() === email) {
       return {
         name: String(rows[i][c.name < 0 ? 0 : c.name] || ''),
         department: String(rows[i][c.department < 0 ? 2 : c.department] || ''),
-        shiftStart: String(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart] || ''),
-        shiftEnd: String(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd] || ''),
+        shiftStart: normShiftTime_(cellTimeStr_(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart], tz)),
+        shiftEnd: normShiftTime_(cellTimeStr_(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd], tz)),
         code: String(rows[i][c.code < 0 ? 10 : c.code] || '')
       };
     }
@@ -1404,13 +1405,14 @@ function findEmployee_(ss, email) {
  */
 function lateResolver_(ss, cfg) {
   var defSec = timeToSec_(cfg.lateAfter || '');
+  var tz = ss.getSpreadsheetTimeZone();
   var map = {};
   var emp = ss.getSheetByName(SHEET_EMPLOYEES);
   if (emp) {
     var rows = emp.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
       var e = String(rows[i][1] || '').trim().toLowerCase();
-      var s = timeToSec_(String(rows[i][4] || ''));
+      var s = timeToSec_(cellTimeStr_(rows[i][4], tz));
       if (e && s >= 0) map[e] = s;
     }
   }
@@ -1438,8 +1440,8 @@ function employeesData_(payload, cfg, now, tz, ss) {
         email: email,
         department: String(rows[i][c.department < 0 ? 2 : c.department] || ''),
         created: String(rows[i][c.created < 0 ? 3 : c.created] || ''),
-        shiftStart: String(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart] || ''),
-        shiftEnd: String(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd] || ''),
+        shiftStart: normShiftTime_(cellTimeStr_(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart], tz)),
+        shiftEnd: normShiftTime_(cellTimeStr_(rows[i][c.shiftEnd < 0 ? 5 : c.shiftEnd], tz)),
         role: String(rows[i][c.role] || ''),
         phone: String(rows[i][c.phone] || ''),
         birth: String(rows[i][c.birth] || ''),
