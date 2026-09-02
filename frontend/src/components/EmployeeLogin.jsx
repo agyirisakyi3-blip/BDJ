@@ -6,7 +6,23 @@ export default function EmployeeLogin() {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
+
+  const handleResend = async () => {
+    if (!email.trim()) { setError('Saisissez votre email professionnel pour recevoir votre code.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setError('Adresse email invalide.'); return; }
+    setResending(true);
+    setError('');
+    try {
+      const res = await apiCall({ action: 'employee_code_resend', email: email.trim() });
+      if (!res.ok) throw new Error(res.message || 'Echec');
+      showFeedback('success', res.message || 'Votre code a ete envoye par email.');
+    } catch (err) {
+      setError(err.message || 'Impossible d\'envoyer le code.');
+    }
+    setResending(false);
+  };
 
   const handleSignIn = async () => {
     if (!email.trim()) { setError('Saisissez votre email professionnel.'); return; }
@@ -76,6 +92,9 @@ export default function EmployeeLogin() {
             />
           </div>
           <p className="emp-hint">Code de 6 chiffres remis par votre administrateur.</p>
+          <button className="emp-resend-link" type="button" onClick={handleResend} disabled={resending}>
+            {resending ? 'Envoi en cours...' : 'Je n\'ai pas recu mon code, envoyez-le-moi'}
+          </button>
           {error && <p className="feedback error">{error}</p>}
           <button className="emp-cta" type="button" onClick={handleSignIn} disabled={loading}>
             <span>{loading ? 'Connexion...' : 'Se connecter'}</span>

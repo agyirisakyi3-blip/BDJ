@@ -245,6 +245,9 @@ function handleRequest_(e) {
     if (action === 'send_codes') {
       return json_(sendCodes_(payload, cfg, now, tz, ss));
     }
+    if (action === 'employee_code_resend') {
+      return json_(employeeCodeResend_(payload, cfg, now, tz, ss));
+    }
     if (action === 'user_login') {
       return json_(userLogin_(payload, cfg, now, tz, ss));
     }
@@ -1762,6 +1765,53 @@ function sendCodes_(payload, cfg, now, tz, ss) {
     failed: failed,
     message: sent + ' sign-in code' + (sent === 1 ? '' : 's') + ' sent to ' + sent + ' email' + (sent === 1 ? '' : 's') + '.'
   };
+}
+
+/**
+ * Self-service: email an employee their own personal 6-digit sign-in code on
+ * request, without involving the admin. The employee only receives their own
+ * code. Roster-only members (no Employees row) have no code to send and are
+ * told to ask the admin. Rate-limited like OTP sends.
+ */
+function employeeCodeResend_(payload, cfg, now, tz, ss) {
+  var email = String(payload.email || '').trim().toLowerCase();
+  if (!email) return error_('Email required');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error_('Adresse email invalide.');
+  if (!isEmailAllowed_(ss, email, cfg)) {
+    logAudit_(ss, email, 'Code resend blocked by roster', 'CODEREQ_DENIED', now, tz);
+    return error_('Cet email n\'est pas dans la liste autorisee. Demandez a votre administrateur de vous ajouter.');
+  }
+
+  // Backfill missing codes, then look the employee up again.
+  ensureEmployeeCodes_(ss);
+  var emp = findEmployee_(ss, email);
+  if (!emp || !String(emp.code || '').trim()) {
+    logAudit_(ss, email, 'No code available to resend', 'CODEREQ_NO_CODE', now, tz);
+    return error_('Aucun code n\'est associe a cet email. Demandez a votre administrateur.');
+  }
+
+  if (!writeBudget_('codereq:' + ss.getId() + ':' + email, 3, 3600000)) {
+    logAudit_(ss, email, 'Code resend rate limit hit', 'CODEREQ_QUOTA', now, tz);
+    return error_('Trop de codes envoyes a cet email cette heure. Reessayez plus tard.');
+  }
+
+  var name = emp.name || email.split('@')[0] || email;
+  var appName = cfg.appName || 'Attendance';
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: 'Your ' + appName + ' sign-in code',
+      body: 'Hello ' + name + ',\n\n' +
+        'Your personal sign-in code for ' + appName + ' is: ' + emp.code + '\n\n' +
+        'Keep it private. It is used to clock in and out, and can be changed by an administrator.\n\n' +
+        'If you did not expect this email, please ignore it.'
+    });
+  } catch (e) {
+    logAudit_(ss, email, 'Code resend email failed', 'CODEREQ_FAIL', now, tz);
+    return error_('Impossible d\'envoyer le code. Reessayez plus tard.');
+  }
+  logAudit_(ss, email, 'Sign-in code resent on request', 'CODEREQ_SENT', now, tz);
+  return { ok: true, message: 'Votre code a ete envoye a ' + email + '.' };
 }
 
 /* ================= Leave & holidays ================= */

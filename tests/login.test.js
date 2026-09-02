@@ -233,6 +233,55 @@ describe('Fixed-Code Login Flow', () => {
 });
 
 /* ==========================================
+   3. CODE RESEND
+   ========================================== */
+describe('Code Resend', () => {
+  test('clicking resend without an email shows an error', async () => {
+    const page = await bootPage(browser);
+    await page.click('#btn-login-resend');
+    await page.waitForFunction(() => !document.getElementById('login-error').classList.contains('hidden'), { timeout: 10000 });
+    const err = await page.$eval('#login-error', el => el.textContent);
+    expect(err.toLowerCase()).toContain('email');
+    await page.close();
+  });
+
+  test('resend sends email and shows success feedback', async () => {
+    const cap = apiCapture(apiRoutes({
+      employee_code_resend: body => ({ ok: true, message: 'Votre code a ete envoye a ' + body.email + '.' })
+    }));
+
+    const page = await bootPage(browser, { api: body => cap.handler(body) });
+    await page.type('#login-email', 'bob@company.com');
+    await page.click('#btn-login-resend');
+
+    await page.waitForFunction(() => document.getElementById('feedback').textContent.indexOf('envoye') !== -1, { timeout: 10000 });
+
+    const call = cap.ofAction('employee_code_resend')[0];
+    expect(call).toBeTruthy();
+    expect(call.email).toBe('bob@company.com');
+    const fb = await page.$eval('#feedback', el => el.textContent);
+    expect(fb).toContain('envoye');
+    await page.close();
+  });
+
+  test('server rejection displays the error message', async () => {
+    const page = await bootPage(browser, {
+      api: apiRoutes({
+        employee_code_resend: { ok: false, message: 'Aucun code n\'est associe a cet email. Demandez a votre administrateur.' }
+      })
+    });
+
+    await page.type('#login-email', 'ghost@company.com');
+    await page.click('#btn-login-resend');
+
+    await page.waitForFunction(() => !document.getElementById('login-error').classList.contains('hidden'), { timeout: 10000 });
+    const err = await page.$eval('#login-error', el => el.textContent);
+    expect(err).toContain('administrateur');
+    await page.close();
+  });
+});
+
+/* ==========================================
    4. LOGOUT FLOW
    ========================================== */
 describe('Logout Flow', () => {

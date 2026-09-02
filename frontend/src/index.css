@@ -1275,6 +1275,10 @@ th.sortable.desc::after { content: "\2193"; opacity: 1; }
 }
 .emp-hint { margin: 10px 2px 2px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
+.emp-resend-link { margin: 6px 2px 0; padding: 0; background: none; border: none; color: var(--accent); font-size: 12px; text-align: left; text-decoration: underline; cursor: pointer; }
+.emp-resend-link:hover { filter: brightness(1.1); }
+.emp-resend-link:disabled { opacity: 0.6; cursor: default; }
+
 .emp-cta {
   position: relative;
   width: 100%;

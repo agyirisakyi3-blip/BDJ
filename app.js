@@ -242,6 +242,7 @@ import {
     $('admin-pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
     $('admin-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onAdminGo(); });
     $('btn-login-go').addEventListener('click', onLoginGo);
+    $('btn-login-resend').addEventListener('click', onLoginResendCode);
     $('login-email').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
     $('login-tenant').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
     $('login-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLoginGo(); });
@@ -601,6 +602,27 @@ import {
       enterApp();
     }).catch(function (err) {
       btn.textContent = 'Se connecter';
+      showError('login-error', err.message);
+    });
+  }
+
+  function onLoginResendCode() {
+    var email = $('login-email').value.trim();
+    if (!email) { showError('login-error', 'Saisissez votre email professionnel pour recevoir votre code.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showError('login-error', 'Adresse email invalide.'); return; }
+    var btn = $('btn-login-resend');
+    var original = btn.textContent;
+    btn.textContent = 'Envoi en cours...';
+    btn.disabled = true;
+    hideError('login-error');
+    api({ action: 'employee_code_resend', email: email }).then(function (res) {
+      btn.textContent = original;
+      btn.disabled = false;
+      if (!res.ok) throw new Error(res.message || 'Impossible d\'envoyer le code.');
+      showFeedback('success', res.message || 'Votre code a ete envoye par email.');
+    }).catch(function (err) {
+      btn.textContent = original;
+      btn.disabled = false;
       showError('login-error', err.message);
     });
   }
