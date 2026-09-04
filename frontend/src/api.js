@@ -4,7 +4,9 @@ export function isConfigured() {
   const url = CONFIG.API_URL;
   if (/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url) &&
       url.indexOf('YOUR_SCRIPT_ID') === -1) return true;
-  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/exec(\?|$)/.test(url);
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(exec|api)(\?|$)/.test(url)) return true;
+  // Supabase-backed API server
+  return /^https:\/\/.+\/api(\?|$)/.test(url) && url.indexOf('your-api-server') === -1;
 }
 
 export function api(body, tenant = '') {
