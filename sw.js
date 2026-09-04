@@ -1,4 +1,6 @@
 var CACHE = 'att-v23';
+var CDN_CACHE = 'att-cdn-v1';
+var CDN_ORIGINS = ['https://cdnjs.cloudflare.com'];
 var ASSETS = [
   './',
   './index.html',
@@ -12,19 +14,26 @@ var ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-512-maskable.png',
-  './icons/apple-touch-icon.png',
+  './icons/apple-touch-icon.png'
+];
+var CDN_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
 ];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(function (c) {
+    Promise.all([
+      caches.open(CACHE).then(function (c) {
         return Promise.allSettled(ASSETS.map(function (url) {
           return c.add(url);
         }));
+      }),
+      caches.open(CDN_CACHE).then(function (c) {
+        return Promise.allSettled(CDN_ASSETS.map(function (url) {
+          return c.add(url);
+        }));
       })
-      .then(function () { return self.skipWaiting(); })
+    ]).then(function () { return self.skipWaiting(); })
   );
 });
 
@@ -32,7 +41,7 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys()
       .then(function (keys) {
-        return Promise.all(keys.filter(function (k) { return k !== CACHE; })
+        return Promise.all(keys.filter(function (k) { return k !== CACHE && k !== CDN_CACHE; })
           .map(function (k) { return caches.delete(k); }));
       })
       .then(function () { return self.clients.claim(); })
@@ -41,7 +50,26 @@ self.addEventListener('activate', function (e) {
 
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
-  if (e.request.url.indexOf(self.location.origin) !== 0) return;
+
+  var url = e.request.url;
+
+  if (CDN_ORIGINS.some(function (o) { return url.indexOf(o) === 0; })) {
+    e.respondWith(
+      caches.match(e.request).then(function (hit) {
+        if (hit) return hit;
+        return fetch(e.request).then(function (resp) {
+          if (resp && resp.status === 200) {
+            var copy = resp.clone();
+            caches.open(CDN_CACHE).then(function (c) { c.put(e.request, copy); });
+          }
+          return resp;
+        });
+      })
+    );
+    return;
+  }
+
+  if (url.indexOf(self.location.origin) !== 0) return;
   e.respondWith(
     caches.match(e.request).then(function (hit) {
       var refresh = fetch(e.request).then(function (resp) {

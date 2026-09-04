@@ -20,6 +20,37 @@ import {
   var LS_PROFILE = 'att.profile.v1';
   var LS_STATUS = 'att.status.v1';
   var LS_QUEUE = 'att.queue.v1';
+
+  var STORAGE_WARN_KB = 4600;   // warn at ~4.6MB of ~5MB quota
+  var STORAGE_LIMIT_KB = 4800;  // hard trim at ~4.8MB
+
+  function storageKb() {
+    var total = 0;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k === null) continue;
+        var v = localStorage.getItem(k);
+        if (v) total += k.length + v.length;
+      }
+    } catch (e) {}
+    return Math.round(total / 1024);
+  }
+
+  function checkStorageUsage() {
+    var kb = storageKb();
+    if (kb < STORAGE_WARN_KB) return;
+    loadQueue().then(function (q) {
+      if (kb >= STORAGE_LIMIT_KB && q.length > 0) {
+        // Trim oldest queued entries to free space, keep the most recent 5.
+        saveQueue(q.slice(-5)).then(function () {
+          showFeedback('warn', 'Stockage local presque plein. Les pointages hors ligne les plus anciens ont ete supprimes.');
+        });
+      } else {
+        showFeedback('warn', 'Stockage local presque plein (' + kb + ' Ko). Pensez a vous connecter pour synchroniser.');
+      }
+    });
+  }
   var LS_ONBOARDED = 'att.onboarded.v1';
   var LS_THEME = 'att.theme.v1';
   var LS_CONSENT = 'att.consent.v1';
@@ -82,7 +113,9 @@ import {
     if (/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(API_URL) &&
         API_URL.indexOf('YOUR_SCRIPT_ID') === -1) return true;
     /* Local dev / test harness: same-origin mock endpoint (e.g. tests/server.js /exec). */
-    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/exec(\?|$)/.test(API_URL);
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(exec|api)(\?|$)/.test(API_URL)) return true;
+    /* Supabase-backed API server */
+    return /^https:\/\/.+\/api(\?|$)/.test(API_URL) && API_URL.indexOf('your-api-server') === -1;
   }
 
   function defaultsConfig() {
@@ -166,6 +199,7 @@ import {
       if (!sessionListenersBound) {
         sessionListenersBound = true;
         window.addEventListener('online', flushQueue);
+        window.addEventListener('storage', onCrossTabStorage);
 
         if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
           navigator.serviceWorker.register('sw.js').catch(function () {});
@@ -178,6 +212,8 @@ import {
         loadWeek();
         loadMonth();
         initReminders();
+        checkStorageUsage();
+        setInterval(checkStorageUsage, 600000);
       }, 800);
     });
   }
@@ -512,6 +548,32 @@ import {
     if (prevToken) { applyAdminVisibility(); }
   }
 
+  function onCrossTabStorage(e) {
+    if (!e || !e.key) return;
+    if (e.key === LS_SESSION) {
+      loadSession().then(function (s) {
+        if (!s && state.session) {
+          state.profile = null;
+          state.status = null;
+          showLoginView();
+          route();
+        } else if (s) {
+          state.session = s;
+          if (!state.profile) loadProfile().then(function () {
+            syncProfileFromSession();
+            hideLoginView();
+            renderHome();
+            route();
+          });
+        }
+      });
+    } else if (e.key === LS_STATUS) {
+      loadStatus().then(function () { renderHome(); });
+    } else if (e.key === LS_PROFILE) {
+      loadProfile().then(function () { renderHome(); });
+    }
+  }
+
   function syncProfileFromSession() {
     var s = state.session;
     if (!s) return;
@@ -736,7 +798,9 @@ import {
   }
 
   function saveQueue(q) {
-    return lsSet(LS_QUEUE, JSON.stringify(q.slice(0, 20)));
+    return lsSet(LS_QUEUE, JSON.stringify(q.slice(0, 20))).then(function () {
+      if (storageKb() >= STORAGE_WARN_KB) checkStorageUsage();
+    });
   }
 
   function queueAttendance(payload) {

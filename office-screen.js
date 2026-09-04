@@ -1,12 +1,100 @@
 ﻿    (function () {
       var API_URL = window.ATT_CONFIG && window.ATT_CONFIG.API_URL;
       var POLL_MS = 10000;
-      var state = {
-        token: '',
-        sessionToken: localStorage.getItem('att_screen_token') || '',
-        email: localStorage.getItem('att_screen_email') || '',
-        tenant: localStorage.getItem('att_screen_tenant') || ''
-      };
+
+      var LS_KEY = 'att.key.v1';
+      var LS_SCR_TOKEN = 'att_screen_token';
+      var LS_SCR_EMAIL = 'att_screen_email';
+      var LS_SCR_TENANT = 'att_screen_tenant';
+      var ENC_SUPPORTED = !!(window.crypto && window.crypto.subtle && window.TextEncoder && window.TextDecoder);
+
+      function bytesToBase64(bytes) {
+        var bin = '';
+        for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return window.btoa(bin);
+      }
+
+      function base64ToBytes(b64) {
+        var bin = window.atob(b64);
+        var out = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      }
+
+      function encKey() {
+        if (!ENC_SUPPORTED) return Promise.resolve(null);
+        try {
+          var raw = localStorage.getItem(LS_KEY);
+          if (raw) return Promise.resolve(raw);
+          var bytes = new Uint8Array(32);
+          window.crypto.getRandomValues(bytes);
+          var b64 = bytesToBase64(bytes);
+          localStorage.setItem(LS_KEY, b64);
+          return Promise.resolve(b64);
+        } catch (e) {
+          ENC_SUPPORTED = false;
+          return Promise.resolve(null);
+        }
+      }
+
+      function importKey(b64, use) {
+        return window.crypto.subtle.importKey('raw', base64ToBytes(b64), { name: 'AES-GCM' }, false, [use]);
+      }
+
+      function secureGet(key) {
+        var v;
+        try { v = localStorage.getItem(key); } catch (e) { return null; }
+        if (v === null) return null;
+        if (!ENC_SUPPORTED || v.indexOf('enc1:') !== 0) return v;
+        return encKey().then(function (k) {
+          if (!k) return v;
+          return importKey(k, 'decrypt').then(function (cryptoKey) {
+            var env = JSON.parse(v.slice(5));
+            var iv = base64ToBytes(env.iv);
+            var data = base64ToBytes(env.d);
+            return window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, cryptoKey, data)
+              .then(function (buf) { return new TextDecoder().decode(buf); });
+          });
+        }).catch(function () {
+          return v;
+        });
+      }
+
+      function secureSet(key, val) {
+        if (!ENC_SUPPORTED) { try { localStorage.setItem(key, val); } catch (e) {} return Promise.resolve(); }
+        return encKey().then(function (k) {
+          if (!k) { try { localStorage.setItem(key, val); } catch (e) {} return; }
+          return importKey(k, 'encrypt').then(function (cryptoKey) {
+            var iv = window.crypto.getRandomValues(new Uint8Array(12));
+            return window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, cryptoKey, new TextEncoder().encode(val))
+              .then(function (ct) {
+                var env = { v: 1, iv: bytesToBase64(iv), d: bytesToBase64(new Uint8Array(ct)) };
+                try { localStorage.setItem(key, 'enc1:' + JSON.stringify(env)); } catch (e) {}
+              });
+          });
+        });
+      }
+
+      function secureRemove(key) {
+        try { localStorage.removeItem(key); } catch (e) {}
+      }
+
+      function loadState() {
+        return Promise.all([
+          secureGet(LS_SCR_TOKEN),
+          secureGet(LS_SCR_EMAIL),
+          secureGet(LS_SCR_TENANT)
+        ]).then(function (vals) {
+          return {
+            token: '',
+            sessionToken: vals[0] || '',
+            email: vals[1] || '',
+            tenant: vals[2] || ''
+          };
+        });
+      }
+
+      var state = { token: '', sessionToken: '', email: '', tenant: '' };
 
       var $ = function (id) { return document.getElementById(id); };
       var loginEl = $('login'), screenEl = $('screen'), statusEl = $('status');
@@ -43,9 +131,9 @@
           state.sessionToken = res.token || '';
           state.email = email;
           state.tenant = ($('tenant-inp').value.trim() || state.tenant);
-          localStorage.setItem('att_screen_token', state.sessionToken);
-          localStorage.setItem('att_screen_email', email);
-          localStorage.setItem('att_screen_tenant', state.tenant);
+          secureSet(LS_SCR_TOKEN, state.sessionToken);
+          secureSet(LS_SCR_EMAIL, email);
+          secureSet(LS_SCR_TENANT, state.tenant);
           enterScreen();
         }).catch(function () { st.textContent = 'Erreur reseau.'; });
       }
@@ -57,7 +145,7 @@
       }
 
       function logout() {
-        localStorage.removeItem('att_screen_token');
+        secureRemove(LS_SCR_TOKEN);
         state.sessionToken = '';
         location.reload();
       }
@@ -135,8 +223,13 @@
         // Library blocked/offline: show a hint but keep login usable.
         console.warn('qrcodejs failed to load');
       }
-      if (state.sessionToken && state.email) {
-        $('l-email').value = state.email;
-        enterScreen();
-      }
+      loadState().then(function (saved) {
+        state.sessionToken = saved.sessionToken;
+        state.email = saved.email;
+        state.tenant = saved.tenant;
+        if (state.sessionToken && state.email) {
+          $('l-email').value = state.email;
+          enterScreen();
+        }
+      });
     })();

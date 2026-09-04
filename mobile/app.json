@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "addredance",
+    "slug": "addredance",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "addredance",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "addredance uses your camera to scan the office attendance QR code."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA"
+      ],
+      "package": "com.addredance.mobile"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow addredance to scan attendance QR codes."
+        }
+      ]
+    ]
+  }
+}
