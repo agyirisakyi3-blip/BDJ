@@ -82,6 +82,7 @@ const VIEW_TITLES = {
   assiduite: 'Assiduite & series',
   alertes: 'Alertes & anomalies',
   gestion: 'Gestion',
+  org: 'Mon organisation',
   qr: 'QR & acces',
   annonces: 'Annonces',
   aide: 'Centre d\u0027aide',
@@ -222,6 +223,8 @@ export default function AdminDashboard() {
   const [annTitle, setAnnTitle] = useState('');
   const [annBody, setAnnBody] = useState('');
   const [annPinned, setAnnPinned] = useState(false);
+  const [orgInfo, setOrgInfo] = useState(null);
+  const [orgBusy, setOrgBusy] = useState('');
 
   // People table state
   const [peopleQuery, setPeopleQuery] = useState('');
@@ -275,7 +278,39 @@ export default function AdminDashboard() {
     apiCall({ action: 'leave_list', token: t }).then((r) => setLeaves(r.ok ? r.leaves || [] : [])).catch(() => {});
     apiCall({ action: 'holiday_list', token: t }).then((r) => setHolidays(r.ok ? r.holidays || [] : [])).catch(() => {});
     apiCall({ action: 'announcement_list', token: t }).then((r) => setAnnouncements(r.ok ? r.announcements || [] : [])).catch(() => {});
+    apiCall({ action: 'organization', token: t }).then((r) => setOrgInfo(r.ok ? r.org : null)).catch(() => {});
   }, [apiCall, token]);
+
+  const loadOrg = useCallback((tkn) => {
+    const t = tkn || token;
+    apiCall({ action: 'organization', token: t })
+      .then((r) => setOrgInfo(r.ok ? r.org : null))
+      .catch(() => {});
+  }, [apiCall, token]);
+
+  const handlePlanChange = async (plan) => {
+    if (!(await requestConfirm({
+      title: 'Changer de plan',
+      message: 'Passer au plan ' + plan + ' ? Les limites superieures s\'appliquent immediatement.',
+      confirmLabel: 'Continuer',
+    }))) return;
+    setOrgBusy(plan);
+    try {
+      const successUrl = window.location.origin + window.location.pathname + '#/admin';
+      const res = await apiCall({ action: 'plan_change', token, plan, successUrl });
+      if (!res.ok) throw new Error(res.message);
+      if (res.checkoutUrl) {
+        window.open(res.checkoutUrl, '_blank', 'noopener');
+        showFeedback('info', 'Paiement en attente. Le plan sera actif apres confirmation.');
+      } else {
+        showFeedback('success', res.message || 'Plan mis a jour.');
+      }
+      loadOrg();
+    } catch (err) {
+      showFeedback('error', err.message);
+    }
+    setOrgBusy('');
+  };
 
   const handleLogin = ({ token: tkn, email, data }) => {
     setToken(tkn);
@@ -1389,6 +1424,13 @@ export default function AdminDashboard() {
           </>
         )}
 
+        {activeView === 'org' && (
+          <>
+            <p className="stat-caption">Organisation & abonnement</p>
+            <OrgSection org={orgInfo} busy={orgBusy} onPlanChange={handlePlanChange} onRefresh={loadOrg} />
+          </>
+        )}
+
         {activeView === 'qr' && (
           <>
             <p className="stat-caption">Acces</p>
@@ -1884,6 +1926,107 @@ function CorrectionSection({ onApply }) {
       {error && <p className="feedback error">{error}</p>}
       {result && <p className="hint">{result}</p>}
     </CollapsibleCard>
+  );
+}
+
+const PLAN_DEFS = [
+  { plan: 'free', name: 'Free', tagline: 'Pour demarrer', features: ['25 employes', '1 bureau'] },
+  { plan: 'starter', name: 'Starter', tagline: 'Pour les equipes en croissance', features: ['100 employes', '3 bureaux'] },
+  { plan: 'pro', name: 'Pro', tagline: 'Pour les grandes structures', features: ['1000 employes', '10 bureaux'] },
+];
+
+function UsageBar({ label, value, limit }) {
+  const safeLimit = Math.max(limit || 1, value || 0);
+  const pct = Math.min(100, Math.round(((value || 0) / safeLimit) * 100));
+  return (
+    <div className="usage-row">
+      <div className="usage-head"><span>{label}</span><b>{value} / {limit}</b></div>
+      <div className="usage-bar"><span className={'usage-fill' + (pct >= 100 ? ' full' : pct >= 85 ? ' near' : '')} style={{ width: pct + '%' }} /></div>
+    </div>
+  );
+}
+
+function OrgSection({ org, busy, onPlanChange, onRefresh }) {
+  if (!org) return <p className="hint">Chargement des informations...</p>;
+
+  const u = org.usage || {};
+  const b = org.billing || {};
+  const isCurrent = (p) => org.plan === p;
+  const pending = org.pendingPlan && org.pendingPlan !== org.plan;
+  const statusLabel = org.status === 'suspended' ? 'Suspendue' : org.status === 'trial' ? 'Periode d\u0027essai' : 'Active';
+
+  return (
+    <>
+      <div className="card block">
+        <div className="block-head">
+          <h3>Informations de l\u0027organisation</h3>
+          <span className="pill">{statusLabel}</span>
+        </div>
+        <div className="block-body org-meta">
+          <div><span className="muted">Code</span><b>{org.code}</b></div>
+          <div><span className="muted">Nom</span><b>{org.appName}</b></div>
+          <div><span className="muted">Creee le</span><b>{org.created || '--'}</b></div>
+          <div><span className="muted">Plan actuel</span><b className="plan-badge">{org.plan}</b></div>
+        </div>
+      </div>
+
+      <div className="card block">
+        <div className="block-head">
+          <h3>Utilisation</h3>
+          <button type="button" className="ghost-btn sm" onClick={onRefresh}>Actualiser</button>
+        </div>
+        <div className="block-body">
+          <UsageBar label="Employes" value={u.employees} limit={u.employeeLimit} />
+          <UsageBar label="Bureaux" value={u.offices} limit={u.officeLimit} />
+        </div>
+      </div>
+
+      <div className="card block">
+        <div className="block-head">
+          <h3>Plan & abonnement</h3>
+          {pending && <span className="pill pill-amber">Passage a {org.pendingPlan} en attente de paiement</span>}
+        </div>
+        <div className="block-body">
+          <p className="hint">
+            {b.stripeConfigured
+              ? 'Le reglement s\u0027effectue via Stripe : vous serez redirige vers la page de paiement, puis le plan est active automatiquement.'
+              : 'Mode developpement : aucune cle Stripe configuree, les changements de plan sont appliques instantanement sans paiement.'}
+          </p>
+          <div className="plan-grid">
+            {PLAN_DEFS.map((p) => {
+              const current = isCurrent(p.plan);
+              const pendingThis = org.pendingPlan === p.plan;
+              const canSelect = !current && !pendingThis;
+              return (
+                <div key={p.plan} className={'plan-card' + (current ? ' current' : '')}>
+                  <div className="plan-top">
+                    <b className="plan-name">{p.name}</b>
+                    <span className="plan-tagline">{p.tagline}</span>
+                  </div>
+                  <ul className="plan-features">
+                    {p.features.map((f) => <li key={f}>{f}</li>)}
+                  </ul>
+                  {current ? (
+                    <span className="plan-status">Plan actuel</span>
+                  ) : pendingThis ? (
+                    <span className="plan-status">Paiement en attente</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="primary-btn sm plan-cta"
+                      onClick={() => onPlanChange(p.plan)}
+                      disabled={!!busy}
+                    >
+                      {busy === p.plan ? 'Chargement...' : 'Passer a ce plan'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 

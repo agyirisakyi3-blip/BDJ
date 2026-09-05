@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   plan TEXT NOT NULL DEFAULT 'free'
     CHECK (plan IN ('free', 'starter', 'pro')),
   master_pin TEXT DEFAULT '',
+  pending_plan TEXT DEFAULT '',
+  stripe_customer_id TEXT DEFAULT '',
   max_employees INTEGER DEFAULT 25,
   max_offices INTEGER DEFAULT 1,
   created DATE DEFAULT CURRENT_DATE,

@@ -23,6 +23,7 @@ const NAV_GROUPS = [
     label: 'Administration',
     items: [
       { key: 'gestion', label: 'Gestion', icon: 'M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01z' },
+      { key: 'org', label: 'Mon organisation', icon: 'M3 21h18 M5 21V7l7-4 7 4v14 M9 10h1 M9 13h1 M9 16h1 M15 10h1 M15 13h1 M15 16h1' },
       { key: 'qr', label: 'QR & acces', icon: 'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z M7 7h3v3H7z M17 7h3v3h-3z M17 17h3v3h-3z M7 17h3v3H7z' },
       { key: 'annonces', label: 'Annonces', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
     ],

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import crypto from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath, pathToFileURL } from 'url';
 import supabase from './supabase.js';
@@ -9,6 +10,17 @@ import { Resend } from 'resend';
 const app = express();
 const PORT = process.env.PORT || 3000;
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+const PLAN_LIMITS = {
+  free: { employees: 25, offices: 1 },
+  starter: { employees: 100, offices: 3 },
+  pro: { employees: 1000, offices: 10 },
+};
+const PLAN_NAMES = { free: 'Free', starter: 'Starter', pro: 'Pro' };
 
 const ctxStore = new AsyncLocalStorage();
 
@@ -67,8 +79,7 @@ function withTenant(row) {
 }
 
 function planLimit(max) {
-  const allowed = { free: { employees: 25, offices: 1 }, starter: { employees: 100, offices: 3 }, pro: { employees: 1000, offices: 10 } };
-  const p = allowed[currentTenantPlan()] || allowed.free;
+  const p = PLAN_LIMITS[currentTenantPlan()] || PLAN_LIMITS.free;
   return p[max] ?? max;
 }
 
@@ -97,7 +108,7 @@ const ROT_INTERVAL_SEC = 30;
 const SELFIE_MAX_BYTES = 400000;
 
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 /* ===================== HELPERS ===================== */
 
@@ -1476,6 +1487,139 @@ async function actionEmployeeCodeResend(payload, cfg, now, tz) {
 const MASTER_PIN = process.env.MASTER_PIN || '';
 const PROVISION_DAILY_LIMIT = Number(process.env.PROVISION_DAILY_LIMIT || 50);
 
+async function actionOrganization(payload, cfg) {
+  const access = await adminAccess(payload, cfg);
+  if (!access.ok) return error(access.message);
+
+  const { data: tenant } = await db('tenants').select('code, app_name, plan, status, created, pending_plan, stripe_customer_id').eq('id', currentTenant()).maybeSingle();
+  if (!tenant) return error('Tenant not found.');
+
+  const { count: empCount } = await db('employees').select('*', { count: 'exact', head: true }).limit(1);
+  const offices = await getOffices(cfg);
+  const limits = PLAN_LIMITS[tenant.plan] || PLAN_LIMITS.free;
+
+  return {
+    ok: true,
+    org: {
+      code: tenant.code,
+      appName: tenant.app_name,
+      plan: tenant.plan,
+      pendingPlan: tenant.pending_plan || '',
+      status: tenant.status,
+      created: tenant.created || '',
+      usage: {
+        employees: empCount || 0,
+        employeeLimit: limits.employees,
+        offices: offices.length,
+        officeLimit: limits.offices,
+      },
+      billing: {
+        stripeConfigured: !!STRIPE_SECRET_KEY,
+        upgrades: [
+          { plan: 'starter', price: process.env.STRIPE_PRICE_STARTER || '' },
+          { plan: 'pro', price: process.env.STRIPE_PRICE_PRO || '' },
+        ],
+      },
+    },
+  };
+}
+
+async function stripeCreateCheckout({ price, plan, tenantId, code, successUrl }) {
+  const body = new URLSearchParams({
+    mode: 'payment',
+    'line_items[0][price]': price,
+    'line_items[0][quantity]': '1',
+    'metadata[tenant_id]': tenantId,
+    'metadata[plan]': plan,
+    'metadata[code]': code,
+    success_url: successUrl,
+  });
+  try {
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + STRIPE_SECRET_KEY,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, message: (data.error && data.error.message) || 'Stripe error.' };
+    return { ok: true, url: data.url, id: data.id };
+  } catch (err) {
+    return { ok: false, message: 'Could not reach Stripe: ' + err.message };
+  }
+}
+
+async function actionPlanChange(payload, cfg) {
+  const access = await adminAccess(payload, cfg);
+  if (!access.ok) return error(access.message);
+
+  const target = String(payload.plan || '').trim().toLowerCase();
+  if (!PLAN_LIMITS[target]) return error('Unknown plan: ' + target);
+
+  const { data: tenant } = await db('tenants').select('id, code, plan, pending_plan').eq('id', currentTenant()).maybeSingle();
+  if (!tenant) return error('Tenant not found.');
+
+  if (tenant.plan === target) {
+    return { ok: true, plan: tenant.plan, message: 'This organisation is already on the ' + target + ' plan.' };
+  }
+
+  const price = process.env['STRIPE_PRICE_' + target.toUpperCase()];
+  if (STRIPE_SECRET_KEY && price) {
+    const session = await stripeCreateCheckout({
+      price,
+      plan: target,
+      tenantId: tenant.id,
+      code: tenant.code,
+      successUrl: String(payload.successUrl || FRONTEND_URL + '/#/admin'),
+    });
+    if (!session.ok) return error(session.message);
+    await db('tenants').update({ pending_plan: target }).eq('id', tenant.id);
+    return { ok: true, checkoutUrl: session.url, pendingPlan: target, message: 'Checkout session created.' };
+  }
+
+  await db('tenants').update({ plan: target, pending_plan: null }).eq('id', tenant.id);
+  await logAudit('', 'Plan changed to ' + target, 'PLAN_CHANGED');
+  return { ok: true, plan: target, message: 'Plan mis a jour : ' + PLAN_NAMES[target] + '.' };
+}
+
+function verifyStripeSignature(header, rawBody) {
+  if (!header || !rawBody) return false;
+  const parts = {};
+  for (const part of header.split(',')) {
+    const idx = part.indexOf('=');
+    if (idx > 0) parts[part.slice(0, idx).trim()] = part.slice(idx + 1);
+  }
+  if (!parts.t || !parts.v1) return false;
+  const expected = crypto.createHmac('sha256', STRIPE_WEBHOOK_SECRET).update(parts.t + '.' + rawBody).digest('hex');
+  const a = Buffer.from(parts.v1), b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+async function actionStripeWebhook(req, res) {
+  try {
+    const sig = req.headers['stripe-signature'] || '';
+    if (STRIPE_WEBHOOK_SECRET && !verifyStripeSignature(sig, req.rawBody)) {
+      return res.status(400).json({ error: 'Invalid signature.' });
+    }
+    const event = req.body;
+    if (event && event.type === 'checkout.session.completed') {
+      const s = event.data && event.data.object;
+      const tenantId = (s && s.metadata && s.metadata.tenant_id) || '';
+      const plan = (s && s.metadata && s.metadata.plan) || '';
+      if (tenantId && plan) {
+        await supabase.from('tenants').update({ plan, pending_plan: null, stripe_customer_id: s.customer || '' }).eq('id', tenantId);
+      }
+    }
+    return res.json({ received: true });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 async function actionProvision(payload) {
   const code = String(payload.code || '').trim().toLowerCase();
   const appName = safeCell(String(payload.appName || payload.orgName || '').trim()).slice(0, 60);
@@ -1541,6 +1685,10 @@ function tenantRequired(res, tenant) {
   return false;
 }
 
+app.post('/api/stripe_webhook', async (req, res) => {
+  return actionStripeWebhook(req, res);
+});
+
 app.post(['/api', '/'], async (req, res) => {
   try {
     const payload = req.body;
@@ -1550,6 +1698,7 @@ app.post(['/api', '/'], async (req, res) => {
 
     if (action === 'provision') return json(res, await actionProvision(payload));
     if (action === 'tenant_check') return json(res, await actionTenantCheck(payload));
+    if (action === 'stripe_webhook') return actionStripeWebhook(req, res);
 
     const tenant = await effectiveTenant(payload);
     const blocked = tenantRequired(res, tenant);
@@ -1561,6 +1710,8 @@ app.post(['/api', '/'], async (req, res) => {
 
       switch (action) {
         case 'config': return json(res, await actionConfig());
+        case 'organization': return json(res, await actionOrganization(payload, cfg));
+        case 'plan_change': return json(res, await actionPlanChange(payload, cfg));
         case 'attendance': return json(res, await actionAttendance(payload, cfg, now, tz));
         case 'admin': return json(res, await actionAdmin(payload, cfg, now, tz));
         case 'myattendance': return json(res, await actionMyAttendance(payload, cfg, now, tz));

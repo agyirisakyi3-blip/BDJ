@@ -720,6 +720,59 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79, 70, 22
   letter-spacing: 0.3px;
 }
 
+.pill-amber { color: #fde68a; background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.35); }
+
+/* ============ Organisation / billing ============ */
+.org-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.org-meta > div {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.org-meta .muted { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+.org-meta b { color: var(--text); font-size: 13px; word-break: break-word; }
+.plan-badge { text-transform: capitalize; color: var(--accent-light); }
+
+.usage-row { margin-bottom: 12px; }
+.usage-head { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+.usage-head span { color: var(--muted); }
+.usage-head b { color: var(--text); }
+.usage-bar {
+  height: 8px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.usage-fill {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  transition: width 0.4s ease;
+}
+.usage-fill.near { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.usage-fill.full { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+.plan-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.plan-card.current { border-color: var(--accent-border); background: var(--accent-soft); }
+.plan-card:not(.current):hover { border-color: var(--accent-border); transform: translateY(-1px); }
+.plan-top { display: flex; flex-direction: column; gap: 2px; }
+.plan-name { font-size: 15px; color: #fff; }
+.plan-tagline { font-size: 11px; color: var(--muted); }
+.plan-features { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text); display: flex; flex-direction: column; gap: 4px; }
+.plan-status {
+  text-align: center; font-size: 11px; font-weight: 700; color: var(--accent-light);
+  border: 1px dashed var(--accent-border); border-radius: 8px; padding: 7px;
+}
+.plan-cta { width: 100%; }
+
 /* ============ Chips ============ */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
