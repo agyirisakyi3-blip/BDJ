@@ -773,6 +773,28 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79, 70, 22
 }
 .plan-cta { width: 100%; }
 
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.settings-grid .range-field { margin: 0; }
+.settings-grid .range-field input { width: 100%; box-sizing: border-box; }
+.settings-toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 10px; }
+.toggle-field {
+  display: flex; flex-direction: column; gap: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.toggle-field span { font-size: 12px; color: var(--muted); }
+.toggle-field select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.settings-actions { margin-top: 12px; }
+
 /* ============ Chips ============ */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {

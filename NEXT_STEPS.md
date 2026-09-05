@@ -29,6 +29,8 @@ Everything below is committed on branch `v2-supabase` (commit `4ca9876`, pushed 
   ```
 
 ## 4. Later phases (not started)
-- Phase 3: billing tiers (free/starter/pro) enforcement + Stripe.
-- Phase 4: tenant admin portal UI (org settings, plan, usage).
 - Rotate the live `SUPABASE_SERVICE_KEY` before public launch (the .env is gitignored, but it exists).
+
+## Done in code (not yet deployed live)
+- Phase 3: billing tiers — `organization`/`plan_change` actions, Stripe Checkout + `stripe_webhook`, instant plan changes in dev mode, plan limits enforced on `employee_add`.
+- Phase 4: tenant admin portal — "Mon organisation" view (org info, usage bars, plan cards) + org settings editor (`config_update` action) for name, office, radius, late-after, weekend rule, selfie mode, reminders.

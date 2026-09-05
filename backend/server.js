@@ -1513,6 +1513,19 @@ async function actionOrganization(payload, cfg) {
         offices: offices.length,
         officeLimit: limits.offices,
       },
+      settings: {
+        appName: cfg.appName,
+        officeName: cfg.officeName,
+        officeLat: cfg.officeLat,
+        officeLng: cfg.officeLng,
+        radiusMeters: cfg.radiusMeters,
+        lateAfter: cfg.lateAfter,
+        weekendsOff: cfg.weekendsOff ? 'on' : 'off',
+        selfieMode: cfg.selfieMode,
+        reminderCheckInAfter: cfg.reminderCheckInAfter,
+        reminderCheckOutAfter: cfg.reminderCheckOutAfter,
+        minScanIntervalSec: cfg.minScanIntervalSec,
+      },
       billing: {
         stripeConfigured: !!STRIPE_SECRET_KEY,
         upgrades: [
@@ -1582,6 +1595,82 @@ async function actionPlanChange(payload, cfg) {
   await db('tenants').update({ plan: target, pending_plan: null }).eq('id', tenant.id);
   await logAudit('', 'Plan changed to ' + target, 'PLAN_CHANGED');
   return { ok: true, plan: target, message: 'Plan mis a jour : ' + PLAN_NAMES[target] + '.' };
+}
+
+const EDITABLE_CONFIG = {
+  appName: { type: 'text', max: 60 },
+  officeName: { type: 'text', max: 60 },
+  officeLat: { type: 'float', min: -90, max: 90 },
+  officeLng: { type: 'float', min: -180, max: 180 },
+  radiusMeters: { type: 'int', min: 1, max: 10000 },
+  lateAfter: { type: 'time' },
+  weekendsOff: { type: 'flag' },
+  selfieMode: { type: 'enum', values: ['off', 'optional', 'required'] },
+  reminderCheckInAfter: { type: 'time', optional: true },
+  reminderCheckOutAfter: { type: 'time', optional: true },
+  minScanIntervalSec: { type: 'int', min: 10, max: 3600 },
+};
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function validateEditableConfig(key, raw) {
+  const spec = EDITABLE_CONFIG[key];
+  if (!spec) return { ok: false, message: 'Unknown setting: ' + key };
+  const v = String(raw == null ? '' : raw).trim();
+  switch (spec.type) {
+    case 'text':
+      if (!v) return { ok: false, message: 'Required field: ' + key };
+      if (v.length > (spec.max || 200)) return { ok: false, message: key + ' is too long.' };
+      return { ok: true, value: v.slice(0, spec.max || 200) };
+    case 'float': {
+      const n = Number(v);
+      if (!isFinite(n) || n < spec.min || n > spec.max) return { ok: false, message: 'Invalid value for ' + key };
+      return { ok: true, value: String(n) };
+    }
+    case 'int': {
+      const n = parseInt(v, 10);
+      if (!isFinite(n) || String(n) !== v || n < spec.min || n > spec.max) return { ok: false, message: 'Invalid value for ' + key };
+      return { ok: true, value: String(n) };
+    }
+    case 'time':
+      if (spec.optional && !v) return { ok: true, value: '' };
+      if (!TIME_RE.test(v)) return { ok: false, message: 'Invalid time for ' + key + ' (HH:MM).' };
+      return { ok: true, value: v };
+    case 'flag':
+      return { ok: true, value: (v === 'on' || v === '1' || (v !== 'off' && v !== 'false' && v !== '0')) ? 'on' : 'off' };
+    case 'enum':
+      if (!spec.values.includes(v)) return { ok: false, message: 'Invalid value for ' + key };
+      return { ok: true, value: v };
+  }
+  return { ok: false, message: 'Unsupported setting: ' + key };
+}
+
+async function actionConfigUpdate(payload, cfg) {
+  const access = await adminAccess(payload, cfg);
+  if (!access.ok) return error(access.message);
+
+  const updates = payload.updates;
+  if (!updates || typeof updates !== 'object') return error('Required field: updates');
+  const keys = Object.keys(updates);
+  if (!keys.length) return error('No settings to update.');
+
+  for (const key of keys) {
+    if (!EDITABLE_CONFIG[key]) return error('Unknown setting: ' + key);
+  }
+
+  const rows = [];
+  for (const key of keys) {
+    const r = validateEditableConfig(key, updates[key]);
+    if (!r.ok) return error(r.message);
+    rows.push(withTenant({ key, value: r.value }));
+  }
+
+  const { error: upErr } = await db('config').upsert(rows);
+  if (upErr) return error('Could not save settings. ' + (upErr.message || ''));
+
+  await logAudit('', 'Settings updated: ' + keys.sort().join(', '), 'CONFIG_UPDATED');
+  const cfg2 = await getConfig();
+  return { ok: true, message: 'Parametres enregistres.', config: publicConfig(cfg2, await getOffices(cfg2)) };
 }
 
 function verifyStripeSignature(header, rawBody) {
@@ -1712,6 +1801,7 @@ app.post(['/api', '/'], async (req, res) => {
         case 'config': return json(res, await actionConfig());
         case 'organization': return json(res, await actionOrganization(payload, cfg));
         case 'plan_change': return json(res, await actionPlanChange(payload, cfg));
+        case 'config_update': return json(res, await actionConfigUpdate(payload, cfg));
         case 'attendance': return json(res, await actionAttendance(payload, cfg, now, tz));
         case 'admin': return json(res, await actionAdmin(payload, cfg, now, tz));
         case 'myattendance': return json(res, await actionMyAttendance(payload, cfg, now, tz));

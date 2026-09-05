@@ -312,6 +312,19 @@ export default function AdminDashboard() {
     setOrgBusy('');
   };
 
+  const handleSaveSettings = async (updates) => {
+    setOrgBusy('settings');
+    try {
+      const res = await apiCall({ action: 'config_update', token, updates });
+      if (!res.ok) throw new Error(res.message);
+      showFeedback('success', res.message || 'Parametres enregistres.');
+      loadOrg();
+    } catch (err) {
+      showFeedback('error', err.message);
+    }
+    setOrgBusy('');
+  };
+
   const handleLogin = ({ token: tkn, email, data }) => {
     setToken(tkn);
     setAdminEmail(email);
@@ -1428,6 +1441,7 @@ export default function AdminDashboard() {
           <>
             <p className="stat-caption">Organisation & abonnement</p>
             <OrgSection org={orgInfo} busy={orgBusy} onPlanChange={handlePlanChange} onRefresh={loadOrg} />
+            <OrgSettings settings={orgInfo && orgInfo.settings} busy={orgBusy} onSave={handleSaveSettings} />
           </>
         )}
 
@@ -2027,6 +2041,86 @@ function OrgSection({ org, busy, onPlanChange, onRefresh }) {
         </div>
       </div>
     </>
+  );
+}
+
+function OrgSettings({ settings, busy, onSave }) {
+  const [form, setForm] = useState(settings || {});
+  useEffect(() => { if (settings) setForm({ ...settings }); }, [settings]);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const saving = busy === 'settings';
+
+  const submit = () => {
+    onSave({
+      appName: form.appName,
+      officeName: form.officeName,
+      officeLat: String(form.officeLat ?? ''),
+      officeLng: String(form.officeLng ?? ''),
+      radiusMeters: String(form.radiusMeters ?? ''),
+      lateAfter: form.lateAfter || '',
+      weekendsOff: form.weekendsOff === 'on' ? 'on' : 'off',
+      selfieMode: form.selfieMode || 'off',
+      reminderCheckInAfter: form.reminderCheckInAfter || '',
+      reminderCheckOutAfter: form.reminderCheckOutAfter || '',
+      minScanIntervalSec: String(form.minScanIntervalSec ?? ''),
+    });
+  };
+
+  return (
+    <div className="card block">
+      <div className="block-head"><h3>Parametres de l\u0027organisation</h3></div>
+      <div className="block-body">
+        <div className="settings-grid">
+          <label className="range-field"><span>Nom affiche</span>
+            <input type="text" value={form.appName || ''} onChange={(e) => set('appName', e.target.value)} maxLength={60} />
+          </label>
+          <label className="range-field"><span>Bureau principal</span>
+            <input type="text" value={form.officeName || ''} onChange={(e) => set('officeName', e.target.value)} maxLength={60} />
+          </label>
+          <label className="range-field"><span>Latitude du bureau</span>
+            <input type="number" step="any" value={form.officeLat ?? ''} onChange={(e) => set('officeLat', e.target.value)} />
+          </label>
+          <label className="range-field"><span>Longitude du bureau</span>
+            <input type="number" step="any" value={form.officeLng ?? ''} onChange={(e) => set('officeLng', e.target.value)} />
+          </label>
+          <label className="range-field"><span>Rayon de pointage (m)</span>
+            <input type="number" min="1" max="10000" value={form.radiusMeters ?? ''} onChange={(e) => set('radiusMeters', e.target.value)} />
+          </label>
+          <label className="range-field"><span>Heure limite arrivee</span>
+            <input type="time" value={form.lateAfter || ''} onChange={(e) => set('lateAfter', e.target.value)} />
+          </label>
+          <label className="range-field"><span>Intervalle de scan min (s)</span>
+            <input type="number" min="10" max="3600" value={form.minScanIntervalSec ?? ''} onChange={(e) => set('minScanIntervalSec', e.target.value)} />
+          </label>
+          <label className="range-field"><span>Rappel entree (HH:MM)</span>
+            <input type="time" value={form.reminderCheckInAfter || ''} onChange={(e) => set('reminderCheckInAfter', e.target.value)} />
+          </label>
+          <label className="range-field"><span>Rappel sortie (HH:MM)</span>
+            <input type="time" value={form.reminderCheckOutAfter || ''} onChange={(e) => set('reminderCheckOutAfter', e.target.value)} />
+          </label>
+        </div>
+        <div className="settings-toggles">
+          <label className="toggle-field"><span>Pointage le week-end</span>
+            <select value={form.weekendsOff === 'on' ? 'on' : 'off'} onChange={(e) => set('weekendsOff', e.target.value)}>
+              <option value="on">Week-end ferme (samedi/dimanche non ouvres)</option>
+              <option value="off">Week-end ouvert</option>
+            </select>
+          </label>
+          <label className="toggle-field"><span>Photo selfie</span>
+            <select value={form.selfieMode || 'off'} onChange={(e) => set('selfieMode', e.target.value)}>
+              <option value="off">Desactivee</option>
+              <option value="optional">Optionnelle</option>
+              <option value="required">Obligatoire au pointage</option>
+            </select>
+          </label>
+        </div>
+        <div className="settings-actions">
+          <button className="primary-btn range-btn" onClick={submit} disabled={!!busy}>
+            {saving ? 'Enregistrement...' : 'Enregistrer les parametres'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
