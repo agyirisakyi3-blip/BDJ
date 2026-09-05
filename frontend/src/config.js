@@ -1,7 +1,7 @@
 const CONFIG = {
   // v2.0 (Supabase): point to your deployed Supabase-backed API server.
-  // Replace your-api-server with your hosted backend URL (e.g. https://your-app.onrender.com) and keep /api.
-  API_URL: 'https://your-api-server/api',
+  // Local dev (backend runs `npm run dev` on port 3000):
+  API_URL: (import.meta.env && import.meta.env.VITE_API_URL) || 'http://localhost:3000/api',
   APP_NAME: 'addredance',
   DEFAULT_TENANT: '',
 };

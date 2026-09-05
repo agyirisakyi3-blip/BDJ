@@ -51,8 +51,8 @@ export function AppProvider({ children }) {
     return t || String(CONFIG.DEFAULT_TENANT || '').trim();
   }, [profile]);
 
-  const apiCall = useCallback((body) => {
-    return api(body, tenantFromProfile());
+  const apiCall = useCallback((body, tenantOverride) => {
+    return api(body, tenantOverride ? String(tenantOverride).trim() : tenantFromProfile());
   }, [tenantFromProfile]);
 
   const showFeedback = useCallback((type, msg, hapticPattern) => {
@@ -136,7 +136,8 @@ export function AppProvider({ children }) {
   // Load config on mount
   useEffect(() => {
     if (!isConfigured()) return;
-    api({ action: 'config' })
+    if (!tenantFromProfile()) return;
+    api({ action: 'config' }, tenantFromProfile())
       .then((res) => {
         if (res.ok && res.config) {
           setConfig((prev) => ({ ...prev, ...res.config }));

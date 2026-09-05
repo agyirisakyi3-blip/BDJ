@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath, pathToFileURL } from 'url';
 import supabase from './supabase.js';
 import { Resend } from 'resend';
@@ -8,6 +9,89 @@ import { Resend } from 'resend';
 const app = express();
 const PORT = process.env.PORT || 3000;
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+const ctxStore = new AsyncLocalStorage();
+
+const TENANT_TABLES = new Set([
+  'config', 'employees', 'attendance', 'admins', 'roster', 'offices',
+  'audit', 'leave_requests', 'holidays', 'announcements',
+  'otp_store', 'sessions', 'write_quotas',
+]);
+
+const DEFAULT_CONFIG = [
+  ['appName', 'Liste Des Presences'],
+  ['officeName', 'Head Office'],
+  ['officeLat', '5.6037168'],
+  ['officeLng', '-0.1869644'],
+  ['radiusMeters', '150'],
+  ['rosterMode', 'roster'],
+  ['rosterDomain', ''],
+  ['minScanIntervalSec', '60'],
+  ['replayMaxAgeMs', '300000'],
+  ['pinMaxAttempts', '5'],
+  ['pinLockoutMs', '900000'],
+  ['writeQuotaPerEmail', '60'],
+  ['writeQuotaTenant', '600'],
+  ['retentionDays', '0'],
+  ['lateAfter', '08:30'],
+  ['selfieMode', 'off'],
+  ['reminderCheckInAfter', ''],
+  ['reminderCheckOutAfter', ''],
+  ['weekendsOff', 'on'],
+];
+
+/* ===================== TENANCY HELPERS ===================== */
+
+function currentTenant() {
+  const st = ctxStore.getStore();
+  return st ? st.tenantId : null;
+}
+
+function currentTenantPlan() {
+  const st = ctxStore.getStore();
+  return st ? st.plan : 'free';
+}
+
+function db(table) {
+  const q = supabase.from(table);
+  if (TENANT_TABLES.has(table) && currentTenant()) {
+    return q.eq('tenant_id', currentTenant());
+  }
+  return q;
+}
+
+function withTenant(row) {
+  if (Array.isArray(row)) return row.map(withTenant);
+  const tid = currentTenant();
+  return tid ? { ...row, tenant_id: tid } : row;
+}
+
+function planLimit(max) {
+  const allowed = { free: { employees: 25, offices: 1 }, starter: { employees: 100, offices: 3 }, pro: { employees: 1000, offices: 10 } };
+  const p = allowed[currentTenantPlan()] || allowed.free;
+  return p[max] ?? max;
+}
+
+async function resolveTenant(code) {
+  const c = String(code || '').trim().toLowerCase();
+  if (!c) return null;
+  const { data } = await db('tenants').select('id, code, app_name, plan, status, master_pin, max_employees, max_offices').eq('code', c).maybeSingle();
+  return data || null;
+}
+
+async function ensureTenantConfig(tenantId) {
+  const { count } = await db('config').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId);
+  if (count > 0) return;
+  await db('config').insert(DEFAULT_CONFIG.map(([key, value]) => ({ tenant_id: tenantId, key, value })));
+}
+
+async function effectiveTenant(payload) {
+  const code = String(payload.tenant || process.env.DEFAULT_TENANT || '').trim().toLowerCase();
+  if (!code) return { id: null, code: '', reason: 'no_tenant' };
+  const t = await resolveTenant(code);
+  if (!t) return { id: null, code, reason: 'unknown' };
+  return { id: t.id, code: t.code, plan: t.plan, status: t.status, appName: t.app_name };
+}
 
 const ROT_INTERVAL_SEC = 30;
 const SELFIE_MAX_BYTES = 400000;
@@ -99,7 +183,7 @@ function sanitizeDate(v, fallback) {
 /* ===================== CONFIG ===================== */
 
 async function getConfig() {
-  const { data } = await supabase.from('config').select('key, value');
+  const { data } = await db('config').select('key, value');
   const cfg = {};
   if (data) {
     for (const row of data) {
@@ -149,7 +233,7 @@ function publicConfig(cfg, offices) {
 /* ===================== OFFICES ===================== */
 
 async function getOffices(cfg) {
-  const { data } = await supabase.from('offices').select('*');
+  const { data } = await db('offices').select('*');
   const offices = (data || []).filter(o => o.qr_token && o.latitude && o.longitude);
   if (offices.length === 0 && cfg.qrSecret) {
     return [{ name: cfg.officeName, qr_token: cfg.qrSecret, latitude: cfg.officeLat, longitude: cfg.officeLng, radius_meters: cfg.radiusMeters }];
@@ -160,13 +244,13 @@ async function getOffices(cfg) {
 /* ===================== EMPLOYEES ===================== */
 
 async function findEmployee(email) {
-  const { data } = await supabase.from('employees').select('*').eq('email', email.toLowerCase().trim()).maybeSingle();
+  const { data } = await db('employees').select('*').eq('email', email.toLowerCase().trim()).maybeSingle();
   return data;
 }
 
 async function expectedStaff() {
-  const { data: empRows } = await supabase.from('employees').select('name, email, department');
-  const { data: rosterRows } = await supabase.from('roster').select('email');
+  const { data: empRows } = await db('employees').select('name, email, department');
+  const { data: rosterRows } = await db('roster').select('email');
   const seen = {};
   const out = [];
   for (const e of (empRows || [])) {
@@ -187,16 +271,17 @@ async function expectedStaff() {
 /* ===================== AUDIT ===================== */
 
 async function logAudit(email, reason, code) {
+  if (!currentTenant()) return;
   const now = new Date();
   const tz = 'Africa/Accra';
   try {
-    await supabase.from('audit').insert({
+    await db('audit').insert(withTenant({
       date: dateStr(now, tz),
       time: formatTime(now, tz),
       email: email || '',
       reason: reason || '',
       code: code || '',
-    });
+    }));
   } catch (e) {}
 }
 
@@ -204,59 +289,59 @@ async function logAudit(email, reason, code) {
 
 async function writeBudget(key, limit, windowMs) {
   const now = Date.now();
-  const { data } = await supabase.from('write_quotas').select('*').eq('key', key).maybeSingle();
+  const { data } = await db('write_quotas').select('*').eq('key', key).maybeSingle();
   if (!data || (now - new Date(data.window_start).getTime()) > windowMs) {
-    await supabase.from('write_quotas').upsert({ key, count: 1, window_start: new Date().toISOString() });
+    await db('write_quotas').upsert(withTenant({ key, count: 1, window_start: new Date().toISOString() }));
     return true;
   }
   if (data.count >= limit) return false;
-  await supabase.from('write_quotas').update({ count: data.count + 1 }).eq('key', key);
+  await db('write_quotas').update({ count: data.count + 1 }).eq('key', key);
   return true;
 }
 
 /* ===================== OTP / SESSIONS ===================== */
 
 async function storeOtp(key, code, ttlMs) {
-  await supabase.from('otp_store').upsert({
+  await db('otp_store').upsert(withTenant({
     key,
     value: { code, tries: 0 },
     expires_at: new Date(Date.now() + ttlMs).toISOString(),
-  });
+  }));
 }
 
 async function verifyOtp(key, attempt) {
-  const { data } = await supabase.from('otp_store').select('*').eq('key', key).maybeSingle();
+  const { data } = await db('otp_store').select('*').eq('key', key).maybeSingle();
   if (!data) return false;
   if (new Date(data.expires_at).getTime() < Date.now()) return false;
   if ((data.value.tries || 0) >= 5) return false;
   if (String(data.value.code) !== String(attempt).trim()) {
-    await supabase.from('otp_store').update({ value: { ...data.value, tries: (data.value.tries || 0) + 1 } }).eq('key', key);
+    await db('otp_store').update({ value: { ...data.value, tries: (data.value.tries || 0) + 1 } }).eq('key', key);
     return false;
   }
-  await supabase.from('otp_store').delete().eq('key', key);
+  await db('otp_store').delete().eq('key', key);
   return true;
 }
 
 async function createSession(type = 'admin', email = null) {
   const token = randomToken() + randomToken();
-  await supabase.from('sessions').insert({
+  await db('sessions').insert(withTenant({
     token,
     email,
     session_type: type,
     expires_at: new Date(Date.now() + 12 * 3600 * 1000).toISOString(),
-  });
+  }));
   return token;
 }
 
 async function validSession(token) {
   if (!token) return false;
-  const { data } = await supabase.from('sessions').select('token').eq('token', token).maybeSingle();
+  const { data } = await db('sessions').select('token').eq('token', token).maybeSingle();
   return !!data;
 }
 
 async function validUserSession(email, token) {
   if (!email || !token) return false;
-  const { data } = await supabase.from('sessions').select('token, email').eq('token', token).maybeSingle();
+  const { data } = await db('sessions').select('token, email').eq('token', token).maybeSingle();
   return !!data && String(data.email).toLowerCase() === String(email).trim().toLowerCase();
 }
 
@@ -270,7 +355,7 @@ async function ownsEmail(email, token) {
 async function pinCheck(payload, cfg) {
   const pin = String(payload.pin || '').trim();
   const guardKey = 'pinlock';
-  const { data } = await supabase.from('otp_store').select('*').eq('key', guardKey).maybeSingle();
+  const { data } = await db('otp_store').select('*').eq('key', guardKey).maybeSingle();
   let state = { count: 0, until: 0 };
   if (data) state = { count: data.value.count || 0, until: data.value.until || 0 };
 
@@ -286,17 +371,17 @@ async function pinCheck(payload, cfg) {
       state.count = 0;
       state.until = Date.now() + cfg.pinLockoutMs;
     }
-    await supabase.from('otp_store').upsert({
+    await db('otp_store').upsert(withTenant({
       key: guardKey,
       value: state,
       expires_at: new Date(Date.now() + cfg.pinLockoutMs).toISOString(),
-    });
+    }));
     if (state.until > Date.now()) {
       return { ok: false, message: 'Too many failed attempts. Admin locked for ' + Math.ceil(cfg.pinLockoutMs / 60000) + ' minutes.' };
     }
     return { ok: false, message: 'Invalid PIN (' + state.count + '/' + cfg.pinMaxAttempts + ' attempts).' };
   }
-  await supabase.from('otp_store').delete().eq('key', guardKey);
+  await db('otp_store').delete().eq('key', guardKey);
   return { ok: true };
 }
 
@@ -329,7 +414,7 @@ async function adminAccess(payload, cfg) {
   const otp = String(payload.otp || '').trim();
 
   if (email && otp) {
-    const { data: admin } = await supabase.from('admins').select('email').eq('email', email).maybeSingle();
+    const { data: admin } = await db('admins').select('email').eq('email', email).maybeSingle();
     if (admin) {
       if (!await verifyOtp('otp:admin:' + email, otp)) {
         await logAudit(email, 'Bad admin one-time code', 'BAD_OTP');
@@ -348,10 +433,10 @@ async function adminAccess(payload, cfg) {
   if (!otp) {
     let otpEmail = cfg.adminEmail;
     const { data: admin } = otpEmail
-      ? await supabase.from('admins').select('email').eq('email', otpEmail).maybeSingle()
+      ? await db('admins').select('email').eq('email', otpEmail).maybeSingle()
       : { data: null };
     if (!otpEmail || !admin) {
-      const { data: admins } = await supabase.from('admins').select('email').limit(1);
+      const { data: admins } = await db('admins').select('email').limit(1);
       if (admins && admins.length) otpEmail = admins[0].email;
     }
     if (!otpEmail) {
@@ -379,7 +464,7 @@ async function adminAccess(payload, cfg) {
 
 async function isAdmin(email) {
   if (!email) return false;
-  const { data } = await supabase.from('admins').select('email').eq('email', email.toLowerCase().trim()).maybeSingle();
+  const { data } = await db('admins').select('email').eq('email', email.toLowerCase().trim()).maybeSingle();
   return !!data;
 }
 
@@ -387,7 +472,7 @@ async function isAdmin(email) {
 
 async function lateResolver(cfg) {
   const defSec = timeToSec(cfg.lateAfter || '');
-  const { data } = await supabase.from('employees').select('email, shift_start');
+  const { data } = await db('employees').select('email, shift_start');
   const map = {};
   if (data) {
     for (const row of data) {
@@ -517,7 +602,7 @@ function daysOverlapCount(aFrom, aTo, bFrom, bTo, workingOnly) {
 /* ===================== ROTATING QR ===================== */
 
 async function rotatingSecret() {
-  const { data } = await supabase.from('config').select('value').eq('key', 'qrSecret').maybeSingle();
+  const { data } = await db('config').select('value').eq('key', 'qrSecret').maybeSingle();
   return data?.value || 'default';
 }
 
@@ -546,7 +631,7 @@ async function matchRotating(qr, nowMs) {
 /* ===================== LEAVE ===================== */
 
 async function getLeavesInRange(from, to) {
-  const { data } = await supabase.from('leave_requests').select('*');
+  const { data } = await db('leave_requests').select('*');
   return (data || []).filter(l => {
     const start = sanitizeDate(l.start_date, '');
     const end = sanitizeDate(l.end_date, '');
@@ -562,7 +647,7 @@ async function getLeavesInRange(from, to) {
 /* ===================== HOLIDAYS ===================== */
 
 async function getHolidaysInRange(from, to) {
-  const { data } = await supabase.from('holidays').select('*');
+  const { data } = await db('holidays').select('*');
   return (data || [])
     .filter(h => {
       const d = sanitizeDate(h.date, '');
@@ -618,7 +703,7 @@ async function actionAttendance(payload, cfg, now, tz) {
   const employee = await findEmployee(email);
   const displayName = employee && employee.name ? employee.name : name;
 
-  const { data: todayRows } = await supabase.from('attendance')
+  const { data: todayRows } = await db('attendance')
     .select('*')
     .eq('email', email)
     .eq('date', dateStr(now, tz))
@@ -688,7 +773,7 @@ async function actionAttendance(payload, cfg, now, tz) {
     return error('Office is very busy right now. Try again in a few minutes.');
   }
 
-  await supabase.from('attendance').insert({
+  await db('attendance').insert(withTenant({
     date: dateStr(now, tz),
     time: formatTime(now, tz),
     name: safeCell(displayName),
@@ -698,7 +783,7 @@ async function actionAttendance(payload, cfg, now, tz) {
     qr_token: qr,
     office: office.name || '',
     selfie: selfieFileId,
-  });
+  }));
 
   const breakMinutes = computeBreakMinutes(rows.concat([{ action, sec: nowSec }]));
 
@@ -737,7 +822,7 @@ async function isEmailAllowed(email, cfg) {
     return email.slice(at + 1).toLowerCase() === String(cfg.rosterDomain || '').toLowerCase();
   }
   if (mode === 'roster') {
-    const { data } = await supabase.from('roster').select('email').eq('email', email.toLowerCase()).maybeSingle();
+    const { data } = await db('roster').select('email').eq('email', email.toLowerCase()).maybeSingle();
     if (data) return true;
     const emp = await findEmployee(email);
     return !!emp;
@@ -756,7 +841,7 @@ async function actionAdmin(payload, cfg, now, tz) {
   const from = sanitizeDate(payload.from, today);
   const to = sanitizeDate(payload.to, today);
 
-  const { data: attData } = await supabase.from('attendance').select('*').gte('date', from).lte('date', to).order('time', { ascending: true });
+  const { data: attData } = await db('attendance').select('*').gte('date', from).lte('date', to).order('time', { ascending: true });
 
   const onSite = {}, onBreakSet = {}, checkedInSet = {};
   let checkedInToday = 0, checkedOutToday = 0;
@@ -809,7 +894,7 @@ async function actionAdmin(payload, cfg, now, tz) {
     }
   }
 
-  const { data: adminRows } = await supabase.from('admins').select('*');
+  const { data: adminRows } = await db('admins').select('*');
   const admins = (adminRows || []).map(a => ({ email: a.email, name: a.name || '', addedOn: a.added_on || '', addedBy: a.added_by || '' }));
 
   return {
@@ -897,7 +982,7 @@ async function actionMyAttendance(payload, cfg, now, tz) {
   const from = sanitizeDate(payload.from, today.slice(0, 7) + '-01');
   const to = sanitizeDate(payload.to, today);
 
-  const { data } = await supabase.from('attendance').select('*').eq('email', email).gte('date', from).lte('date', to);
+  const { data } = await db('attendance').select('*').eq('email', email).gte('date', from).lte('date', to);
   const lateFor = await lateResolver(cfg);
   const report = computeReport(data || [], from, to, lateFor, tz);
 
@@ -911,7 +996,7 @@ async function actionRecent(payload, cfg, now, tz) {
   const email = String(payload.email || '').trim().toLowerCase();
   if (!await ownsEmail(email, String(payload.token || ''))) return { ok: false, code: 'SESSION_REQUIRED', message: 'Session expired.' };
 
-  const { data } = await supabase.from('attendance')
+  const { data } = await db('attendance')
     .select('date, time, action, office')
     .eq('email', email)
     .order('date', { ascending: false })
@@ -929,7 +1014,7 @@ async function actionWeek(payload, cfg, now, tz) {
   const from = dateStr(fromDate, tz);
   const to = dateStr(now, tz);
 
-  const { data } = await supabase.from('attendance').select('*').eq('email', email).gte('date', from).lte('date', to);
+  const { data } = await db('attendance').select('*').eq('email', email).gte('date', from).lte('date', to);
   const lateFor = await lateResolver(cfg);
   const report = computeReport(data || [], from, to, lateFor, tz);
 
@@ -953,7 +1038,7 @@ async function actionEmployees(payload, cfg, now, tz) {
   const access = await adminAccess(payload, cfg);
   if (!access.ok) return error(access.message);
 
-  const { data } = await supabase.from('employees').select('*').order('name');
+  const { data } = await db('employees').select('*').order('name');
   const list = (data || []).map(r => ({
     name: r.name || '',
     email: (r.email || '').toLowerCase(),
@@ -984,7 +1069,11 @@ async function actionEmployeeAdd(payload, cfg, now, tz) {
   const code = String(payload.code || '').trim();
   if (code && !/^\d{6}$/.test(code)) return error('Code must be exactly 6 digits.');
 
-  const { data: existing } = await supabase.from('employees').select('*').eq('email', email).maybeSingle();
+  const { data: existing } = await db('employees').select('*').eq('email', email).maybeSingle();
+  if (!existing) {
+    const { count: empCount } = await db('employees').select('*', { count: 'exact', head: true });
+    if (empCount >= planLimit('employees')) return error('Your plan allows up to ' + planLimit('employees') + ' employees. Upgrade to add more.');
+  }
   if (existing) {
     const update = {
       name, department, role: safeCell(String(payload.role || '').trim()),
@@ -995,22 +1084,22 @@ async function actionEmployeeAdd(payload, cfg, now, tz) {
     if (shiftStart) update.shift_start = shiftStart + ':00';
     if (shiftEnd) update.shift_end = shiftEnd + ':00';
     if (code && code !== existing.code) {
-      const { data: used } = await supabase.from('employees').select('code');
+      const { data: used } = await db('employees').select('code');
       if (used && used.some(u => u.code === code)) return error('This code is already used by another employee.');
       update.code = code;
     }
-    await supabase.from('employees').update(update).eq('email', email);
+    await db('employees').update(update).eq('email', email);
     return { ok: true, employee: { name, email, department } };
   }
 
   let empCode = code;
   if (!empCode) {
-    const { data: allCodes } = await supabase.from('employees').select('code');
+    const { data: allCodes } = await db('employees').select('code');
     const used = new Set((allCodes || []).map(c => c.code).filter(Boolean));
     do { empCode = String(Math.floor(100000 + Math.random() * 900000)); } while (used.has(empCode));
   }
 
-  await supabase.from('employees').insert({
+  await db('employees').insert(withTenant({
     name, email, department, code: empCode,
     shift_start: shiftStart ? shiftStart + ':00' : null,
     shift_end: shiftEnd ? shiftEnd + ':00' : null,
@@ -1018,7 +1107,7 @@ async function actionEmployeeAdd(payload, cfg, now, tz) {
     phone: safeCell(String(payload.phone || '').trim()),
     birth_date: String(payload.birth || '').trim() || null,
     photo: String(payload.photo || '').trim().slice(0, 60000),
-  });
+  }));
   return { ok: true, employee: { name, email, department, code: empCode } };
 }
 
@@ -1027,9 +1116,9 @@ async function actionEmployeeDelete(payload, cfg, now, tz) {
   if (!access.ok) return error(access.message);
   const email = String(payload.email || '').trim().toLowerCase();
   if (!email) return error('Email required');
-  const { data } = await supabase.from('employees').select('email').eq('email', email).maybeSingle();
+  const { data } = await db('employees').select('email').eq('email', email).maybeSingle();
   if (!data) return error('Employee not found: ' + email);
-  await supabase.from('employees').delete().eq('email', email);
+  await db('employees').delete().eq('email', email);
   return { ok: true, deleted: email };
 }
 
@@ -1053,8 +1142,18 @@ async function actionAdminLogin(payload, cfg, now, tz) {
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
   await storeOtp('otp:admin:' + email, code, 600000);
-  await sendEmail(email, 'Your admin access code', 'Your one-time code is: ' + code + '\nValid for 10 minutes.');
-  return { ok: true, needOtp: true, message: 'A one-time code was sent to ' + email + '.', email };
+  if (resend) {
+    await sendEmail(email, 'Your admin access code', 'Your one-time code is: ' + code + '\nValid for 10 minutes.');
+  } else {
+    console.log('[DEV] Admin OTP for ' + email + ': ' + code);
+  }
+  return {
+    ok: true,
+    needOtp: true,
+    message: 'A one-time code was sent to ' + email + '.',
+    email,
+    otpDev: resend ? undefined : code,
+  };
 }
 
 async function actionAdminCheck(payload) {
@@ -1066,7 +1165,7 @@ async function actionAdminCheck(payload) {
 async function actionAdminsList(payload, cfg, now, tz) {
   const access = await adminAccess(payload, cfg);
   if (!access.ok) return error(access.message);
-  const { data } = await supabase.from('admins').select('*');
+  const { data } = await db('admins').select('*');
   return { ok: true, admins: (data || []).map(a => ({ email: a.email, name: a.name || '', addedOn: a.added_on || '', addedBy: a.added_by || '' })) };
 }
 
@@ -1077,7 +1176,7 @@ async function actionAdminAdd(payload, cfg, now, tz) {
   const name = String(payload.name || '').trim();
   if (!email) return error('Email required');
   if (await isAdmin(email)) return { ok: true, message: email + ' is already an admin.' };
-  await supabase.from('admins').insert({ email, name, added_on: dateStr(now, 'Africa/Accra'), added_by: safeCell(String(payload.adminEmail || 'admin')) });
+  await db('admins').insert(withTenant({ email, name, added_on: dateStr(now, 'Africa/Accra'), added_by: safeCell(String(payload.adminEmail || 'admin')) }));
   await logAudit(String(payload.adminEmail || 'admin'), 'Added admin: ' + email, 'ADMIN_ADDED');
   return { ok: true, admin: { email, name } };
 }
@@ -1087,9 +1186,9 @@ async function actionAdminRemove(payload, cfg, now, tz) {
   if (!access.ok) return error(access.message);
   const email = String(payload.email || '').trim().toLowerCase();
   if (!email) return error('Email required');
-  const { data } = await supabase.from('admins').select('email').eq('email', email).maybeSingle();
+  const { data } = await db('admins').select('email').eq('email', email).maybeSingle();
   if (!data) return error('Admin not found: ' + email);
-  await supabase.from('admins').delete().eq('email', email);
+  await db('admins').delete().eq('email', email);
   await logAudit(String(payload.adminEmail || 'admin'), 'Removed admin: ' + email, 'ADMIN_REMOVED');
   return { ok: true, deleted: email };
 }
@@ -1113,18 +1212,18 @@ async function actionUserLogin(payload, cfg, now, tz) {
       return error('No code associated with this email.');
     }
     const cacheKey = 'codetry:' + email;
-    const { data: attemptData } = await supabase.from('otp_store').select('*').eq('key', cacheKey).maybeSingle();
+    const { data: attemptData } = await db('otp_store').select('*').eq('key', cacheKey).maybeSingle();
     if (attemptData && attemptData.value.locked_until && Date.now() < attemptData.value.locked_until) {
       return error('Too many failed attempts. Try again later.');
     }
     if (code !== emp.code) {
       const tries = (attemptData?.value.tries || 0) + 1;
       const val = tries >= 5 ? { tries: 0, locked_until: Date.now() + 900000 } : { tries };
-      await supabase.from('otp_store').upsert({ key: cacheKey, value: val, expires_at: new Date(Date.now() + 900000).toISOString() });
+      await db('otp_store').upsert(withTenant({ key: cacheKey, value: val, expires_at: new Date(Date.now() + 900000).toISOString() }));
       await logAudit(email, 'Bad fixed sign-in code', 'BAD_CODE');
       return error('Incorrect code.');
     }
-    await supabase.from('otp_store').delete().eq('key', cacheKey);
+    await db('otp_store').delete().eq('key', cacheKey);
     await logAudit(email, 'User signed in (fixed code)', 'USER_LOGIN');
     const adminFlag = await isAdmin(email);
     const sessionType = adminFlag ? 'admin' : 'user';
@@ -1177,7 +1276,7 @@ async function actionLeaveAdd(payload, cfg, now, tz) {
   const reason = safeCell(String(payload.reason || '').trim());
   if (!start || !end) return error('Dates required (YYYY-MM-DD).');
   if (end < start) return error('End must be after start.');
-  await supabase.from('leave_requests').insert({ email, start_date: start, end_date: end, reason, created_by: safeCell(String(payload.adminEmail || 'admin')) });
+  await db('leave_requests').insert(withTenant({ email, start_date: start, end_date: end, reason, created_by: safeCell(String(payload.adminEmail || 'admin')) }));
   await logAudit(String(payload.adminEmail || 'admin'), 'Leave added: ' + email + ' ' + start + '..' + end, 'LEAVE_ADDED');
   return { ok: true };
 }
@@ -1186,9 +1285,9 @@ async function actionLeaveDelete(payload, cfg, now, tz) {
   const access = await adminAccess(payload, cfg);
   if (!access.ok) return error(access.message);
   const idx = Number(payload.index);
-  const { data } = await supabase.from('leave_requests').select('*').order('created');
+  const { data } = await db('leave_requests').select('*').order('created');
   if (!data || idx < 1 || idx >= data.length) return error('Entry not found.');
-  await supabase.from('leave_requests').delete().eq('id', data[idx].id);
+  await db('leave_requests').delete().eq('id', data[idx].id);
   return { ok: true };
 }
 
@@ -1204,9 +1303,9 @@ async function actionHolidayAdd(payload, cfg, now, tz) {
   const d = sanitizeDate(payload.date, '');
   const name = safeCell(String(payload.name || '').trim() || 'Holiday');
   if (!d) return error('Date required (YYYY-MM-DD).');
-  const { data: existing } = await supabase.from('holidays').select('date').eq('date', d).maybeSingle();
+  const { data: existing } = await db('holidays').select('date').eq('date', d).maybeSingle();
   if (existing) return error('This date is already recorded.');
-  await supabase.from('holidays').insert({ date: d, name });
+  await db('holidays').insert(withTenant({ date: d, name }));
   return { ok: true };
 }
 
@@ -1214,14 +1313,14 @@ async function actionHolidayDelete(payload, cfg, now, tz) {
   const access = await adminAccess(payload, cfg);
   if (!access.ok) return error(access.message);
   const idx = Number(payload.index);
-  const { data } = await supabase.from('holidays').select('*').order('date');
+  const { data } = await db('holidays').select('*').order('date');
   if (!data || idx < 1 || idx >= data.length) return error('Entry not found.');
-  await supabase.from('holidays').delete().eq('id', data[idx].id);
+  await db('holidays').delete().eq('id', data[idx].id);
   return { ok: true };
 }
 
 async function actionAnnouncements() {
-  const { data } = await supabase.from('announcements').select('*');
+  const { data } = await db('announcements').select('*');
   const out = (data || []).filter(a => a.title || a.body).map(a => ({
     title: a.title || '', body: a.body || '', postedOn: a.posted_on || '', postedBy: a.posted_by || '', pinned: !!a.pinned,
   }));
@@ -1235,11 +1334,11 @@ async function actionAnnouncementAdd(payload, cfg, now, tz) {
   const title = safeCell(String(payload.title || '').trim());
   const body = safeCell(String(payload.body || '').trim());
   if (!title && !body) return error('Title or body required.');
-  await supabase.from('announcements').insert({
+  await db('announcements').insert(withTenant({
     title, body, posted_on: dateStr(now, 'Africa/Accra'),
     posted_by: safeCell(String(payload.adminEmail || 'admin')),
     pinned: String(payload.pinned) === 'true',
-  });
+  }));
   return { ok: true };
 }
 
@@ -1247,9 +1346,9 @@ async function actionAnnouncementDelete(payload, cfg, now, tz) {
   const access = await adminAccess(payload, cfg);
   if (!access.ok) return error(access.message);
   const idx = Number(payload.index);
-  const { data } = await supabase.from('announcements').select('*').order('posted_on');
+  const { data } = await db('announcements').select('*').order('posted_on');
   if (!data || idx < 1 || idx >= data.length) return error('Announcement not found.');
-  await supabase.from('announcements').delete().eq('id', data[idx].id);
+  await db('announcements').delete().eq('id', data[idx].id);
   return { ok: true };
 }
 
@@ -1277,7 +1376,7 @@ async function actionSendCodes(payload, cfg, now, tz) {
   const staff = await expectedStaff();
   if (!staff.length) return error('No one in the roster yet.');
 
-  const { data: empRows } = await supabase.from('employees').select('email, code, name');
+  const { data: empRows } = await db('employees').select('email, code, name');
   const codeByEmail = {};
   for (const e of (empRows || [])) {
     const em = String(e.email || '').toLowerCase();
@@ -1302,7 +1401,7 @@ async function actionSendCodes(payload, cfg, now, tz) {
 async function actionMyExport(payload, cfg, now, tz) {
   const email = String(payload.email || '').trim().toLowerCase();
   if (!await ownsEmail(email, String(payload.token || ''))) return { ok: false, code: 'SESSION_REQUIRED', message: 'Session expired.' };
-  const { data } = await supabase.from('attendance').select('*').eq('email', email).order('date');
+  const { data } = await db('attendance').select('*').eq('email', email).order('date');
   return {
     ok: true,
     rows: (data || []).map(r => ({
@@ -1320,7 +1419,7 @@ async function actionCorrectionApply(payload, cfg, now, tz) {
   const date = sanitizeDate(payload.date, '');
   if (!email || !date) return error('Email and date required.');
 
-  const { data: dayRows } = await supabase.from('attendance').select('*').eq('email', email).eq('date', date).order('time');
+  const { data: dayRows } = await db('attendance').select('*').eq('email', email).eq('date', date).order('time');
 
   if (mode === 'set_out') {
     const outT = normShiftTime(payload.out);
@@ -1330,10 +1429,10 @@ async function actionCorrectionApply(payload, cfg, now, tz) {
     if (last.action === 'Check-out') return error('Day already closed.');
     const outSec = timeToSec(outT);
     if (outSec <= timeToSec(last.time)) return error('Checkout must be after check-in.');
-    await supabase.from('attendance').insert({
+    await db('attendance').insert(withTenant({
       date, time: outT + ':00', name: last.name || email, email,
       action: 'Check-out', status: 'Corrected', qr_token: last.qr_token, office: last.office,
-    });
+    }));
     return { ok: true, applied: 'Checkout ' + outT + ' added' };
   }
 
@@ -1343,24 +1442,104 @@ async function actionCorrectionApply(payload, cfg, now, tz) {
     if (!inT || !outT) return error('Invalid times.');
     if (timeToSec(outT) <= timeToSec(inT)) return error('Checkout must be after check-in.');
     const officeName = dayRows && dayRows.length ? dayRows[dayRows.length - 1].office : '';
-    await supabase.from('attendance').insert([
+    await db('attendance').insert(withTenant([
       { date, time: inT + ':00', name: email, email, action: 'Check-in', status: 'Manual', office: officeName },
       { date, time: outT + ':00', name: email, email, action: 'Check-out', status: 'Manual', office: officeName },
-    ]);
+    ]));
     return { ok: true, applied: 'Manual pair ' + inT + '-' + outT + ' added' };
   }
 
   if (mode === 'remove_last') {
     if (!dayRows || !dayRows.length) return error('No attendance this day.');
     const victim = dayRows[dayRows.length - 1];
-    await supabase.from('attendance').delete().eq('id', victim.id);
+    await db('attendance').delete().eq('id', victim.id);
     return { ok: true, applied: 'Last entry removed (' + victim.action + ' ' + (victim.time || '').slice(0, 5) + ')' };
   }
 
   return error('Unknown correction mode.');
 }
 
+async function actionEmployeeCodeResend(payload, cfg, now, tz) {
+  const email = String(payload.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return error('Invalid email address.');
+  const emp = await findEmployee(email);
+  if (!emp) return error('No account found for this email.');
+  if (!emp.code) return error('No sign-in code has been set for this account.');
+  await sendEmail(email, 'Your ' + cfg.appName + ' sign-in code',
+    'Hello ' + (emp.name || email.split('@')[0]) + ',\n\nYour personal sign-in code for ' + cfg.appName + ' is: ' + emp.code + '\n\nKeep it private.');
+  await logAudit(email, 'Sign-in code resent', 'CODE_SENT');
+  return { ok: true, message: 'Your sign-in code has been emailed to you.' };
+}
+
 /* ===================== ROUTER ===================== */
+
+const MASTER_PIN = process.env.MASTER_PIN || '';
+const PROVISION_DAILY_LIMIT = Number(process.env.PROVISION_DAILY_LIMIT || 50);
+
+async function actionProvision(payload) {
+  const code = String(payload.code || '').trim().toLowerCase();
+  const appName = safeCell(String(payload.appName || payload.orgName || '').trim()).slice(0, 60);
+  const adminEmail = String(payload.adminEmail || '').trim().toLowerCase();
+  const masterPin = String(payload.masterPin || '');
+
+  // If MASTER_PIN env is empty, self-serve signup is open (no key required).
+  if (MASTER_PIN && masterPin !== MASTER_PIN) return error('Invalid provisioning key.');
+
+  if (adminEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adminEmail)) return error('Invalid admin email address.');
+
+  const { count: todayCount } = await supabase.from('tenants').select('*', { count: 'exact', head: true }).eq('created', dateStr(new Date(), 'Africa/Accra'));
+  if (todayCount >= PROVISION_DAILY_LIMIT) return error('Too many organisations created today. Try again later.');
+  if (!/^[a-z0-9][a-z0-9\-]{1,23}$/.test(code)) {
+    return error('Organisation code must be 2-24 chars: lowercase letters, digits, or hyphens.');
+  }
+  if (!appName) return error('Organisation name is required.');
+
+  const existing = await resolveTenant(code);
+  if (existing) return error('That organisation code is already taken.');
+
+  const adminPin = String(Math.floor(100000 + Math.random() * 900000));
+  const qrSecret = randomToken() + randomToken() + randomToken();
+
+  const { data: tenant, error: terr } = await supabase.from('tenants').insert({
+    code,
+    app_name: appName,
+    status: 'active',
+    plan: 'free',
+    master_pin: adminPin,
+  }).select('id, code, app_name').single();
+  if (terr || !tenant) return error('Could not create the organisation. ' + (terr ? terr.message : ''));
+
+  await supabase.from('config').insert([
+    ...DEFAULT_CONFIG.map(([k, v]) => ({ tenant_id: tenant.id, key: k, value: v })),
+    { tenant_id: tenant.id, key: 'adminPin', value: adminPin },
+    { tenant_id: tenant.id, key: 'qrSecret', value: qrSecret },
+    { tenant_id: tenant.id, key: 'appName', value: appName },
+    { tenant_id: tenant.id, key: 'adminEmail', value: adminEmail },
+  ]);
+
+  if (adminEmail) {
+    await supabase.from('admins').insert({ tenant_id: tenant.id, email: adminEmail, name: appName, added_by: 'provision' });
+  }
+
+  return {
+    ok: true,
+    tenant: { code: tenant.code, appName },
+    adminPin,
+    message: 'Organisation created. Share the code with your team and keep the admin PIN safe.',
+  };
+}
+
+async function actionTenantCheck(payload) {
+  const t = await resolveTenant(String(payload.tenant || '').trim());
+  return { ok: true, exists: !!t, tenant: t ? { code: t.code, appName: t.app_name } : null };
+}
+
+function tenantRequired(res, tenant) {
+  if (tenant.reason === 'no_tenant') return json(res, error('Organisation code required. Set it in the app or include "tenant" in the request.'));
+  if (tenant.reason === 'unknown') return json(res, error('Unknown organisation code.'));
+  if (tenant.status !== 'active') return json(res, error('This organisation is suspended.'));
+  return false;
+}
 
 app.post(['/api', '/'], async (req, res) => {
   try {
@@ -1368,40 +1547,52 @@ app.post(['/api', '/'], async (req, res) => {
     const action = String(payload.action || 'config');
     const now = new Date();
     const tz = 'Africa/Accra';
-    const cfg = await getConfig();
 
-    switch (action) {
-      case 'config': return json(res, await actionConfig());
-      case 'attendance': return json(res, await actionAttendance(payload, cfg, now, tz));
-      case 'admin': return json(res, await actionAdmin(payload, cfg, now, tz));
-      case 'myattendance': return json(res, await actionMyAttendance(payload, cfg, now, tz));
-      case 'recent': return json(res, await actionRecent(payload, cfg, now, tz));
-      case 'week': return json(res, await actionWeek(payload, cfg, now, tz));
-      case 'employees': return json(res, await actionEmployees(payload, cfg, now, tz));
-      case 'employee_add': return json(res, await actionEmployeeAdd(payload, cfg, now, tz));
-      case 'employee_delete': return json(res, await actionEmployeeDelete(payload, cfg, now, tz));
-      case 'admin_login': return json(res, await actionAdminLogin(payload, cfg, now, tz));
-      case 'admin_check': return json(res, await actionAdminCheck(payload));
-      case 'admins_list': return json(res, await actionAdminsList(payload, cfg, now, tz));
-      case 'admin_add': return json(res, await actionAdminAdd(payload, cfg, now, tz));
-      case 'admin_remove': return json(res, await actionAdminRemove(payload, cfg, now, tz));
-      case 'office_screen': return json(res, await actionOfficeScreen(payload, cfg, now, tz));
-      case 'leave_list': return json(res, await actionLeaveList(payload, cfg, now, tz));
-      case 'leave_add': return json(res, await actionLeaveAdd(payload, cfg, now, tz));
-      case 'leave_delete': return json(res, await actionLeaveDelete(payload, cfg, now, tz));
-      case 'holiday_list': return json(res, await actionHolidayList(payload, cfg, now, tz));
-      case 'holiday_add': return json(res, await actionHolidayAdd(payload, cfg, now, tz));
-      case 'holiday_delete': return json(res, await actionHolidayDelete(payload, cfg, now, tz));
-      case 'announcements': return json(res, await actionAnnouncements());
-      case 'announcement_list': return json(res, await actionAnnouncements());
-      case 'announcement_add': return json(res, await actionAnnouncementAdd(payload, cfg, now, tz));
-      case 'announcement_delete': return json(res, await actionAnnouncementDelete(payload, cfg, now, tz));
-      case 'correction_apply': return json(res, await actionCorrectionApply(payload, cfg, now, tz));
-      case 'send_codes': return json(res, await actionSendCodes(payload, cfg, now, tz));
-      case 'user_login': return json(res, await actionUserLogin(payload, cfg, now, tz));
-      case 'myexport': return json(res, await actionMyExport(payload, cfg, now, tz));
-      default: return json(res, error('Unknown action: ' + action));
-    }
+    if (action === 'provision') return json(res, await actionProvision(payload));
+    if (action === 'tenant_check') return json(res, await actionTenantCheck(payload));
+
+    const tenant = await effectiveTenant(payload);
+    const blocked = tenantRequired(res, tenant);
+    if (blocked) return blocked;
+
+    return await ctxStore.run({ tenantId: tenant.id, plan: tenant.plan }, async () => {
+      await ensureTenantConfig(tenant.id);
+      const cfg = await getConfig();
+
+      switch (action) {
+        case 'config': return json(res, await actionConfig());
+        case 'attendance': return json(res, await actionAttendance(payload, cfg, now, tz));
+        case 'admin': return json(res, await actionAdmin(payload, cfg, now, tz));
+        case 'myattendance': return json(res, await actionMyAttendance(payload, cfg, now, tz));
+        case 'recent': return json(res, await actionRecent(payload, cfg, now, tz));
+        case 'week': return json(res, await actionWeek(payload, cfg, now, tz));
+        case 'employees': return json(res, await actionEmployees(payload, cfg, now, tz));
+        case 'employee_add': return json(res, await actionEmployeeAdd(payload, cfg, now, tz));
+        case 'employee_delete': return json(res, await actionEmployeeDelete(payload, cfg, now, tz));
+        case 'admin_login': return json(res, await actionAdminLogin(payload, cfg, now, tz));
+        case 'admin_check': return json(res, await actionAdminCheck(payload));
+        case 'admins_list': return json(res, await actionAdminsList(payload, cfg, now, tz));
+        case 'admin_add': return json(res, await actionAdminAdd(payload, cfg, now, tz));
+        case 'admin_remove': return json(res, await actionAdminRemove(payload, cfg, now, tz));
+        case 'office_screen': return json(res, await actionOfficeScreen(payload, cfg, now, tz));
+        case 'leave_list': return json(res, await actionLeaveList(payload, cfg, now, tz));
+        case 'leave_add': return json(res, await actionLeaveAdd(payload, cfg, now, tz));
+        case 'leave_delete': return json(res, await actionLeaveDelete(payload, cfg, now, tz));
+        case 'holiday_list': return json(res, await actionHolidayList(payload, cfg, now, tz));
+        case 'holiday_add': return json(res, await actionHolidayAdd(payload, cfg, now, tz));
+        case 'holiday_delete': return json(res, await actionHolidayDelete(payload, cfg, now, tz));
+        case 'announcements': return json(res, await actionAnnouncements());
+        case 'announcement_list': return json(res, await actionAnnouncements());
+        case 'announcement_add': return json(res, await actionAnnouncementAdd(payload, cfg, now, tz));
+        case 'announcement_delete': return json(res, await actionAnnouncementDelete(payload, cfg, now, tz));
+        case 'correction_apply': return json(res, await actionCorrectionApply(payload, cfg, now, tz));
+        case 'send_codes': return json(res, await actionSendCodes(payload, cfg, now, tz));
+        case 'user_login': return json(res, await actionUserLogin(payload, cfg, now, tz));
+        case 'employee_code_resend': return json(res, await actionEmployeeCodeResend(payload, cfg, now, tz));
+        case 'myexport': return json(res, await actionMyExport(payload, cfg, now, tz));
+        default: return json(res, error('Unknown action: ' + action));
+      }
+    });
   } catch (err) {
     console.error('Server error:', err);
     return json(res, error('Server error: ' + err.message));

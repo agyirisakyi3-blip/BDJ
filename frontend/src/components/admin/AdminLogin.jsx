@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
+import CONFIG from '../../config';
 
 export default function AdminLogin({ onLogin }) {
   const { showFeedback, apiCall } = useApp();
+  const [tenant, setTenant] = useState(() => {
+    if (CONFIG.DEFAULT_TENANT) return CONFIG.DEFAULT_TENANT;
+    try { return window.localStorage.getItem('att.orgcode.v1') || ''; } catch { return ''; }
+  });
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [pinType, setPinType] = useState('password');
@@ -13,13 +18,14 @@ export default function AdminLogin({ onLogin }) {
   const [error, setError] = useState('');
 
   const handleLogin = async (submittedOtp) => {
+    if (!tenant.trim()) { setError('Saisissez votre code organisation.'); return; }
     if (!email.trim()) { setError('Saisissez votre email.'); return; }
     setLoading(true);
     setError('');
     try {
       const otpValue = typeof submittedOtp === 'string' && submittedOtp ? submittedOtp : otp.join('');
-      const body = { action: 'admin_login', email: email.trim(), pin: pin.trim(), otp: otpValue };
-      const res = await apiCall(body);
+      const body = { action: 'admin_login', tenant: tenant.trim().toLowerCase(), email: email.trim(), pin: pin.trim(), otp: otpValue };
+      const res = await apiCall(body, tenant);
       if (res && res.needOtp) {
         setShowOtp(true);
         setOtpNote(res.otpDev ? res.message + ' Code de developpement : ' + res.otpDev : (res.message || ''));
@@ -29,8 +35,8 @@ export default function AdminLogin({ onLogin }) {
       if (!res.ok) throw new Error(res.message || 'Echec');
       // Now fetch admin data
       const tkn = res.token || res.sessionToken || '';
-      const adminBody = { action: 'admin', from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10), token: tkn };
-      const adminRes = await apiCall(adminBody);
+      const adminBody = { action: 'admin', tenant: tenant.trim().toLowerCase(), from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10), token: tkn };
+      const adminRes = await apiCall(adminBody, tenant);
       if (!adminRes.ok) throw new Error(adminRes.message || 'Echec chargement');
       onLogin({ token: tkn, email: email.trim(), data: adminRes });
     } catch (err) {
@@ -73,6 +79,11 @@ export default function AdminLogin({ onLogin }) {
         <div className="login-head">
           <div><h3>Acces admin</h3><p className="muted">Connectez-vous avec votre email admin et votre code PIN.</p></div>
         </div>
+        <label>Organisation</label>
+        <input type="text" autoComplete="organization" placeholder="code-entreprise" value={tenant}
+          onChange={(e) => setTenant(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+          disabled={!!CONFIG.DEFAULT_TENANT} />
         <label>Email</label>
         <input type="email" inputMode="email" autoComplete="email" placeholder="vous@entreprise.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         <label>PIN</label>

@@ -1,41 +1,65 @@
--- Attendance App - Supabase Schema
+-- ============================================================================
+-- Attendance App - Multi-tenant Supabase Schema (v2)
+-- ----------------------------------------------------------------------------
+-- Every data table carries a tenant_id foreign key. Tenants (companies) are
+-- isolated in a SINGLE shared Postgres database, with the tenant_id column
+-- scoping every row. The API server resolves the tenant from the tenant code
+-- sent in each request payload and filters every query by tenant_id.
+--
 -- Run this in: Supabase Dashboard > SQL Editor > New query
+--
+-- WARNING: the block below drops the previous (v1, single-tenant) tables so
+-- the multi-tenant schema can be created from scratch. This wipes any trial
+-- data left from the incomplete v2 migration.
+-- ============================================================================
+
+-- ===================== RESET (v1 -> v2) =====================
+DROP TABLE IF EXISTS announcements CASCADE;
+DROP TABLE IF EXISTS holidays CASCADE;
+DROP TABLE IF EXISTS leave_requests CASCADE;
+DROP TABLE IF EXISTS offices CASCADE;
+DROP TABLE IF EXISTS roster CASCADE;
+DROP TABLE IF EXISTS admins CASCADE;
+DROP TABLE IF EXISTS attendance CASCADE;
+DROP TABLE IF EXISTS employees CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS write_quotas CASCADE;
+DROP TABLE IF EXISTS otp_store CASCADE;
+DROP TABLE IF EXISTS audit CASCADE;
+DROP TABLE IF EXISTS config CASCADE;
+DROP TABLE IF EXISTS tenants CASCADE;
+
+-- ===================== TENANTS =====================
+CREATE TABLE IF NOT EXISTS tenants (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL CHECK (code ~ '^[a-z0-9][a-z0-9\-]{1,23}$'),
+  app_name TEXT DEFAULT 'Liste Des Presences',
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'suspended', 'trial')),
+  plan TEXT NOT NULL DEFAULT 'free'
+    CHECK (plan IN ('free', 'starter', 'pro')),
+  master_pin TEXT DEFAULT '',
+  max_employees INTEGER DEFAULT 25,
+  max_offices INTEGER DEFAULT 1,
+  created DATE DEFAULT CURRENT_DATE,
+  created_by TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
 
 -- ===================== CONFIG =====================
-CREATE TABLE config (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS config (
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, key)
 );
 
--- Default config values
-INSERT INTO config (key, value) VALUES
-  ('appName', 'Liste Des Presences'),
-  ('officeName', 'Head Office'),
-  ('officeLat', '5.6037168'),
-  ('officeLng', '-0.1869644'),
-  ('radiusMeters', '150'),
-  ('adminPin', '1234'),
-  ('adminEmail', ''),
-  ('rosterMode', 'roster'),
-  ('rosterDomain', ''),
-  ('minScanIntervalSec', '60'),
-  ('replayMaxAgeMs', '300000'),
-  ('pinMaxAttempts', '5'),
-  ('pinLockoutMs', '900000'),
-  ('writeQuotaPerEmail', '60'),
-  ('writeQuotaTenant', '600'),
-  ('retentionDays', '0'),
-  ('lateAfter', '08:30'),
-  ('selfieMode', 'off'),
-  ('reminderCheckInAfter', ''),
-  ('reminderCheckOutAfter', ''),
-  ('weekendsOff', 'on');
-
 -- ===================== EMPLOYEES =====================
-CREATE TABLE employees (
+CREATE TABLE IF NOT EXISTS employees (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   name TEXT NOT NULL DEFAULT '',
-  email TEXT UNIQUE NOT NULL,
+  email TEXT NOT NULL,
   department TEXT DEFAULT '',
   created DATE DEFAULT CURRENT_DATE,
   shift_start TIME,
@@ -44,12 +68,16 @@ CREATE TABLE employees (
   phone TEXT DEFAULT '',
   birth_date DATE,
   photo TEXT DEFAULT '',
-  code TEXT UNIQUE
+  code TEXT,
+  UNIQUE (tenant_id, email),
+  UNIQUE (tenant_id, code)
 );
+CREATE INDEX IF NOT EXISTS idx_employees_tenant ON employees (tenant_id);
 
 -- ===================== ATTENDANCE =====================
-CREATE TABLE attendance (
+CREATE TABLE IF NOT EXISTS attendance (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   date DATE NOT NULL,
   time TIME NOT NULL,
   name TEXT DEFAULT '',
@@ -63,48 +91,55 @@ CREATE TABLE attendance (
   office TEXT DEFAULT '',
   selfie TEXT DEFAULT ''
 );
-
-CREATE INDEX idx_attendance_email_date ON attendance (email, date);
-CREATE INDEX idx_attendance_date ON attendance (date);
+CREATE INDEX IF NOT EXISTS idx_attendance_tenant_date ON attendance (tenant_id, date);
+CREATE INDEX IF NOT EXISTS idx_attendance_tenant_email_date ON attendance (tenant_id, email, date);
+CREATE INDEX IF NOT EXISTS idx_attendance_tenant_date_time ON attendance (tenant_id, date, time);
 
 -- ===================== ADMINS =====================
-CREATE TABLE admins (
-  email TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS admins (
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
   name TEXT DEFAULT '',
   added_on DATE DEFAULT CURRENT_DATE,
-  added_by TEXT DEFAULT ''
+  added_by TEXT DEFAULT '',
+  PRIMARY KEY (tenant_id, email)
 );
 
 -- ===================== ROSTER =====================
-CREATE TABLE roster (
-  email TEXT PRIMARY KEY
+CREATE TABLE IF NOT EXISTS roster (
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, email)
 );
 
 -- ===================== OFFICES =====================
-CREATE TABLE offices (
+CREATE TABLE IF NOT EXISTS offices (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   name TEXT DEFAULT 'Office',
   qr_token TEXT NOT NULL,
   latitude DOUBLE PRECISION DEFAULT 0,
   longitude DOUBLE PRECISION DEFAULT 0,
   radius_meters DOUBLE PRECISION DEFAULT 150
 );
+CREATE INDEX IF NOT EXISTS idx_offices_tenant ON offices (tenant_id);
 
 -- ===================== AUDIT =====================
-CREATE TABLE audit (
+CREATE TABLE IF NOT EXISTS audit (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   date DATE,
   time TIME,
   email TEXT DEFAULT '',
   reason TEXT DEFAULT '',
   code TEXT DEFAULT ''
 );
-
-CREATE INDEX idx_audit_date ON audit (date);
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_date ON audit (tenant_id, date);
 
 -- ===================== LEAVE =====================
-CREATE TABLE leave_requests (
+CREATE TABLE IF NOT EXISTS leave_requests (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   start_date DATE,
   end_date DATE,
@@ -112,59 +147,62 @@ CREATE TABLE leave_requests (
   created DATE DEFAULT CURRENT_DATE,
   created_by TEXT DEFAULT ''
 );
+CREATE INDEX IF NOT EXISTS idx_leave_tenant ON leave_requests (tenant_id);
 
 -- ===================== HOLIDAYS =====================
-CREATE TABLE holidays (
+CREATE TABLE IF NOT EXISTS holidays (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  date DATE UNIQUE NOT NULL,
-  name TEXT DEFAULT 'Holiday'
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  name TEXT DEFAULT 'Holiday',
+  UNIQUE (tenant_id, date)
 );
+CREATE INDEX IF NOT EXISTS idx_holidays_tenant ON holidays (tenant_id);
 
 -- ===================== ANNOUNCEMENTS =====================
-CREATE TABLE announcements (
+CREATE TABLE IF NOT EXISTS announcements (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   title TEXT DEFAULT '',
   body TEXT DEFAULT '',
   posted_on DATE DEFAULT CURRENT_DATE,
   posted_by TEXT DEFAULT '',
   pinned BOOLEAN DEFAULT false
 );
-
--- ===================== TENANTS =====================
-CREATE TABLE tenants (
-  code TEXT PRIMARY KEY,
-  spreadsheet_id TEXT DEFAULT '',
-  created DATE DEFAULT CURRENT_DATE
-);
+CREATE INDEX IF NOT EXISTS idx_announcements_tenant ON announcements (tenant_id);
 
 -- ===================== OTP STORE (replaces CacheService) =====================
-CREATE TABLE otp_store (
+CREATE TABLE IF NOT EXISTS otp_store (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  key TEXT NOT NULL UNIQUE,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
   value JSONB NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL
+  expires_at TIMESTAMPTZ NOT NULL,
+  UNIQUE (tenant_id, key)
 );
-
-CREATE INDEX idx_otp_key ON otp_store (key);
+CREATE INDEX IF NOT EXISTS idx_otp_tenant_key ON otp_store (tenant_id, key);
 
 -- ===================== SESSIONS =====================
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
   email TEXT,
   session_type TEXT DEFAULT 'admin',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions (tenant_id);
 
 -- ===================== QUOTA TRACKER =====================
-CREATE TABLE write_quotas (
-  key TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS write_quotas (
+  tenant_id UUID NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
   count INTEGER DEFAULT 1,
-  window_start TIMESTAMPTZ DEFAULT NOW()
+  window_start TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, key)
 );
 
 -- ===================== AUTO-CLEANUP FUNCTION =====================
--- Clean expired OTPs and sessions
 CREATE OR REPLACE FUNCTION cleanup_expired()
 RETURNS void AS $$
 BEGIN

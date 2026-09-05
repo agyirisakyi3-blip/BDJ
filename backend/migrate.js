@@ -121,6 +121,22 @@ async function migrate() {
   const sheets = await getGoogleSheets();
   const db = getSupabase();
 
+  // Resolve target tenant (multi-tenant v2)
+  const TENANT_CODE = (process.env.TENANT_CODE || '').trim().toLowerCase();
+  if (!TENANT_CODE) {
+    console.error('Missing TENANT_CODE. Set it in .env to the organisation code to migrate into.');
+    console.error('Provision the tenant first via the API: POST /api { action: "provision", code, appName, masterPin }');
+    process.exit(1);
+  }
+  const { data: tenantRow } = await db.from('tenants').select('id, code').eq('code', TENANT_CODE).maybeSingle();
+  if (!tenantRow) {
+    console.error('Tenant "' + TENANT_CODE + '" not found. Provision it first via the API.');
+    process.exit(1);
+  }
+  const TENANT_ID = tenantRow.id;
+  const t = (row) => ({ ...row, tenant_id: TENANT_ID });
+  console.log('  -> Target tenant: ' + TENANT_CODE + ' (' + TENANT_ID + ')');
+
   // 1. Config
   console.log('1. Migrating Config...');
   const configRows = await readSheet(sheets, 'Config');
@@ -129,10 +145,10 @@ async function migrate() {
     for (let i = 1; i < configRows.length; i++) {
       const key = cellToStr(configRows[i][0]);
       const value = cellToStr(configRows[i][1]);
-      if (key && value) configs.push({ key, value });
+      if (key && value) configs.push(t({ key, value }));
     }
     if (configs.length) {
-      await db.from('config').delete().neq('key', '__none__');
+      await db.from('config').delete().eq('tenant_id', TENANT_ID);
       await db.from('config').insert(configs);
       console.log(`  -> ${configs.length} config values`);
     }
@@ -142,7 +158,7 @@ async function migrate() {
   console.log('2. Migrating Employees...');
   const empRows = rowsToObjects(await readSheet(sheets, 'Employees'));
   if (empRows.length) {
-    const employees = empRows.filter(e => e.email).map(e => ({
+    const employees = empRows.filter(e => e.email).map(e => t({
       name: cellToStr(e.name),
       email: lowerEmail(e.email),
       department: cellToStr(e.department),
@@ -155,7 +171,7 @@ async function migrate() {
       photo: cellToStr(e.photo).slice(0, 60000),
       code: cellToStr(e.code) || String(Math.floor(100000 + Math.random() * 900000)),
     }));
-    await db.from('employees').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await db.from('employees').delete().eq('tenant_id', TENANT_ID);
     // Insert in batches of 50
     for (let i = 0; i < employees.length; i += 50) {
       await db.from('employees').insert(employees.slice(i, i + 50));
@@ -167,7 +183,7 @@ async function migrate() {
   console.log('3. Migrating Attendance...');
   const attRows = rowsToObjects(await readSheet(sheets, 'Attendance'));
   if (attRows.length) {
-    const attendance = attRows.filter(a => a.email).map(a => ({
+    const attendance = attRows.filter(a => a.email).map(a => t({
       date: cellToDate(a.date) || new Date().toISOString().slice(0, 10),
       time: cellToTime(a.time) || '00:00:00',
       name: cellToStr(a.name),
@@ -192,13 +208,13 @@ async function migrate() {
   console.log('4. Migrating Admins...');
   const adminRows = rowsToObjects(await readSheet(sheets, 'Admins'));
   if (adminRows.length) {
-    const admins = adminRows.filter(a => a.email).map(a => ({
+    const admins = adminRows.filter(a => a.email).map(a => t({
       email: lowerEmail(a.email),
       name: cellToStr(a.name),
       added_on: cellToDate(a['added on']) || new Date().toISOString().slice(0, 10),
       added_by: cellToStr(a['added by']),
     }));
-    await db.from('admins').delete().neq('email', '__none__');
+    await db.from('admins').delete().eq('tenant_id', TENANT_ID);
     await db.from('admins').insert(admins);
     console.log(`  -> ${admins.length} admins`);
   }
@@ -207,8 +223,8 @@ async function migrate() {
   console.log('5. Migrating Roster...');
   const rosterRows = rowsToObjects(await readSheet(sheets, 'Roster'));
   if (rosterRows.length) {
-    const roster = rosterRows.filter(r => r.email).map(r => ({ email: lowerEmail(r.email) }));
-    await db.from('roster').delete().neq('email', '__none__');
+    const roster = rosterRows.filter(r => r.email).map(r => t({ email: lowerEmail(r.email) }));
+    await db.from('roster').delete().eq('tenant_id', TENANT_ID);
     await db.from('roster').insert(roster);
     console.log(`  -> ${roster.length} roster entries`);
   }
@@ -217,14 +233,14 @@ async function migrate() {
   console.log('6. Migrating Offices...');
   const officeRows = rowsToObjects(await readSheet(sheets, 'Offices'));
   if (officeRows.length) {
-    const offices = officeRows.filter(o => o['qr token']).map(o => ({
+    const offices = officeRows.filter(o => o['qr token']).map(o => t({
       name: cellToStr(o.name) || 'Office',
       qr_token: cellToStr(o['qr token']),
       latitude: Number(o.latitude) || 0,
       longitude: Number(o.longitude) || 0,
       radius_meters: Number(o['radius (m)']) || 150,
     }));
-    await db.from('offices').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await db.from('offices').delete().eq('tenant_id', TENANT_ID);
     await db.from('offices').insert(offices);
     console.log(`  -> ${offices.length} offices`);
   }
@@ -233,7 +249,7 @@ async function migrate() {
   console.log('7. Migrating Audit...');
   const auditRows = rowsToObjects(await readSheet(sheets, 'Audit'));
   if (auditRows.length) {
-    const audit = auditRows.map(a => ({
+    const audit = auditRows.map(a => t({
       date: cellToDate(a.date),
       time: cellToTime(a.time),
       email: lowerEmail(a.email),
@@ -250,7 +266,7 @@ async function migrate() {
   console.log('8. Migrating Leave...');
   const leaveRows = rowsToObjects(await readSheet(sheets, 'Leave'));
   if (leaveRows.length) {
-    const leaves = leaveRows.filter(l => l.email).map(l => ({
+    const leaves = leaveRows.filter(l => l.email).map(l => t({
       email: lowerEmail(l.email),
       start_date: cellToDate(l.startdate),
       end_date: cellToDate(l.enddate),
@@ -258,7 +274,7 @@ async function migrate() {
       created: cellToDate(l.created) || new Date().toISOString().slice(0, 10),
       created_by: cellToStr(l.createdby),
     }));
-    await db.from('leave_requests').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await db.from('leave_requests').delete().eq('tenant_id', TENANT_ID);
     await db.from('leave_requests').insert(leaves);
     console.log(`  -> ${leaves.length} leave entries`);
   }
@@ -267,11 +283,11 @@ async function migrate() {
   console.log('9. Migrating Holidays...');
   const holidayRows = rowsToObjects(await readSheet(sheets, 'Holidays'));
   if (holidayRows.length) {
-    const holidays = holidayRows.filter(h => h.date).map(h => ({
+    const holidays = holidayRows.filter(h => h.date).map(h => t({
       date: cellToDate(h.date),
       name: cellToStr(h.name) || 'Holiday',
     }));
-    await db.from('holidays').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await db.from('holidays').delete().eq('tenant_id', TENANT_ID);
     await db.from('holidays').insert(holidays);
     console.log(`  -> ${holidays.length} holidays`);
   }
@@ -280,18 +296,19 @@ async function migrate() {
   console.log('10. Migrating Announcements...');
   const annRows = rowsToObjects(await readSheet(sheets, 'Announcements'));
   if (annRows.length) {
-    const announcements = annRows.filter(a => a.title || a.body).map(a => ({
+    const announcements = annRows.filter(a => a.title || a.body).map(a => t({
       title: cellToStr(a.title),
       body: cellToStr(a.body),
       posted_on: cellToDate(a.postedon) || new Date().toISOString().slice(0, 10),
       posted_by: cellToStr(a.postedby),
       pinned: cellToStr(a.pinned) === 'true',
     }));
-    await db.from('announcements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await db.from('announcements').delete().eq('tenant_id', TENANT_ID);
     await db.from('announcements').insert(announcements);
     console.log(`  -> ${announcements.length} announcements`);
   }
 
+  console.log('  -> Tenant code: ' + TENANT_CODE);
   console.log('\n=== Migration complete! ===');
   console.log('Next steps:');
   console.log('  1. Update frontend/src/config.js to point to your new API');
