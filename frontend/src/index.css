@@ -1474,6 +1474,11 @@ th.sortable.desc::after { content: "\2193"; opacity: 1; }
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 .emp-signup-cta:hover { color: var(--accent-light); border-color: rgba(99, 102, 241, 0.5); background: var(--accent-soft); }
+.emp-admin-cta {
+  border-style: solid;
+  border-color: rgba(99, 102, 241, 0.35);
+  color: var(--accent-light);
+}
 
 .emp-signup-result {
   background: rgba(255, 255, 255, 0.06);
@@ -2507,5 +2512,4 @@ mark.help-hl { background: rgba(251,191,36,0.4); color: inherit; border-radius: 
 }
 
 html[data-theme][data-theme-mode="dark"] .tour-card { background: #1a1f2b; }
-
 

@@ -63,6 +63,8 @@ function AppContent() {
         </div>
         <Routes>
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/employe/:email" element={<EmployeeDetailPage />} />
           <Route path="*" element={<EmployeeLogin />} />
         </Routes>
       </>

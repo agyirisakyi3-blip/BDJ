@@ -131,6 +131,9 @@ export default function EmployeeLogin() {
         <Link className="emp-signup-cta" to="/signup">
           Creer une organisation pour mon entreprise
         </Link>
+        <Link className="emp-signup-cta emp-admin-cta" to="/admin">
+          Connexion administrateur
+        </Link>
       </div>
     </div>
   );
