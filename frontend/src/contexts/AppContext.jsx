@@ -135,15 +135,17 @@ export function AppProvider({ children }) {
 
   // Load config on mount
   useEffect(() => {
-    if (!isConfigured()) return;
-    api({ action: 'config' })
+    if (!profileLoaded || !isConfigured()) return;
+    const tenant = tenantFromProfile();
+    if (!tenant) return;
+    api({ action: 'config' }, tenant)
       .then((res) => {
         if (res.ok && res.config) {
           setConfig((prev) => ({ ...prev, ...res.config }));
         }
       })
       .catch(() => {});
-  }, []);
+  }, [profileLoaded, tenantFromProfile]);
 
   // Flush offline queue on online
   useEffect(() => {
