@@ -1337,8 +1337,8 @@ th.sortable.desc::after { content: "\2193"; opacity: 1; }
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(10, 15, 32, 0.55);
-  color: var(--text);
-  -webkit-text-fill-color: currentColor;
+  color: #f0f4f8 !important;
+  -webkit-text-fill-color: #f0f4f8 !important;
   opacity: 1;
   font-size: 14.5px;
   outline: none;
