@@ -52,7 +52,22 @@ function AppContent() {
   }
 
   if (!authenticated) {
-    return <EmployeeLogin />;
+    return (
+      <>
+        <div className="bg-decor" aria-hidden="true">
+          <div className="blob blob-1"></div>
+          <div className="blob blob-2"></div>
+          <div className="blob blob-3"></div>
+          <div className="grain"></div>
+        </div>
+        <Routes>
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/employe/:email" element={<EmployeeDetailPage />} />
+          <Route path="*" element={<EmployeeLogin />} />
+        </Routes>
+      </>
+    );
   }
 
   return (
