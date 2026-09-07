@@ -253,8 +253,7 @@ function handleRequest_(e) {
     }
     return json_(error_('Unknown action: ' + action));
   } catch (err) {
-    console.error('handleRequest_ error:', err);
-    return json_(error_('Something went wrong. Please try again later.'));
+    return json_(error_('Server error: ' + err));
   }
 }
 
@@ -323,13 +322,11 @@ function registerTenant_(code, spreadsheetId) {
 }
 
 function provisionTenant_(payload, masterCfg, now, tz) {
-  var mpin = String(payload.masterPin || '');
-  if (mpin !== masterCfg.adminPin) {
-    logAudit_(SpreadsheetApp.getActiveSpreadsheet(), '', 'Failed tenant creation (bad platform PIN)', 'BAD_MASTER_PIN', now, tz);
-    return error_('Invalid platform PIN.');
-  }
-
   var code = String(payload.code || '').trim().toLowerCase();
+  var adminEmail = String(payload.adminEmail || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adminEmail)) {
+    return error_('A valid admin email is required.');
+  }
   if (!/^[a-z0-9][a-z0-9\-]{1,23}$/.test(code)) {
     return error_('Tenant code must be 2-24 characters: letters, digits and hyphens.');
   }
@@ -350,6 +347,9 @@ function provisionTenant_(payload, masterCfg, now, tz) {
   setSecret_('adminPin', tenantPin, tenant.getId());
   setSecret_('qrSecret', tenantQr, tenant.getId());
   setConfigValue_(tenant, 'appName', appName);
+  setConfigValue_(tenant, 'adminEmail', adminEmail);
+  var admins = tenant.getSheetByName(SHEET_ADMINS);
+  if (admins) admins.appendRow([adminEmail, appName, Utilities.formatDate(now, tz, 'yyyy-MM-dd'), 'self-service']);
   registerTenant_(code, tenant.getId());
 
   return {
@@ -409,7 +409,7 @@ function ensureSheets_(ss) {
     c.appendRow(['writeQuotaTenant', '600']);
     c.appendRow(['retentionDays', '0']);
     c.appendRow(['lateAfter', '']);
-    c.appendRow(['selfieMode', 'required']);
+    c.appendRow(['selfieMode', 'off']);
     c.appendRow(['reminderCheckInAfter', '']);
     c.appendRow(['reminderCheckOutAfter', '']);
     c.appendRow(['weekendsOff', 'on']);
@@ -533,7 +533,7 @@ function getConfig_(ss) {
   cfg.writeQuotaPerEmail = Number(cfg.writeQuotaPerEmail || 60);
   cfg.writeQuotaTenant = Number(cfg.writeQuotaTenant || 600);
   cfg.retentionDays = Number(cfg.retentionDays || 0);
-  cfg.selfieMode = String(cfg.selfieMode || 'required').toLowerCase();
+  cfg.selfieMode = String(cfg.selfieMode || 'off').toLowerCase();
   if (['off', 'optional', 'required'].indexOf(cfg.selfieMode) === -1) cfg.selfieMode = 'off';
   var wo = String(cfg.weekendsOff == null ? 'on' : cfg.weekendsOff).toLowerCase();
   cfg.weekendsOff = !(wo === 'off' || wo === 'false' || wo === 'no' || wo === '0');
@@ -2821,26 +2821,23 @@ function safeCell_(v) {
 }
 
 /**
- * Fixed-window write budget using the script cache. Prevents flooding the
+ * Sliding-window write budget using the script cache. Prevents flooding the
  * spreadsheet (and Apps Script quota) by a scripted attacker. Returns true
  * while under the limit.
- *
- * The window index is baked into the cache key (key + ':' + floor(now/windowMs))
- * so the count cannot drift across windows and is not dependent on the cache
- * TTL (script cache entries expire after at most 6h, which is shorter than a
- * hypothetical window, but each window uses its own key so TTL only needs to
- * outlive the current window).
  */
 function writeBudget_(key, limit, windowMs) {
   var cache = CacheService.getScriptCache();
-  var win = Math.floor(Date.now() / windowMs);
-  var entry = cache.get(key + ':' + win);
-  var n = Number(entry);
-  var c = isFinite(n) && n > 0 ? n : 0;
-  c++;
-  var ttl = Math.min(21600, Math.ceil(windowMs / 1000));
-  cache.put(key + ':' + win, String(c), ttl);
-  return c <= limit;
+  var now = Date.now();
+  var w = { t: now, c: 0 };
+  var entry = cache.get(key);
+  if (entry) {
+    try { w = JSON.parse(entry); } catch (e) { w = { t: now, c: 0 }; }
+  }
+  if (now - Number(w.t) > windowMs) w = { t: now, c: 0 };
+  w.c++;
+  var ttl = Math.min(300, Math.ceil(windowMs / 1000));
+  cache.put(key, JSON.stringify(w), ttl);
+  return w.c <= limit;
 }
 
 function pinGuard_(cfg, now, ss) {

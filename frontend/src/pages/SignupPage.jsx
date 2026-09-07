@@ -10,7 +10,6 @@ export default function SignupPage() {
   const [appName, setAppName] = useState('');
   const [code, setCode] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
-  const [masterPin, setMasterPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
@@ -25,11 +24,10 @@ export default function SignupPage() {
       return;
     }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setError('Saisissez une adresse email admin valide.'); return; }
-    if (!masterPin.trim()) { setError('Saisissez la cle de provisionnement fournie par la plateforme.'); return; }
     setLoading(true);
     setError('');
     try {
-      const res = await api({ action: 'provision', code: orgCode, appName: name, adminEmail: email, masterPin: masterPin.trim() });
+      const res = await api({ action: 'provision', code: orgCode, appName: name, adminEmail: email });
       if (!res.ok) throw new Error(res.message || 'Creation impossible');
       try { localStorage.setItem('att.orgcode.v1', orgCode); } catch {}
       setResult(res);
@@ -142,19 +140,6 @@ export default function SignupPage() {
             />
           </div>
           <p className="emp-hint">Cet email recevra un code a usage unique pour acceder au tableau de bord admin.</p>
-
-          <label>Cle de provisionnement</label>
-          <div className="emp-input-wrap">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <input
-              type="password"
-              autoComplete="off"
-              placeholder="Cle fournie par la plateforme"
-              value={masterPin}
-              onChange={(e) => setMasterPin(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSignup()}
-            />
-          </div>
 
           {error && <p className="feedback error" style={{ marginTop: 10 }}>{error}</p>}
 
