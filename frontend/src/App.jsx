@@ -2,6 +2,7 @@ import { useState, useEffect, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './contexts/AppContext';
 import HomePage from './pages/HomePage';
+import SignupPage from './pages/SignupPage';
 import EmployeeLogin from './components/EmployeeLogin';
 import BottomNav from './components/layout/BottomNav';
 import OfflinePill from './components/layout/OfflinePill';
