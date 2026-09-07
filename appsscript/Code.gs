@@ -14,7 +14,7 @@
  *   Attendance / Audit). The web app routes each request to the right spreadsheet
  *   using the `tenant` field in the request body.
  * - Empty/unknown tenant -> routed to the master spreadsheet (legacy behaviour).
- * - Provision: POST {action:'provision', masterPin, code, appName} creates and
+ * - Provision: POST {action:'provision', code, appName, adminEmail} creates and
  *   registers a new tenant spreadsheet and returns its credentials once.
  * - Office QRs may be "code|token" so the app can auto-select the tenant.
  */
@@ -333,7 +333,7 @@ function provisionTenant_(payload, masterCfg, now, tz) {
   if (lookupTenantId_(code, true)) {
     return error_('Tenant code already exists: ' + code);
   }
-  if (!writeBudget_('provq:master', 10, 3600000)) {
+  if (!writeBudget_('provq:self-service', 10, 3600000)) {
     logAudit_(SpreadsheetApp.getActiveSpreadsheet(), '', 'Tenant creation rate limit hit', 'QUOTA_PROVISION', now, tz);
     return error_('Too many tenants created this hour. Try again later.');
   }
