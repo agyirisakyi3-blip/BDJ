@@ -1,0 +1,76 @@
+name: CD - Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-backend:
+    name: Deploy Apps Script backend (clasp)
+    if: ${{ github.ref == 'refs/heads/main' && secrets.CLASPRC_JSON != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      - name: Restore clasp credentials
+        run: |
+          echo "$CLASPRC_JSON" | base64 -d > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+
+      - name: Push code to Apps Script project
+        run: clasp push -f
+
+      - name: Create new deployment version
+        id: version
+        run: |
+          OUT=$(clasp version "CI deploy ${GITHUB_SHA}")
+          echo "$OUT"
+          echo "version=$(printf '%s' "$OUT" | grep -oE '[0-9]+' | tail -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Point production deployment at the new version
+        run: |
+          clasp deploy -i "AKfycbzo9vVXXha0KA-qu9Bt4OVl0YdJUJRX6blG6qfQtyU8qHJKdE5LlNMErWsIJGmQJHyH_Q" \
+            -V "${{ steps.version.outputs.version }}" \
+            -d "CI deploy ${GITHUB_SHA}"
+
+      - name: Verify deployments
+        run: clasp deployments
+
+  deploy-frontend:
+    name: Deploy frontend to Vercel
+    if: ${{ github.ref == 'refs/heads/main' && secrets.VERCEL_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_Zh8eIwDwXe9zypGZ0uvzPyBc
+      VERCEL_PROJECT_ID: prj_CJSKanTAIPzhr1EfHgSk5glqkk7m
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build (production)
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
