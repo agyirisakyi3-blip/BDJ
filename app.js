@@ -2430,14 +2430,14 @@ import {
       var shift = (e.shiftStart || e.shiftEnd)
         ? ((e.shiftStart || '--:--') + ' - ' + (e.shiftEnd || '--:--'))
         : '\u2014';
-      [e.name, e.email, e.code || '\u2014', e.department || '\u2014', shift].forEach(function (txt) {
+      [e.name, e.email, '\u2022\u2022\u2022\u2022\u2022\u2022', e.department || '\u2014', shift].forEach(function (txt) {
         var td = document.createElement('td');
         td.textContent = txt;
         tr.appendChild(td);
       });
       var tdActions = document.createElement('td');
       tdActions.className = 'row-actions';
-      if (e.code) {
+      {
         var btnCode = document.createElement('button');
         btnCode.type = 'button';
         btnCode.className = 'ghost-btn sm';

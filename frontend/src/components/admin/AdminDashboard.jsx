@@ -1606,10 +1606,10 @@ function EmployeeSection({ employees, onAdd, onDelete, onCodeReset, onBulkImport
             {employees.length === 0 ? <tr><td className="empty" colSpan={6}>Aucun employe.</td></tr> : employees.map((e) => (
               <tr key={e.email}>
                 <td><div className="person-cell"><PhotoAvatar name={e.name} email={e.email} photo={e.photo} /><span className="person-name">{e.name}</span></div></td>
-                <td>{e.email}</td><td>{e.code || '\u2014'}</td><td>{e.department || '\u2014'}</td>
+                <td>{e.email}</td><td>••••••</td><td>{e.department || '\u2014'}</td>
                 <td>{(e.shiftStart || e.shiftEnd) ? ((e.shiftStart || '--:--') + ' - ' + (e.shiftEnd || '--:--')) : '\u2014'}</td>
                 <td className="row-actions">
-                  {e.code && <button className="ghost-btn sm" onClick={() => onCodeReset(e.email)}>Regenerer</button>}
+                  <button className="ghost-btn sm" onClick={() => onCodeReset(e.email)}>Regenerer</button>
                   <button className="ghost-btn sm" onClick={() => onDelete(e.email)}>Supprimer</button>
                 </td>
               </tr>

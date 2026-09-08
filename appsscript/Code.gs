@@ -397,7 +397,7 @@ function ensureSheets_(ss) {
     c.appendRow(['officeLng', '-0.1869644']);
     c.appendRow(['radiusMeters', '150']);
     c.appendRow(['qrSecret', 'ATT' + randomToken_()]);
-    c.appendRow(['adminPin', '1234']);
+    c.appendRow(['adminPin', 'PIN' + randomToken_().slice(0, 6)]);
     c.appendRow(['adminEmail', '']);
     c.appendRow(['rosterMode', 'roster']);
     c.appendRow(['rosterDomain', '']);
@@ -1447,7 +1447,7 @@ function employeesData_(payload, cfg, now, tz, ss) {
         phone: String(rows[i][c.phone] || ''),
         birth: String(rows[i][c.birth] || ''),
         photo: String(rows[i][c.photo] || ''),
-        code: String(rows[i][c.code < 0 ? 10 : c.code] || '')
+        code: ''
       });
     }
   }
@@ -1481,12 +1481,12 @@ function employeeAdd_(payload, cfg, now, tz, ss) {
   ensureEmployeeBioCols_(sheet);
   var c = employeeColumns_(sheet);
   var rows = sheet.getDataRange().getValues();
-  var usedCodes = collectEmployeeCodes_(rows, c);
+  var maps = collectCodeMaps_(rows, c);
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() === email) {
       var existingCode = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
-      if (code && code === existingCode) { /* unchanged */ }
-      else if (code && usedCodes.hasOwnProperty(code)) return error_('This code is already used by another employee.');
+      if (code && codeMatches_(ss, code, existingCode)) { /* unchanged */ }
+      else if (code && plainCodeInUse_(ss, maps, code)) return error_('This code is already used by another employee.');
       var created = String(rows[i][c.created < 0 ? 3 : c.created] || Utilities.formatDate(now, tz, 'yyyy-MM-dd'));
       var row = [name, email, department, created];
       row[4] = shiftStart;
@@ -1495,22 +1495,25 @@ function employeeAdd_(payload, cfg, now, tz, ss) {
       row[c.phone < 0 ? 7 : c.phone] = phone;
       row[c.birth < 0 ? 8 : c.birth] = birth;
       row[c.photo < 0 ? 9 : c.photo] = photo;
-      row[c.code < 0 ? 10 : c.code] = code || generateUniqueEmployeeCode_(ss, usedCodes);
+      var chosen = code || generateUniqueEmployeeCode_(ss, maps);
+      if (!code && !plainCodeInUse_(ss, maps, chosen)) maps.plain[chosen] = true;
+      row[c.code < 0 ? 10 : c.code] = codeHash_(ss, chosen);
       writeEmployeeRow_(sheet, i + 1, row);
-      return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo, code: row[c.code < 0 ? 10 : c.code] } };
+      return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo, code: chosen } };
     }
   }
-  if (code && usedCodes.hasOwnProperty(code)) return error_('This code is already used by another employee.');
+  if (code && plainCodeInUse_(ss, maps, code)) return error_('This code is already used by another employee.');
   var row = [name, email, department, Utilities.formatDate(now, tz, 'yyyy-MM-dd')];
   row[c.role < 0 ? 6 : c.role] = role;
   row[c.phone < 0 ? 7 : c.phone] = phone;
   row[c.birth < 0 ? 8 : c.birth] = birth;
   row[c.photo < 0 ? 9 : c.photo] = photo;
-  row[c.code < 0 ? 10 : c.code] = code || generateUniqueEmployeeCode_(ss, usedCodes);
+  var chosen2 = code || generateUniqueEmployeeCode_(ss, maps);
+  row[c.code < 0 ? 10 : c.code] = codeHash_(ss, chosen2);
   if (shiftStart) row[c.shiftStart < 0 ? 4 : c.shiftStart] = shiftStart;
   if (shiftEnd) row[c.shiftEnd < 0 ? 5 : c.shiftEnd] = shiftEnd;
   sheet.appendRow(padRow_(row, Math.max(11, c.role < 0 ? 6 : 10)));
-  return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo, code: row[c.code < 0 ? 10 : c.code] } };
+  return { ok: true, employee: { name: name, email: email, department: department, role: role, phone: phone, birth: birth, photo: photo, code: chosen2 } };
 }
 
 /** Update bio/photo (+ optional shift times) for an existing employee row. */
@@ -1542,11 +1545,11 @@ function employeeBioUpdate_(payload, cfg, now, tz, ss) {
       var newCode = normEmployeeCode_(payload.code);
       if (!String(payload.code || '').trim()) return error_('Code is required when updating it.');
       if (!newCode) return error_('Code must be exactly 6 digits.');
-      if (newCode !== existingCode) {
-        var used = collectEmployeeCodes_(rows, c);
-        if (used.hasOwnProperty(newCode)) return error_('This code is already used by another employee.');
+      if (!codeMatches_(ss, newCode, existingCode)) {
+        var codeMaps = collectCodeMaps_(rows, c);
+        if (plainCodeInUse_(ss, codeMaps, newCode)) return error_('This code is already used by another employee.');
       }
-      row[c.code < 0 ? 10 : c.code] = newCode;
+      row[c.code < 0 ? 10 : c.code] = codeHash_(ss, newCode);
     }
     writeEmployeeRow_(sheet, i + 1, row);
     return { ok: true, employee: { name: row[c.name < 0 ? 0 : c.name], email: email } };
@@ -1592,20 +1595,105 @@ function normEmployeeCode_(v) {
   var s = String(v || '').trim();
   return /^\d{6}$/.test(s) ? s : '';
 }
-/** Collect all non-empty employee codes from rows into a lookup map. */
-function collectEmployeeCodes_(rows, c) {
-  var codes = {};
+/** Collect stored codes from rows into plaintext + hash lookup maps. */
+function collectCodeMaps_(rows, c) {
+  var plain = {};
+  var hashes = {};
   for (var i = 1; i < rows.length; i++) {
-    var code = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
-    if (code) codes[code] = true;
+    var v = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
+    if (!v) continue;
+    if (isCodeHash_(v)) hashes[v.toLowerCase()] = true;
+    else plain[v] = true;
   }
-  return codes;
+  return { plain: plain, hashes: hashes };
 }
-/** Return a unique 6-digit code not in the provided usedCodes map. */
-function generateUniqueEmployeeCode_(ss, usedCodes) {
+/** True when the candidate plaintext code is already held by another row. */
+function plainCodeInUse_(ss, maps, code) {
+  if (maps.plain && maps.plain[code]) return true;
+  var h = codeHash_(ss, code);
+  return !!(maps.hashes && maps.hashes[h]);
+}
+/** Return a unique 6-digit code not present in the provided plaintext/hash maps. */
+function generateUniqueEmployeeCode_(ss, maps) {
   var code;
-  do { code = String(Math.floor(100000 + Math.random() * 900000)); } while (usedCodes && usedCodes[code]);
+  do {
+    code = randCode6_();
+  } while (maps && (maps.plain && maps.plain[code] || maps.hashes && maps.hashes[codeHash_(ss, code)]));
   return code;
+}
+/** CSPRNG-backed 6-digit code (App Scripts UUIDs are RFC 4122 v4). */
+function randCode6_() {
+  var u = Utilities.getUuid().replace(/[^0-9]/g, '');
+  var s = String(parseInt(u.slice(0, 9), 10) % 1000000);
+  while (s.length < 6) s = '0' + s;
+  return s;
+}
+/** Per-tenant HMAC secret for employee codes, kept in Script Properties only. */
+function codeSecret_(ss) {
+  var props = PropertiesService.getScriptProperties();
+  var key = 'codeHmacSecret:' + ss.getId();
+  var scoped = props.getProperty(key);
+  if (scoped) return scoped;
+  var global = props.getProperty('codeHmacSecret');
+  if (!global) {
+    global = 'ATT' + uniqueToken_();
+    props.setProperty('codeHmacSecret', global);
+  }
+  scoped = global + ':' + ss.getId();
+  props.setProperty(key, scoped);
+  return scoped;
+}
+function uniqueToken_() {
+  var t = '';
+  for (var i = 0; i < 4; i++) t += Utilities.getUuid().replace(/-/g, '');
+  return t;
+}
+/** Constant-time string equality. */
+function ctEq_(a, b) {
+  var a2 = String(a == null ? '' : a);
+  var b2 = String(b == null ? '' : b);
+  if (a2.length !== b2.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a2.length; i++) diff |= a2.charCodeAt(i) ^ b2.charCodeAt(i);
+  return diff === 0;
+}
+function toHex_(bytes) {
+  var hex = '';
+  for (var i = 0; i < bytes.length; i++) {
+    var b = bytes[i] & 0xff;
+    hex += (b < 16 ? '0' : '') + b.toString(16);
+  }
+  return hex;
+}
+/** HMAC-SHA256 hex digest of an employee code with the per-tenant secret. */
+function codeHash_(ss, code) {
+  return toHex_(Utilities.computeHmacSha256Signature('empcode:' + String(code), codeSecret_(ss)));
+}
+/** True when the stored value is a hashed code (64 lowercase hex). */
+function isCodeHash_(v) {
+  return /^[0-9a-f]{64}$/.test(String(v || '').trim());
+}
+/** Compare a login attempt against a stored value (hash or legacy plaintext). */
+function codeMatches_(ss, attempt, stored) {
+  var a = String(attempt || '').trim();
+  var s = String(stored || '').trim();
+  if (!a || !s) return false;
+  if (isCodeHash_(s)) return ctEq_(codeHash_(ss, a), s);
+  return ctEq_(a, s);
+}
+/** Replace a legacy plaintext code cell with its hash after a successful login. */
+function upgradeStoredCode_(ss, email) {
+  var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
+  if (!sheet) return;
+  var c = employeeColumns_(sheet);
+  if (c.code < 0) return;
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() !== email) continue;
+    var v = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
+    if (v && !isCodeHash_(v)) sheet.getRange(i + 1, c.code + 1).setValue(codeHash_(ss, v));
+    return;
+  }
 }
 /** Backfill missing codes for existing Employees rows (migration). */
 function ensureEmployeeCodes_(ss) {
@@ -1615,17 +1703,17 @@ function ensureEmployeeCodes_(ss) {
   var c = employeeColumns_(sheet);
   if (c.code < 0) return;
   var rows = sheet.getDataRange().getValues();
-  var usedCodes = {};
+  var maps = collectCodeMaps_(rows, c);
   var updates = [];
   for (var i = 1; i < rows.length; i++) {
     var code = String(rows[i][c.code] || '').trim();
-    if (code) { usedCodes[code] = true; continue; }
-    var fresh = generateUniqueEmployeeCode_(ss, usedCodes);
-    usedCodes[fresh] = true;
-    updates.push({ row: i + 1, code: fresh });
+    if (code) continue;
+    var fresh = generateUniqueEmployeeCode_(ss, maps);
+    maps.plain[fresh] = true;
+    updates.push({ row: i + 1, hash: codeHash_(ss, fresh) });
   }
   for (var u = 0; u < updates.length; u++) {
-    sheet.getRange(updates[u].row, c.code + 1).setValue(updates[u].code);
+    sheet.getRange(updates[u].row, c.code + 1).setValue(updates[u].hash);
   }
 }
 /** Admin action: generate a new unique code for an employee. */
@@ -1640,13 +1728,11 @@ function employeeCodeReset_(payload, cfg, now, tz, ss) {
   var c = employeeColumns_(sheet);
   if (c.code < 0) return error_('Code column not configured.');
   var rows = sheet.getDataRange().getValues();
-  var usedCodes = collectEmployeeCodes_(rows, c);
+  var maps = collectCodeMaps_(rows, c);
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() !== email) continue;
-    var oldCode = String(rows[i][c.code] || '').trim();
-    if (oldCode) delete usedCodes[oldCode];
-    var newCode = generateUniqueEmployeeCode_(ss, usedCodes);
-    sheet.getRange(i + 1, c.code + 1).setValue(newCode);
+    var newCode = generateUniqueEmployeeCode_(ss, maps);
+    sheet.getRange(i + 1, c.code + 1).setValue(codeHash_(ss, newCode));
     logAudit_(ss, String(payload.adminEmail || 'admin'), 'Employee code reset: ' + email, 'CODE_RESET', now, tz);
     return { ok: true, code: newCode };
   }
@@ -1660,7 +1746,7 @@ function codeAttemptOk_(ss, email, attempt, expected, now) {
   var entry = cache.get(key);
   if (entry) { try { state = JSON.parse(entry); } catch (e) {} }
   if (now.getTime() < Number(state.until || 0)) return false;
-  if (String(attempt).trim() === String(expected).trim()) { cache.remove(key); return true; }
+  if (codeMatches_(ss, attempt, expected)) { cache.remove(key); return true; }
   state.c = Number(state.c || 0) + 1;
   if (state.c >= 5) { state.c = 0; state.until = now.getTime() + 900000; }
   cache.put(key, JSON.stringify(state), 900);
@@ -1721,35 +1807,55 @@ function sendCodes_(payload, cfg, now, tz, ss) {
 
   var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
   var c = sheet ? employeeColumns_(sheet) : { email: 1, code: 10, name: 0 };
-  var codeByEmail = {};
+  var rows = sheet ? sheet.getDataRange().getValues() : [];
+  var rowByEmail = {};
+  var maps = { plain: {}, hashes: {} };
   if (sheet) {
-    var rows = sheet.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
       var em = String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase();
       var cd = String(rows[i][c.code < 0 ? 10 : c.code] || '').trim();
-      if (em && cd) codeByEmail[em] = cd;
+      if (!em) continue;
+      rowByEmail[em] = { row: i + 1, stored: cd };
+      if (cd) {
+        if (isCodeHash_(cd)) maps.hashes[cd] = true;
+        else maps.plain[cd] = true;
+      }
     }
   }
 
   var sent = 0;
   var failed = [];
   var appName = cfg.appName || 'Attendance';
+  var upgrades = [];
 
   for (var s = 0; s < staff.length; s++) {
     var email = String(staff[s].email || '').trim().toLowerCase();
     if (!email) continue;
     // Roster-only entries have no Employees row, so no code to send.
-    if (!codeByEmail[email]) {
+    var entry = rowByEmail[email];
+    if (!entry || !entry.stored) {
       failed.push(email + ' (no code on Employees)');
       continue;
     }
     var name = staff[s].name || email.split('@')[0] || email;
+    var codeToEmail;
+    if (isCodeHash_(entry.stored)) {
+      // Stored value is a hash: mint a fresh code, persist the hash, email the plaintext.
+      var fresh = generateUniqueEmployeeCode_(ss, maps);
+      maps.plain[fresh] = true;
+      sheet.getRange(entry.row, c.code + 1).setValue(codeHash_(ss, fresh));
+      codeToEmail = fresh;
+    } else {
+      // Legacy plaintext: deliver it once, then upgrade the cell to a hash.
+      codeToEmail = entry.stored;
+      upgrades.push({ row: entry.row, hash: codeHash_(ss, entry.stored) });
+    }
     try {
       MailApp.sendEmail({
         to: email,
         subject: 'Your ' + appName + ' sign-in code',
         body: 'Hello ' + name + ',\n\n' +
-          'Your personal sign-in code for ' + appName + ' is: ' + codeByEmail[email] + '\n\n' +
+          'Your personal sign-in code for ' + appName + ' is: ' + codeToEmail + '\n\n' +
           'Keep it private. It is used to clock in and out, and can be changed by an administrator.\n\n' +
           'If you did not expect this email, please ignore it.'
       });
@@ -1758,6 +1864,10 @@ function sendCodes_(payload, cfg, now, tz, ss) {
     } catch (e) {
       failed.push(email);
     }
+  }
+
+  for (var u = 0; u < upgrades.length; u++) {
+    sheet.getRange(upgrades[u].row, c.code + 1).setValue(upgrades[u].hash);
   }
 
   logAudit_(ss, String(payload.adminEmail || 'admin'), 'Bulk codes sent to ' + sent + ' roster member(s)' + (failed.length ? ' (' + failed.length + ' failed)' : ''), 'CODES_SENT', now, tz);
@@ -1800,12 +1910,26 @@ function employeeCodeResend_(payload, cfg, now, tz, ss) {
 
   var name = emp.name || email.split('@')[0] || email;
   var appName = cfg.appName || 'Attendance';
+  // A fresh code is minted and only the plaintext is emailed; the stored value
+  // is always a hash, so nothing sensitive stays in the spreadsheet.
+  var sheet = ss.getSheetByName(SHEET_EMPLOYEES);
+  var c = employeeColumns_(sheet);
+  var rows = sheet ? sheet.getDataRange().getValues() : [];
+  var maps = collectCodeMaps_(rows, c);
+  var fresh = generateUniqueEmployeeCode_(ss, maps);
+  if (sheet && c.code >= 0) {
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase() !== email) continue;
+      sheet.getRange(i + 1, c.code + 1).setValue(codeHash_(ss, fresh));
+      break;
+    }
+  }
   try {
     MailApp.sendEmail({
       to: email,
       subject: 'Your ' + appName + ' sign-in code',
       body: 'Hello ' + name + ',\n\n' +
-        'Your personal sign-in code for ' + appName + ' is: ' + emp.code + '\n\n' +
+        'Your personal sign-in code for ' + appName + ' is: ' + fresh + '\n\n' +
         'Keep it private. It is used to clock in and out, and can be changed by an administrator.\n\n' +
         'If you did not expect this email, please ignore it.'
     });
@@ -2184,7 +2308,7 @@ function devOtpOn_(cfg) {
 function sendOtpTo_(email, now, ss) {
   var cache = CacheService.getScriptCache();
   var key = 'otp:admin:' + ss.getId() + ':' + email;
-  var code = String(Math.floor(100000 + Math.random() * 900000));
+  var code = randCode6_();
   cache.put(key, JSON.stringify({ code: code, until: now.getTime() + 600000, tries: 0 }), 600);
   try {
     MailApp.sendEmail(email, 'Your admin access code',
@@ -2198,7 +2322,7 @@ function sendOtpTo_(email, now, ss) {
 function sendUserOtp_(email, now, ss) {
   var cache = CacheService.getScriptCache();
   var key = 'otp:user:' + ss.getId() + ':' + email;
-  var code = String(Math.floor(100000 + Math.random() * 900000));
+  var code = randCode6_();
   cache.put(key, JSON.stringify({ code: code, until: now.getTime() + 600000, tries: 0 }), 600);
   try {
     MailApp.sendEmail(email, 'Your attendance sign-in code',
@@ -2256,6 +2380,7 @@ function userLogin_(payload, cfg, now, tz, ss) {
       logAudit_(ss, email, 'Bad fixed sign-in code', 'BAD_CODE', now, tz);
       return error_('Code incorrect. Veuillez reessayer.');
     }
+    upgradeStoredCode_(ss, email);
     logAudit_(ss, email, 'User signed in (fixed code)', 'USER_LOGIN', now, tz);
     var name = emp.name || email.split('@')[0] || email;
     var isAdmin = isAdmin_(ss, email);
@@ -2938,7 +3063,7 @@ function adminAccess_(payload, cfg, now, tz, ss) {
 function sendOtp_(cfg, now, ss) {
   var cache = CacheService.getScriptCache();
   var key = 'otp:' + ss.getId();
-  var code = String(Math.floor(100000 + Math.random() * 900000));
+  var code = randCode6_();
   cache.put(key, JSON.stringify({ code: code, until: now.getTime() + 600000, tries: 0 }), 600);
   var email = String(cfg.adminEmail || '').trim();
   if (!email) return { dev: code };

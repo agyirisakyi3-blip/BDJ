@@ -308,7 +308,11 @@ describe('Employee Management', () => {
     await page.waitForFunction(() => document.querySelectorAll('#emp-table tbody tr').length === 1, { timeout: 10000 });
 
     page.once('dialog', d => d.accept());
-    await page.click('#emp-table tbody .ghost-btn');
+    await page.$$eval('#emp-table tbody tr', (rows) => {
+      const btns = Array.from(rows[0].querySelectorAll('button'));
+      const del = btns.find(b => b.textContent.indexOf('Supprimer') !== -1);
+      if (del) del.click();
+    });
     await page.waitForFunction(() => !!document.querySelector('#emp-table tbody td.empty'), { timeout: 10000 });
     await page.waitForFunction(() => document.getElementById('feedback').textContent.indexOf('supprime') !== -1, { timeout: 5000 });
     await page.close();
