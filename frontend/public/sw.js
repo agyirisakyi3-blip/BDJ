@@ -7,16 +7,9 @@ var CDN_ASSETS = [
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
-    Promise.all([
-      caches.open(CACHE).then(function (c) {
-        return c.add('./index.html');
-      }),
-      caches.open(CDN_CACHE).then(function (c) {
-        return Promise.allSettled(CDN_ASSETS.map(function (url) {
-          return c.add(url);
-        }));
-      })
-    ]).then(function () { return self.skipWaiting(); })
+    caches.open(CACHE).then(function () {
+      return self.skipWaiting();
+    })
   );
 });
 
