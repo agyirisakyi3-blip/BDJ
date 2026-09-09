@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useEncryptedStorage, lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import CONFIG from '../config';
 import { api, isConfigured } from '../api';
@@ -33,6 +33,7 @@ export function AppProvider({ children }) {
   const [adminToken, setAdminToken] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const feedbackTimerRef = useRef(null);
   const [recent, setRecent] = useState([]);
   const [recentLoading, setRecentLoading] = useState(false);
   const [week, setWeek] = useState([]);
@@ -56,6 +57,7 @@ export function AppProvider({ children }) {
   }, [tenantFromProfile]);
 
   const showFeedback = useCallback((type, msg, hapticPattern) => {
+    clearTimeout(feedbackTimerRef.current);
     setFeedback({ type, msg });
     if (navigator.vibrate) {
       try {
@@ -64,7 +66,11 @@ export function AppProvider({ children }) {
         else if (type === 'error') navigator.vibrate([60, 50, 60]);
       } catch {}
     }
-    setTimeout(() => setFeedback(null), type === 'info' ? 12000 : 9000);
+    feedbackTimerRef.current = setTimeout(() => setFeedback(null), type === 'info' ? 12000 : 9000);
+  }, []);
+
+  useEffect(() => {
+    return () => clearTimeout(feedbackTimerRef.current);
   }, []);
 
   const setProfile = useCallback(async (p) => {
@@ -227,7 +233,7 @@ export function AppProvider({ children }) {
       if (res.ok) {
         const prefix = todayStr().slice(0, 7);
         let days = 0, hours = 0, breakMin = 0, late = 0;
-        (res.attendance.pairs || []).forEach((p) => {
+        (res.attendance?.pairs || []).forEach((p) => {
           if (!p.date || String(p.date).slice(0, 7) !== prefix) return;
           days++;
           if (p.hours != null && !isNaN(p.hours)) hours += p.hours;

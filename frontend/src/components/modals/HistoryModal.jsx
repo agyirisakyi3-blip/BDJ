@@ -77,7 +77,7 @@ export default function HistoryModal({ isOpen, onClose }) {
       if (res.ok) setData(res.attendance);
       else showFeedback('error', res.message || 'Impossible de charger');
     }).catch((err) => { setLoading(false); showFeedback('error', err.message); });
-  }, [isOpen, profile]);
+  }, [isOpen, profile, apiCall, auth]);
 
   const handleExport = async () => {
     if (!profile) return;

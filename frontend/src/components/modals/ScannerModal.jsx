@@ -5,16 +5,21 @@ const QR_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/ht
 function loadQrScript() {
   if (typeof window.Html5Qrcode !== 'undefined') return Promise.resolve();
   const existing = document.querySelector('script[src="' + QR_CDN_URL + '"]');
-  if (existing) return new Promise((resolve, reject) => {
-    existing.addEventListener('load', resolve);
-    existing.addEventListener('error', reject);
-  });
+  if (existing) {
+    if (existing.dataset.loaded === 'true') return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 10000);
+      existing.addEventListener('load', () => { clearTimeout(timer); existing.dataset.loaded = 'true'; resolve(); });
+      existing.addEventListener('error', () => { clearTimeout(timer); reject(new Error('load failed')); });
+    });
+  }
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = QR_CDN_URL;
     s.async = true;
-    s.onload = resolve;
-    s.onerror = reject;
+    const timer = setTimeout(() => { s.remove(); reject(new Error('timeout')); }, 10000);
+    s.onload = () => { clearTimeout(timer); s.dataset.loaded = 'true'; resolve(); };
+    s.onerror = () => { clearTimeout(timer); s.remove(); reject(new Error('load failed')); };
     document.head.appendChild(s);
   });
 }
@@ -24,6 +29,23 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
   const [cameraError, setCameraError] = useState('');
   const scannerRef = useRef(null);
   const containerRef = useRef(null);
+  const onScanRef = useRef(onScan);
+
+  onScanRef.current = onScan;
+
+  const stopScanner = useCallback(() => {
+    if (scannerRef.current) {
+      try {
+        const p = scannerRef.current.stop();
+        if (p && p.catch) p.catch(() => {});
+      } catch {}
+      try {
+        const c = scannerRef.current.clear();
+        if (c && c.catch) c.catch(() => {});
+      } catch {}
+      scannerRef.current = null;
+    }
+  }, []);
 
   const startScanner = useCallback(async () => {
     setCameraError('');
@@ -42,43 +64,34 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
       return;
     }
 
+    const el = containerRef.current;
+    if (!el) return;
+    if (!el.id) el.id = 'qr-reader-' + Date.now();
+
     try {
-      const scanner = new window.Html5Qrcode(containerRef.current.id || 'qr-reader');
+      const scanner = new window.Html5Qrcode(el.id);
       scannerRef.current = scanner;
       await scanner.start(
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 240, height: 240 } },
-        (text) => { stopScanner(); onScan(text); },
+        (text) => { stopScanner(); onScanRef.current(text); },
         () => {}
       );
     } catch (err) {
       setCameraError('Camera indisponible: ' + err);
     }
-  }, [onScan]);
-
-  const stopScanner = useCallback(() => {
-    if (scannerRef.current) {
-      try {
-        const p = scannerRef.current.stop();
-        if (p && p.catch) p.catch(() => {});
-      } catch {}
-      try {
-        const c = scannerRef.current.clear();
-        if (c && c.catch) c.catch(() => {});
-      } catch {}
-      scannerRef.current = null;
-    }
-  }, []);
+  }, [stopScanner]);
 
   useEffect(() => {
     if (isOpen) {
-      const id = 'qr-reader-' + Date.now();
-      if (containerRef.current) containerRef.current.id = id;
-      setTimeout(() => startScanner(), 100);
+      if (containerRef.current && !containerRef.current.id) {
+        containerRef.current.id = 'qr-reader-' + Date.now();
+      }
+      const t = setTimeout(() => startScanner(), 100);
+      return () => { clearTimeout(t); stopScanner(); };
     } else {
       stopScanner();
     }
-    return () => stopScanner();
   }, [isOpen, startScanner, stopScanner]);
 
   if (!isOpen) return null;

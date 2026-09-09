@@ -3,6 +3,7 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 export default function SelfieModal({ isOpen, onClose, onCapture }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const streamRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
@@ -17,6 +18,7 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
+      streamRef.current = s;
       setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
@@ -28,25 +30,30 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
   }, []);
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      setStream(null);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
+    setStream(null);
     if (videoRef.current) videoRef.current.srcObject = null;
-  }, [stream]);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
       setPreview(null);
       setError('');
-      setTimeout(startCamera, 100);
+      const t = setTimeout(startCamera, 100);
+      return () => {
+        clearTimeout(t);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        }
+      };
     } else {
       stopCamera();
     }
-    return () => {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-    };
-  }, [isOpen]);
+  }, [isOpen, startCamera, stopCamera]);
 
   if (!isOpen) return null;
 

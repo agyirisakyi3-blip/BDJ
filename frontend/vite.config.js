@@ -9,6 +9,7 @@ export default defineConfig({
     compression({ algorithm: 'brotliCompress' }),
   ],
   server: {
+    host: true,
     port: 3000,
     proxy: {
       '/exec': {

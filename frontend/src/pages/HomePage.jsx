@@ -50,7 +50,7 @@ export default function HomePage() {
       loadWeek();
       loadMonth();
     }
-  }, [profile]);
+  }, [profile, loadRecent, loadWeek, loadMonth]);
 
   const showScanSuccess = useCallback((action, time, name) => {
     setScanSuccess({ show: true, action, time, name });

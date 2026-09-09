@@ -30,6 +30,8 @@ export default function QRGenerator() {
   const boxRef = useRef(null);
   const qrInstance = useRef(null);
 
+  const qrContainerRef = useRef(null);
+
   const generate = useCallback(async () => {
     setError('');
     if (!secret.trim()) {
@@ -51,12 +53,12 @@ export default function QRGenerator() {
     }
 
     const text = tenant.trim() ? tenant.trim() + '|' + secret.trim() : secret.trim();
-    const box = boxRef.current;
-    if (!box) { setLoading(false); return; }
+    const container = qrContainerRef.current;
+    if (!container) { setLoading(false); return; }
 
-    box.innerHTML = '';
+    while (container.firstChild) container.removeChild(container.firstChild);
     try {
-      qrInstance.current = new window.QRCode(box, {
+      qrInstance.current = new window.QRCode(container, {
         text: text,
         width: 256,
         height: 256,
@@ -70,7 +72,7 @@ export default function QRGenerator() {
   }, [secret, tenant]);
 
   const download = () => {
-    const canvas = boxRef.current?.querySelector('canvas');
+    const canvas = qrContainerRef.current?.querySelector('canvas');
     if (!canvas) return;
     const a = document.createElement('a');
     a.download = 'qr-addredance-' + (tenant.trim() || 'office') + '.png';
@@ -81,7 +83,7 @@ export default function QRGenerator() {
   };
 
   const print = () => {
-    const canvas = boxRef.current?.querySelector('canvas');
+    const canvas = qrContainerRef.current?.querySelector('canvas');
     if (!canvas) return;
     const win = window.open('', '_blank');
     if (!win) return;
@@ -134,24 +136,22 @@ export default function QRGenerator() {
           </button>
         </div>
         {error && <p className="feedback error">{error}</p>}
-        {generated && (
-          <div style={{ textAlign: 'center', marginTop: '16px' }}>
-            <div ref={boxRef} style={{ display: 'inline-block', padding: '16px', background: '#fff', borderRadius: '16px' }} />
-            <p className="hint" style={{ marginTop: '8px' }}>
-              Ce code est permanent. Imprimez-le et placez-le a l'entree du bureau.
-            </p>
-            <div className="btn-row" style={{ justifyContent: 'center', marginTop: '12px' }}>
-              <button className="ghost-btn" onClick={download}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <span>Telecharger PNG</span>
-              </button>
-              <button className="ghost-btn" onClick={print}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                <span>Imprimer</span>
-              </button>
-            </div>
+        <div ref={boxRef} style={generated ? { textAlign: 'center', marginTop: '16px' } : { display: 'none' }}>
+          <div ref={qrContainerRef} style={{ display: 'inline-block', padding: '16px', background: '#fff', borderRadius: '16px' }} />
+          <p className="hint" style={{ marginTop: '8px' }}>
+            Ce code est permanent. Imprimez-le et placez-le a l'entree du bureau.
+          </p>
+          <div className="btn-row" style={{ justifyContent: 'center', marginTop: '12px' }}>
+            <button className="ghost-btn" onClick={download}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Telecharger PNG</span>
+            </button>
+            <button className="ghost-btn" onClick={print}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              <span>Imprimer</span>
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -58,7 +58,7 @@ export default memo(function StatusCard() {
     tick();
     intervalRef.current = setInterval(tick, 1000);
     return () => clearInterval(intervalRef.current);
-  }, [checkedIn, status]);
+  }, [status]);
 
   const seed = profile ? (profile.name || profile.email || '?') : '?';
   const avatarClass = 'status-avatar' + (checkedIn ? ' in' : isCheckedOut ? ' out' : '');

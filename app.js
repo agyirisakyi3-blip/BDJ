@@ -947,10 +947,12 @@ import {
   function closeScanner() {
     hideModal('modal-scan');
     if (state.qrScanner) {
+      var s = state.qrScanner;
+      state.qrScanner = null;
       try {
-        var stop = state.qrScanner.stop();
+        var stop = s.stop();
         if (stop && stop.then) {
-          stop.then(function () { return state.qrScanner.clear(); }).catch(function () {});
+          stop.then(function () { try { s.clear(); } catch (e) {} }).catch(function () {});
         }
       } catch (e) {}
     }

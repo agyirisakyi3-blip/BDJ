@@ -4,6 +4,7 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fileRef = useRef(null);
+  const streamRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
@@ -18,6 +19,7 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
         audio: false,
       });
+      streamRef.current = s;
       setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
@@ -29,25 +31,29 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
   }, []);
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      setStream(null);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
+    setStream(null);
     if (videoRef.current) videoRef.current.srcObject = null;
-  }, [stream]);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
       setPreview(null);
       setError('');
-      setTimeout(startCamera, 100);
+      const t = setTimeout(startCamera, 100);
+      return () => {
+        clearTimeout(t);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        }
+      };
     } else {
       stopCamera();
     }
-    return () => {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   if (!isOpen) return null;

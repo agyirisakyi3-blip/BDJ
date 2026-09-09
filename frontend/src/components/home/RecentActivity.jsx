@@ -13,13 +13,13 @@ export default memo(function RecentActivity() {
       <ul className="recent-list">
         {recentLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="sk-row">
+            <li key={i} className="sk-row">
               <span className="sk sk-dot"></span>
               <div className="sk-wrap">
                 <span className="sk sk-line"></span>
                 <span className="sk sk-line short"></span>
               </div>
-            </div>
+            </li>
           ))
         ) : recent.length > 0 ? (
           recent.map((r, i) => (

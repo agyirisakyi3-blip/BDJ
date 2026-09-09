@@ -1,7 +1,8 @@
-var CACHE = 'att-v34';
+var CACHE = 'att-v35';
 var CDN_CACHE = 'att-cdn-v1';
 var CDN_ASSETS = [
-  'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 ];
 
 self.addEventListener('install', function (e) {

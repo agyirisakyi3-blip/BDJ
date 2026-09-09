@@ -152,13 +152,17 @@
 
       /* ---------------- Screen ---------------- */
 
+      var pollTimer = null;
+      var clockTimer = null;
       function enterScreen() {
         loginEl.classList.add('hidden');
         screenEl.classList.remove('hidden');
         $('logout-btn').classList.remove('hidden');
+        if (pollTimer) clearInterval(pollTimer);
+        if (clockTimer) clearInterval(clockTimer);
         poll();
-        setInterval(poll, POLL_MS);
-        setInterval(tickClock, 1000);
+        pollTimer = setInterval(poll, POLL_MS);
+        clockTimer = setInterval(tickClock, 1000);
       }
 
       function poll() {
@@ -185,17 +189,16 @@
         tickClock(scr.serverTime);
       }
 
-      var qrBox = null;
       function drawQr(token) {
         if (!token || token === state.token) return;
         state.token = token;
         var box = $('qrcode');
-        box.innerHTML = '';
+        while (box.firstChild) box.removeChild(box.firstChild);
         if (!window.QRCode) {
           statusEl.textContent = 'Bibliotheque QR indisponible (hors ligne ?).';
           return;
         }
-        qrBox = new QRCode(box, { text: token, width: 420, height: 420, correctLevel: QRCode.CorrectLevel.M });
+        new QRCode(box, { text: token, width: 420, height: 420, correctLevel: QRCode.CorrectLevel.M });
       }
 
       function tickClock(serverTime) {
