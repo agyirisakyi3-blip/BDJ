@@ -21,7 +21,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    target: 'es2020',
+    target: 'es2018',
     rollupOptions: {
       output: {
         manualChunks(id) {
