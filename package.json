@@ -6,11 +6,16 @@
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",
+    "test": "npm run build && node tests/run.js",
+    "test:live": "node tests/run.js",
     "clasp:login": "clasp login",
     "clasp:logout": "clasp logout",
     "clasp:push": "clasp push --force",
     "clasp:deploy": "clasp deploy",
     "clasp:status": "clasp status",
     "deploy:backend": "clasp push --force && clasp deploy"
+  },
+  "devDependencies": {
+    "puppeteer": "^22.15.0"
   }
 }
