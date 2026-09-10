@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { cameraContextError, describeCameraError } from '../../media';
 
-const QR_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
+const JSQR_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
 
-function loadQrScript() {
-  if (typeof window.Html5Qrcode !== 'undefined') return Promise.resolve();
-  const existing = document.querySelector('script[src="' + QR_CDN_URL + '"]');
+function loadJsQR() {
+  if (typeof window.jsQR !== 'undefined') return Promise.resolve();
+  const existing = document.querySelector('script[src="' + JSQR_CDN + '"]');
   if (existing) {
     if (existing.dataset.loaded === 'true') return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -16,7 +16,7 @@ function loadQrScript() {
   }
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = QR_CDN_URL;
+    s.src = JSQR_CDN;
     s.async = true;
     const timer = setTimeout(() => { s.remove(); reject(new Error('timeout')); }, 10000);
     s.onload = () => { clearTimeout(timer); s.dataset.loaded = 'true'; resolve(); };
@@ -28,98 +28,91 @@ function loadQrScript() {
 export default function ScannerModal({ isOpen, onClose, onScan }) {
   const [manualInput, setManualInput] = useState('');
   const [cameraError, setCameraError] = useState('');
-  const scannerRef = useRef(null);
-  const containerRef = useRef(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const rafRef = useRef(null);
+  const canvasRef = useRef(null);
   const onScanRef = useRef(onScan);
+  const scanningRef = useRef(false);
   useEffect(() => { onScanRef.current = onScan; }, [onScan]);
 
-  const stopScanner = useCallback(() => {
-    if (scannerRef.current) {
-      try {
-        const p = scannerRef.current.stop();
-        if (p && p.catch) p.catch(() => {});
-      } catch {}
-      try {
-        const c = scannerRef.current.clear();
-        if (c && c.catch) c.catch(() => {});
-      } catch {}
-      scannerRef.current = null;
+  const stopCamera = useCallback(() => {
+    scanningRef.current = false;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   }, []);
 
-  const startScanner = useCallback(async () => {
+  const startCamera = useCallback(async () => {
     setCameraError('');
-    if (!containerRef.current) return;
-    containerRef.current.innerHTML = '';
+    stopCamera();
 
     const contextError = cameraContextError();
-    if (contextError) {
-      setCameraError(contextError);
-      return;
-    }
+    if (contextError) { setCameraError(contextError); return; }
 
     try {
-      await loadQrScript();
+      await loadJsQR();
     } catch {
       setCameraError("Le scanner QR n'a pas pu se charger (verifiez votre connexion).");
       return;
     }
 
-    if (typeof window.Html5Qrcode === 'undefined') {
-      setCameraError("Le scanner QR n'a pas pu se charger (verifiez votre connexion).");
-      return;
-    }
-
-    const el = containerRef.current;
-    if (!el) return;
-    if (!el.id) el.id = 'qr-reader-' + Date.now();
-
     try {
-      const scanner = new window.Html5Qrcode(el.id);
-      scannerRef.current = scanner;
-      const containerRect = el.getBoundingClientRect();
-      const boxSize = Math.min(containerRect.width, containerRect.height, 280);
-      const qrbox = { width: boxSize, height: boxSize };
-      const scanConfig = { fps: 10, qrbox };
+      let stream;
       try {
-        await scanner.start(
-          { facingMode: { ideal: 'environment' } },
-          scanConfig,
-          (text) => { stopScanner(); onScanRef.current(text); },
-          () => {}
-        );
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
       } catch {
-        await scanner.start(
-          true,
-          scanConfig,
-          (text) => { stopScanner(); onScanRef.current(text); },
-          () => {}
-        );
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
+      streamRef.current = stream;
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      scanningRef.current = true;
+
+      if (!canvasRef.current) canvasRef.current = document.createElement('canvas');
+      const scanLoop = () => {
+        if (!scanningRef.current) return;
+        const video = videoRef.current;
+        if (!video || video.readyState < 2) { rafRef.current = requestAnimationFrame(scanLoop); return; }
+        const canvas = canvasRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(video, 0, 0);
+        try {
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          if (typeof window.jsQR !== 'undefined') {
+            const result = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+            if (result && result.data) { scanningRef.current = false; stopCamera(); onScanRef.current(result.data); return; }
+          }
+        } catch {}
+        rafRef.current = requestAnimationFrame(scanLoop);
+      };
+      scanLoop();
     } catch (err) {
       setCameraError(describeCameraError(err));
     }
-  }, [stopScanner]);
+  }, [stopCamera]);
 
   useEffect(() => {
     if (isOpen) {
-      if (containerRef.current && !containerRef.current.id) {
-        containerRef.current.id = 'qr-reader-' + Date.now();
-      }
-      const t = setTimeout(() => startScanner(), 100);
-      return () => { clearTimeout(t); stopScanner(); };
+      const t = setTimeout(() => startCamera(), 100);
+      return () => { clearTimeout(t); stopCamera(); };
     } else {
-      stopScanner();
+      stopCamera();
     }
-  }, [isOpen, startScanner, stopScanner]);
+  }, [isOpen, startCamera, stopCamera]);
 
   if (!isOpen) return null;
 
   const handleManual = () => {
-    if (manualInput.trim()) {
-      stopScanner();
-      onScan(manualInput.trim());
-    }
+    if (manualInput.trim()) { stopCamera(); onScan(manualInput.trim()); }
   };
 
   return (
@@ -137,12 +130,12 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
         {cameraError ? (
           <div className="cam-error">
             <p className="cam-error-msg">{cameraError}</p>
-            <button type="button" className="ghost-btn" onClick={startScanner}>Reessayer la camera</button>
+            <button type="button" className="ghost-btn" onClick={startCamera}>Reessayer la camera</button>
             <p className="hint">Camera ne fonctionne pas? Saisissez le code manuellement ci-dessous.</p>
           </div>
         ) : (
           <div className="scan-frame">
-            <div ref={containerRef} id="qr-reader" style={{ width: '100%', height: '100%' }}></div>
+            <video ref={videoRef} className="scan-video" playsInline muted autoPlay />
             <div className="scan-line" aria-hidden="true"></div>
             <span className="corner tl" aria-hidden="true"></span>
             <span className="corner tr" aria-hidden="true"></span>
@@ -157,7 +150,7 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
             <button className="ghost-btn" type="button" onClick={handleManual}>Utiliser</button>
           </div>
         </details>
-        <button className="ghost-btn" type="button" onClick={() => { stopScanner(); onClose(); }}>Annuler</button>
+        <button className="ghost-btn" type="button" onClick={() => { stopCamera(); onClose(); }}>Annuler</button>
       </div>
     </div>
   );
