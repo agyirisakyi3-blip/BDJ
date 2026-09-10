@@ -77,9 +77,11 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
     try {
       const scanner = new window.Html5Qrcode(el.id);
       scannerRef.current = scanner;
+      const containerRect = el.getBoundingClientRect();
+      const boxSize = Math.min(containerRect.width, containerRect.height, 280);
       await scanner.start(
         { facingMode: { ideal: 'environment' } },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        { fps: 10, qrbox: { width: boxSize, height: boxSize }, aspectRatio: 1.0 },
         (text) => { stopScanner(); onScanRef.current(text); },
         () => {}
       );
