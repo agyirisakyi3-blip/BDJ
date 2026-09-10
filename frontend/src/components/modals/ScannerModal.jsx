@@ -79,12 +79,23 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
       scannerRef.current = scanner;
       const containerRect = el.getBoundingClientRect();
       const boxSize = Math.min(containerRect.width, containerRect.height, 280);
-      await scanner.start(
-        { facingMode: { ideal: 'environment' } },
-        { fps: 10, qrbox: { width: boxSize, height: boxSize }, aspectRatio: 1.0 },
-        (text) => { stopScanner(); onScanRef.current(text); },
-        () => {}
-      );
+      const qrbox = { width: boxSize, height: boxSize };
+      const scanConfig = { fps: 10, qrbox };
+      try {
+        await scanner.start(
+          { facingMode: { ideal: 'environment' } },
+          scanConfig,
+          (text) => { stopScanner(); onScanRef.current(text); },
+          () => {}
+        );
+      } catch {
+        await scanner.start(
+          true,
+          scanConfig,
+          (text) => { stopScanner(); onScanRef.current(text); },
+          () => {}
+        );
+      }
     } catch (err) {
       setCameraError(describeCameraError(err));
     }

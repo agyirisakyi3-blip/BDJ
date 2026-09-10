@@ -11,20 +11,28 @@ export function cameraContextError() {
 
 export function describeCameraError(err) {
   const name = err && err.name ? String(err.name) : '';
-  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+  const msg = err && err.message ? String(err.message).toLowerCase() : '';
+  const combined = name + ' ' + msg;
+  if (combined.includes('NotAllowed') || combined.includes('PermissionDenied') || combined.includes('permission') || combined.includes('denied')) {
     return "Acces camera refuse. Autorisez la camera dans les reglages du navigateur, puis reessayez.";
   }
-  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+  if (combined.includes('NotFound') || combined.includes('DevicesNotFound') || combined.includes('no camera') || combined.includes('no device')) {
     return "Aucune camera n'a ete detectee sur cet appareil.";
   }
-  if (name === 'NotReadableError' || name === 'TrackStartError') {
+  if (combined.includes('NotReadable') || combined.includes('TrackStart') || combined.includes('could not start') || combined.includes('in use')) {
     return 'La camera est deja utilisee par une autre application. Fermez-la puis reessayez.';
   }
-  if (name === 'SecurityError') {
+  if (combined.includes('SecurityError') || combined.includes('not secure') || combined.includes('insecure')) {
     return "L'acces camera est bloque. Reessayez depuis un lien securise (HTTPS).";
   }
-  if (name === 'OverconstrainedError') {
+  if (combined.includes('Overconstrained') || combined.includes('overconstrain')) {
     return 'La camera ne repond pas aux parametres demandes. Reessayez.';
   }
-  return "Impossible d'acceder a la camera. Reessayez.";
+  if (combined.includes('Abort') || combined.includes('aborted')) {
+    return "L'acces a la camera a ete interrompu. Reessayez.";
+  }
+  if (combined.includes('NotSupported') || combined.includes('unsupported')) {
+    return "La camera n'est pas supportee par ce navigateur.";
+  }
+  return "Impossible d'acceder a la camera. Verifiez les permissions et reessayez.";
 }
