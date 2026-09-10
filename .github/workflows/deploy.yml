@@ -9,39 +9,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check-deploy-creds:
-    name: Check deploy credentials
-    runs-on: ubuntu-latest
-    outputs:
-      has_clasp: ${{ steps.clasp.outputs.has }}
-      has_vercel: ${{ steps.vercel.outputs.has }}
-    steps:
-      - id: clasp
-        env:
-          CREDS: ${{ secrets.CLASPRC_JSON }}
-        run: echo "has=$([ -n \"$CREDS\" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
-      - id: vercel
-        env:
-          TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: echo "has=$([ -n \"$TOKEN\" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
   deploy-backend:
     name: Deploy Apps Script backend (clasp)
-    needs: check-deploy-creds
-    if: needs.check-deploy-creds.outputs.has_clasp == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Check clasp credentials
+        id: creds
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "CLASPRC_JSON not configured - skipping backend deploy"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install clasp
+        if: steps.creds.outputs.skip != 'true'
         run: npm install -g @google/clasp
 
       - name: Restore clasp credentials
+        if: steps.creds.outputs.skip != 'true'
         run: |
           echo "$CLASPRC_JSON" | base64 -d > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
@@ -49,47 +36,57 @@ jobs:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
 
       - name: Push code to Apps Script project
+        if: steps.creds.outputs.skip != 'true'
         run: clasp push -f
 
       - name: Create new deployment version
         id: version
+        if: steps.creds.outputs.skip != 'true'
         run: |
           OUT=$(clasp version "CI deploy ${GITHUB_SHA}")
           echo "$OUT"
           echo "version=$(printf '%s' "$OUT" | grep -oE '[0-9]+' | tail -1)" >> "$GITHUB_OUTPUT"
 
       - name: Point production deployment at the new version
+        if: steps.creds.outputs.skip != 'true'
         run: |
           clasp deploy -i "AKfycbzo9vVXXha0KA-qu9Bt4OVl0YdJUJRX6blG6qfQtyU8qHJKdE5LlNMErWsIJGmQJHyH_Q" \
             -V "${{ steps.version.outputs.version }}" \
             -d "CI deploy ${GITHUB_SHA}"
 
       - name: Verify deployments
+        if: steps.creds.outputs.skip != 'true'
         run: clasp deployments
 
   deploy-frontend:
     name: Deploy frontend to Vercel
-    needs: check-deploy-creds
-    if: needs.check-deploy-creds.outputs.has_vercel == 'true'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: team_Zh8eIwDwXe9zypGZ0uvzPyBc
       VERCEL_PROJECT_ID: prj_CJSKanTAIPzhr1EfHgSk5glqkk7m
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Check Vercel token
+        id: creds
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN not configured - skipping frontend deploy"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install Vercel CLI
+        if: steps.creds.outputs.skip != 'true'
         run: npm install --global vercel@latest
 
       - name: Pull Vercel environment
+        if: steps.creds.outputs.skip != 'true'
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build (production)
+        if: steps.creds.outputs.skip != 'true'
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel
+        if: steps.creds.outputs.skip != 'true'
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
