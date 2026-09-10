@@ -12,6 +12,8 @@ jobs:
   deploy-backend:
     name: Deploy Apps Script backend (clasp)
     runs-on: ubuntu-latest
+    env:
+      clasp_config_project: .clasp.json
     steps:
       - name: Check clasp credentials
         id: creds
@@ -25,7 +27,7 @@ jobs:
 
       - name: Install clasp
         if: steps.creds.outputs.skip != 'true'
-        run: npm install -g @google/clasp@2.5.0
+        run: npm install -g @google/clasp
 
       - name: Restore clasp credentials
         if: steps.creds.outputs.skip != 'true'
@@ -37,26 +39,27 @@ jobs:
 
       - name: Push code to Apps Script project
         if: steps.creds.outputs.skip != 'true'
-        run: clasp push -f
+        run: clasp push -f -P .clasp.json
 
       - name: Create new deployment version
         id: version
         if: steps.creds.outputs.skip != 'true'
         run: |
-          OUT=$(clasp version "CI deploy ${GITHUB_SHA}")
+          OUT=$(clasp version -P .clasp.json "CI deploy ${GITHUB_SHA}")
           echo "$OUT"
           echo "version=$(printf '%s' "$OUT" | grep -oE '[0-9]+' | tail -1)" >> "$GITHUB_OUTPUT"
 
       - name: Point production deployment at the new version
         if: steps.creds.outputs.skip != 'true'
         run: |
-          clasp deploy -i "AKfycbzo9vVXXha0KA-qu9Bt4OVl0YdJUJRX6blG6qfQtyU8qHJKdE5LlNMErWsIJGmQJHyH_Q" \
+          clasp deploy -P .clasp.json \
+            -i "AKfycbzo9vVXXha0KA-qu9Bt4OVl0YdJUJRX6blG6qfQtyU8qHJKdE5LlNMErWsIJGmQJHyH_Q" \
             -V "${{ steps.version.outputs.version }}" \
             -d "CI deploy ${GITHUB_SHA}"
 
       - name: Verify deployments
         if: steps.creds.outputs.skip != 'true'
-        run: clasp deployments
+        run: clasp deployments -P .clasp.json
 
   deploy-frontend:
     name: Deploy frontend to Vercel
