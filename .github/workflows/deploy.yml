@@ -9,9 +9,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-deploy-creds:
+    name: Check deploy credentials
+    runs-on: ubuntu-latest
+    outputs:
+      has_clasp: ${{ steps.clasp.outputs.has }}
+      has_vercel: ${{ steps.vercel.outputs.has }}
+    steps:
+      - id: clasp
+        env:
+          CREDS: ${{ secrets.CLASPRC_JSON }}
+        run: echo "has=$([ -n \"$CREDS\" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - id: vercel
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: echo "has=$([ -n \"$TOKEN\" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   deploy-backend:
     name: Deploy Apps Script backend (clasp)
-    if: ${{ github.ref == 'refs/heads/main' && secrets.CLASPRC_JSON != '' }}
+    needs: check-deploy-creds
+    if: needs.check-deploy-creds.outputs.has_clasp == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +69,8 @@ jobs:
 
   deploy-frontend:
     name: Deploy frontend to Vercel
-    if: ${{ github.ref == 'refs/heads/main' && secrets.VERCEL_TOKEN != '' }}
+    needs: check-deploy-creds
+    if: needs.check-deploy-creds.outputs.has_vercel == 'true'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: team_Zh8eIwDwXe9zypGZ0uvzPyBc
