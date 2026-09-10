@@ -80,7 +80,7 @@ export function useEncryptedStorage(key, initialValue = null) {
       setLoaded(true);
     });
     return () => { cancelled = true; };
-  }, [key]);
+  }, [key, initialValue]);
 
   const set = useCallback(async (val) => {
     setValue(val);

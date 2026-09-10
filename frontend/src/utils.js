@@ -106,7 +106,7 @@ export function printReportPDF(title, period, columns, rows) {
     '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
     '<p class="f">Genere le ' + new Date().toLocaleString() + ' \u00b7 ' + esc(title) + '</p>' +
     '<button class="no-print" onclick="window.print()">Imprimer / Enregistrer en PDF</button>' +
-    '<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>';
+    '<script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>';
   const w = window.open('', '_blank', 'width=900,height=700');
   if (!w) { alert('Autorisez les fenetres pop-up pour exporter en PDF.'); return; }
   w.document.write(html);

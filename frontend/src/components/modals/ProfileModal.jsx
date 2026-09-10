@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { avatarHue, avatarInitials } from '../../utils';
 import PhotoModal from './PhotoModal';
 
@@ -19,7 +19,7 @@ export default function ProfileModal({ isOpen, onClose }) {
   const handleSave = () => {
     if (!name.trim()) { setError('Saisissez votre nom.'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setError('Saisissez un email valide.'); return; }
-    if (tenant.trim() && !/^[a-z0-9][a-z0-9\-]{1,23}$/.test(tenant.trim())) {
+    if (tenant.trim() && !/^[a-z0-9][a-z0-9-]{1,23}$/.test(tenant.trim())) {
       setError('Code espace : 2-24 caractères, lettres/chiffres/tirets.'); return;
     }
     try { localStorage.setItem('att.remind.v1', remind ? '1' : '0'); } catch {}

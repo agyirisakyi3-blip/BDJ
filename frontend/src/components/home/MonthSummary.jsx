@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { fmtHours } from '../../utils';
 
 export default memo(function MonthSummary() {

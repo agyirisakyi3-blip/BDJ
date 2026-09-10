@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useEncryptedStorage, lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import CONFIG from '../config';
 import { api, isConfigured } from '../api';
 import { todayStr } from '../utils';
+import AppContext from './AppContextObject';
 
 const LS_PROFILE = 'att.profile.v1';
 const LS_STATUS = 'att.status.v1';
@@ -11,8 +12,6 @@ const LS_ONBOARDED = 'att.onboarded.v1';
 const LS_THEME = 'att.theme.v1';
 const LS_CONSENT = 'att.consent.v1';
 const LS_AUTH = 'att.auth.v1';
-
-const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
   const [profile, setProfileRaw, profileLoaded] = useEncryptedStorage(LS_PROFILE, null);
@@ -292,10 +291,4 @@ export function AppProvider({ children }) {
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-}
-
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
-  return ctx;
 }

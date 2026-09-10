@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 
 export default memo(function Feedback() {
   const { feedback } = useApp();

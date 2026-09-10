@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { fmtHours, dayLabel, todayStr } from '../../utils';
 
 export default memo(function WeekChart() {

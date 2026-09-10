@@ -1,6 +1,7 @@
 import { useState, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
-import { AppProvider, useApp } from './contexts/AppContext';
+import { AppProvider } from './contexts/AppContext';
+import { useApp } from './hooks/useApp';
 import HomePage from './pages/HomePage';
 import SignupPage from './pages/SignupPage';
 import EmployeeLogin from './components/EmployeeLogin';

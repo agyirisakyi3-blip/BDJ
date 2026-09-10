@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useApp } from '../contexts/AppContext';
+import { useApp } from '../hooks/useApp';
 
 export default function EmployeeLogin() {
   const { apiCall, login, showFeedback } = useApp();

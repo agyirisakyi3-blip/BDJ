@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 
 export default function AnnouncementsCard() {
   const { profile, apiCall } = useApp();

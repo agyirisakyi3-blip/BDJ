@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, memo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useState, useEffect, memo } from 'react';
+import { useApp } from '../../hooks/useApp';
 import { todayStr } from '../../utils';
 
 const LS_DISMISSED = 'att.breakPromptDismissed.v1';
@@ -25,34 +25,28 @@ function markDismissedToday() {
 
 export default memo(function BreakPrompt({ onBreak }) {
   const { profile, status } = useApp();
-  const [show, setShow] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), CHECK_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   const act = status ? String(status.action || '') : '';
   const checkedIn = act === 'Check-in' || act === 'Break-in';
   const alreadyOnBreak = act === 'Break-out';
 
-  const evaluate = useCallback(() => {
-    if (!checkedIn || alreadyOnBreak || !isBreakWindow() || wasDismissedToday()) {
-      setShow(false);
-      return;
-    }
-    setShow(true);
-  }, [checkedIn, alreadyOnBreak]);
-
-  useEffect(() => {
-    evaluate();
-    const id = setInterval(evaluate, CHECK_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [evaluate]);
+  void tick;
+  const show = !dismissed && profile && checkedIn && !alreadyOnBreak && isBreakWindow() && !wasDismissedToday();
 
   const handleStartBreak = () => {
-    setShow(false);
     if (onBreak) onBreak('break');
   };
 
   const handleDismiss = () => {
     markDismissedToday();
-    setShow(false);
+    setDismissed(true);
   };
 
   if (!show || !profile) return null;

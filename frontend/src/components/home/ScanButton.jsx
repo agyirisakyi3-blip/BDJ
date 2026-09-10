@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 
 export default memo(function ScanButton({ onScan }) {
   const { status } = useApp();

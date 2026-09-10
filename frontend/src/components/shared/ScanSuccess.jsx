@@ -3,15 +3,19 @@ import { useEffect, useState } from 'react';
 export default function ScanSuccess({ show, action, time, name }) {
   const [visible, setVisible] = useState(false);
   const [fade, setFade] = useState(false);
+  const [prevShow, setPrevShow] = useState(show);
+
+  if (show && !prevShow) {
+    setVisible(true);
+    setFade(false);
+  }
+  if (show !== prevShow) setPrevShow(show);
 
   useEffect(() => {
-    if (show) {
-      setVisible(true);
-      setFade(false);
-      const t1 = setTimeout(() => setFade(true), 1200);
-      const t2 = setTimeout(() => setVisible(false), 1700);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
-    }
+    if (!show) return;
+    const t1 = setTimeout(() => setFade(true), 1200);
+    const t2 = setTimeout(() => setVisible(false), 1700);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [show, action, time]);
 
   if (!visible) return null;

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useApp } from '../contexts/AppContext';
+import { useApp } from '../hooks/useApp';
 import { fmtHours, todayStr, shiftDateStr, avatarHue, avatarInitials } from '../utils';
 import AdminLogin from '../components/admin/AdminLogin';
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { fmtDateLabel } from '../../utils';
 
 export default function TopBar({ onProfileClick, onThemeClick }) {

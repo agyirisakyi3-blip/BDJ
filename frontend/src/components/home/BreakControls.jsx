@@ -1,4 +1,4 @@
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { todayStr, fmtHours } from '../../utils';
 
 export default function BreakControls({ onFeedback }) {

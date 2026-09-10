@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 
 export default function Reveal({ children, delay = 0, className = '' }) {
   const ref = useRef(null);
-  const [shown, setShown] = useState(false);
+  const [shown, setShown] = useState(() => typeof IntersectionObserver === 'undefined');
 
   useEffect(() => {
+    if (shown) return;
     const el = ref.current;
     if (!el) return;
-    if (typeof IntersectionObserver === 'undefined') { setShown(true); return; }
     const io = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
@@ -18,7 +18,7 @@ export default function Reveal({ children, delay = 0, className = '' }) {
     );
     io.observe(el);
     return () => io.disconnect();
-  }, []);
+  }, [shown]);
 
   return (
     <div

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { avatarHue, todayStr } from '../../utils';
 
 const RING_CIRC = 2 * Math.PI * 35;
@@ -58,7 +58,7 @@ export default memo(function StatusCard() {
     tick();
     intervalRef.current = setInterval(tick, 1000);
     return () => clearInterval(intervalRef.current);
-  }, [status]);
+  }, [status, checkedIn]);
 
   const seed = profile ? (profile.name || profile.email || '?') : '?';
   const avatarClass = 'status-avatar' + (checkedIn ? ' in' : isCheckedOut ? ' out' : '');

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { fmtHours, todayStr, shiftDateStr, cmpVals } from '../../utils';
 import AdminLogin from './AdminLogin';
 import QRGenerator from './QRGenerator';
@@ -215,15 +215,16 @@ export default function AdminDashboard() {
   // Live refresh
   const [liveRefresh, setLiveRefresh] = useState(true);
 
-  // Auto-refresh the "today" dashboard every 30s for live on-site status.
-  useEffect(() => {
-    if (!adminData || !liveRefresh || activeQuickRange !== 'today') return;
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') loadDashboard(todayStr(), todayStr());
-    }, 30000);
-    return () => clearInterval(id);
-  }, [adminData, liveRefresh, activeQuickRange]);
+  const loadSubData = useCallback((tkn) => {
+    const t = tkn || token;
+    apiCall({ action: 'employees', token: t }).then((r) => setEmployees(r.ok ? r.employees || [] : [])).catch(() => {});
+    apiCall({ action: 'admins_list', token: t }).then((r) => setAdmins(r.ok ? r.admins || [] : [])).catch(() => {});
+    apiCall({ action: 'leave_list', token: t }).then((r) => setLeaves(r.ok ? r.leaves || [] : [])).catch(() => {});
+    apiCall({ action: 'holiday_list', token: t }).then((r) => setHolidays(r.ok ? r.holidays || [] : [])).catch(() => {});
+    apiCall({ action: 'announcement_list', token: t }).then((r) => setAnnouncements(r.ok ? r.announcements || [] : [])).catch(() => {});
+  }, [apiCall, token]);
 
+  const loadDashboardRef = useRef(null);
   const loadDashboard = useCallback(async (from, to, tkn) => {
     setLoading(true);
     try {
@@ -240,16 +241,18 @@ export default function AdminDashboard() {
       }
     }
     setLoading(false);
-  }, [apiCall, token, showFeedback]);
+  }, [apiCall, token, showFeedback, loadSubData]);
 
-  const loadSubData = useCallback((tkn) => {
-    const t = tkn || token;
-    apiCall({ action: 'employees', token: t }).then((r) => setEmployees(r.ok ? r.employees || [] : [])).catch(() => {});
-    apiCall({ action: 'admins_list', token: t }).then((r) => setAdmins(r.ok ? r.admins || [] : [])).catch(() => {});
-    apiCall({ action: 'leave_list', token: t }).then((r) => setLeaves(r.ok ? r.leaves || [] : [])).catch(() => {});
-    apiCall({ action: 'holiday_list', token: t }).then((r) => setHolidays(r.ok ? r.holidays || [] : [])).catch(() => {});
-    apiCall({ action: 'announcement_list', token: t }).then((r) => setAnnouncements(r.ok ? r.announcements || [] : [])).catch(() => {});
-  }, [apiCall, token]);
+  useEffect(() => { loadDashboardRef.current = loadDashboard; }, [loadDashboard]);
+
+  // Auto-refresh the "today" dashboard every 30s for live on-site status.
+  useEffect(() => {
+    if (!adminData || !liveRefresh || activeQuickRange !== 'today') return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDashboardRef.current?.(todayStr(), todayStr());
+    }, 30000);
+    return () => clearInterval(id);
+  }, [adminData, liveRefresh, activeQuickRange]);
 
   const handleLogin = ({ token: tkn, email, data }) => {
     setToken(tkn);

@@ -68,16 +68,21 @@ export default function AdminTour({ onOpenView, onClose }) {
   const [box, setBox] = useState(null);
   const [viewReady, setViewReady] = useState(false);
   const renderTick = useRef(0);
+  const [prevStep, setPrevStep] = useState(step);
 
   const current = STEPS[step];
 
-  useEffect(() => {
+  if (step !== prevStep) {
     setBox(null);
     setViewReady(false);
+    setPrevStep(step);
+  }
+
+  useEffect(() => {
     if (current && typeof onOpenView === 'function') {
       onOpenView(current.view);
     }
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, current, onOpenView]);
 
   // Wait for the target element to (re)render before measuring.
   useEffect(() => {

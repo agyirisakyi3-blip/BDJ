@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
-import { useApp } from '../contexts/AppContext';
+import { useApp } from '../hooks/useApp';
 import { parseQr, todayStr } from '../utils';
 import { lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import TopBar from '../components/layout/TopBar';

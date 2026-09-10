@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { fmtHours, todayStr } from '../../utils';
 import ConfirmModal from '../admin/ConfirmModal';
 
@@ -74,7 +74,7 @@ export default function HistoryModal({ isOpen, onClose }) {
       if (res.ok) setData(res.attendance);
       else showFeedback('error', res.message || 'Impossible de charger');
     }).catch((err) => { showFeedback('error', err.message); });
-  }, [isOpen, profile, apiCall, auth]);
+  }, [isOpen, profile, apiCall, auth, showFeedback]);
 
   const handleExport = async () => {
     if (!profile) return;

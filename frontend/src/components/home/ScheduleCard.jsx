@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 import { timeToMinutes } from '../../utils';
 
 function fmtClock(hhmm) {

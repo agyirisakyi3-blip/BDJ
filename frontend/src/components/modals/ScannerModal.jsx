@@ -30,8 +30,7 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
   const scannerRef = useRef(null);
   const containerRef = useRef(null);
   const onScanRef = useRef(onScan);
-
-  onScanRef.current = onScan;
+  useEffect(() => { onScanRef.current = onScan; }, [onScan]);
 
   const stopScanner = useCallback(() => {
     if (scannerRef.current) {

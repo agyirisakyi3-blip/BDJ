@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 
 export default function AdminLogin({ onLogin }) {
   const { apiCall } = useApp();

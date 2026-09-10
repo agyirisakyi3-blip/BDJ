@@ -7,6 +7,13 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
   const [stream, setStream] = useState(null);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+
+  if (isOpen && !prevIsOpen) {
+    setPreview(null);
+    setError('');
+  }
+  if (isOpen !== prevIsOpen) setPrevIsOpen(isOpen);
 
   const startCamera = useCallback(async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -39,21 +46,20 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      setPreview(null);
-      setError('');
-      const t = setTimeout(startCamera, 100);
-      return () => {
-        clearTimeout(t);
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((t) => t.stop());
-          streamRef.current = null;
-        }
-      };
-    } else {
-      stopCamera();
-    }
-  }, [isOpen, startCamera, stopCamera]);
+    if (!isOpen) return;
+    const t = setTimeout(startCamera, 100);
+    const streamToClean = streamRef.current;
+    const videoToClean = videoRef.current;
+    return () => {
+      clearTimeout(t);
+      if (streamToClean) {
+        streamToClean.getTracks().forEach((tr) => tr.stop());
+      }
+      streamRef.current = null;
+      setStream(null);
+      if (videoToClean) videoToClean.srcObject = null;
+    };
+  }, [isOpen, startCamera]);
 
   if (!isOpen) return null;
 

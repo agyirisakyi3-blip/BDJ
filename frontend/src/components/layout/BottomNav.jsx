@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useApp } from '../../contexts/AppContext';
+import { useApp } from '../../hooks/useApp';
 
 export default function BottomNav({ onShowHistory, onShowHelp }) {
   const location = useLocation();

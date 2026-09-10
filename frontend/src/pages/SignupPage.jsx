@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useApp } from '../contexts/AppContext';
+import { useApp } from '../hooks/useApp';
 import { api } from '../api';
 
-const ORG_CODE_REGEX = /^[a-z0-9][a-z0-9\-]{1,23}$/;
+const ORG_CODE_REGEX = /^[a-z0-9][a-z0-9-]{1,23}$/;
 
 export default function SignupPage() {
   const { showFeedback } = useApp();
@@ -120,7 +120,7 @@ export default function SignupPage() {
               type="text"
               placeholder="code-entreprise"
               value={code}
-              onChange={(e) => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9\-]/g, '').slice(0, 24))}
+              onChange={(e) => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24))}
               onKeyDown={(e) => e.key === 'Enter' && handleSignup()}
             />
           </div>
