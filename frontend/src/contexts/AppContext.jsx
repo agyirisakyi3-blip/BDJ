@@ -10,7 +10,6 @@ const LS_QUEUE = 'att.queue.v1';
 const LS_ONBOARDED = 'att.onboarded.v1';
 const LS_THEME = 'att.theme.v1';
 const LS_CONSENT = 'att.consent.v1';
-const LS_REMIND = 'att.remind.v1';
 const LS_AUTH = 'att.auth.v1';
 
 const AppContext = createContext(null);

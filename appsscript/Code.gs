@@ -78,7 +78,7 @@ function rotateQrSecret() {
   var qr = 'ATT' + randomToken_();
   setSecret_('qrSecret', qr, ss.getId());
   clearConfigCache_(ss);
-  SpreadsheetApp.getUi().alert('New QR secret: ' + qr + '\n\nPrint a new office QR with qr-generator.html using this value.');
+  SpreadsheetApp.getUi().alert('New QR secret: ' + qr + '\n\nGenerate a new office QR from Admin > QR & acces using this value.');
 }
 
 function clearConfigCache_(ss) {
@@ -613,7 +613,7 @@ function matchRotating_(ss, qr, nowMs) {
 }
 
 /**
- * Feed for the office display screen (office-screen.html). Admin-gated so a
+ * Feed for a rotating QR display. Admin-gated so a
  * random visitor cannot fetch live entrance codes from outside the office.
  */
 function officeScreen_(payload, cfg, now, tz, ss) {

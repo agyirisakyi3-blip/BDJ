@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { useApp } from '../../contexts/AppContext';
-import { avatarHue, avatarInitials, fmtHours, todayStr } from '../../utils';
+import { avatarHue, todayStr } from '../../utils';
 
 const RING_CIRC = 2 * Math.PI * 35;
 

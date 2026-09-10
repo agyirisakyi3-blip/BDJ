@@ -30,14 +30,6 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=604800" }
       ]
-    },
-    {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/" },
-        { "key": "Content-Security-Policy", "value": "default-src 'none'; script-src 'self'; worker-src 'self'" }
-      ]
     }
   ]
 }

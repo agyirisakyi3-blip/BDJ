@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
-import { fmtDateLabel, todayStr, fmtHours } from '../../utils';
+import { fmtDateLabel } from '../../utils';
 
-export default function TopBar({ onProfileClick, onThemeClick, onInstallClick }) {
-  const { profile, config, themeMode } = useApp();
+export default function TopBar({ onProfileClick, onThemeClick }) {
+  const { config, themeMode } = useApp();
   const [time, setTime] = useState('--:--:--');
   const [installPrompt, setInstallPrompt] = useState(null);
 

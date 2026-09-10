@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 
 export default memo(function ScanButton({ onScan }) {
-  const { profile, status } = useApp();
+  const { status } = useApp();
   const act = status ? String(status.action || '') : '';
   const onBreakNow = act === 'Break-out';
 

@@ -65,18 +65,15 @@ function Heatmap({ pairs, rangeFrom }) {
 export default function HistoryModal({ isOpen, onClose }) {
   const { profile, auth, apiCall, showFeedback } = useApp();
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !profile) return;
-    setLoading(true);
     apiCall({ action: 'myattendance', email: profile.email, token: auth ? (auth.sessionToken || '') : '' }).then((res) => {
-      setLoading(false);
       if (res.ok) setData(res.attendance);
       else showFeedback('error', res.message || 'Impossible de charger');
-    }).catch((err) => { setLoading(false); showFeedback('error', err.message); });
+    }).catch((err) => { showFeedback('error', err.message); });
   }, [isOpen, profile, apiCall, auth]);
 
   const handleExport = async () => {

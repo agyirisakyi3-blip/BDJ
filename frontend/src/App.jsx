@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, lazy } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './contexts/AppContext';
 import HomePage from './pages/HomePage';
@@ -19,12 +19,6 @@ function AppContent() {
   const { consent, authenticated, authLoaded } = useApp();
   const [showHelp, setShowHelp] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-  }, []);
 
   if (!consent) {
     return (

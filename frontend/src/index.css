@@ -1992,15 +1992,13 @@ html[data-theme] body.admin-view .login-split { box-shadow: 0 20px 48px -20px rg
 :root[data-theme="light"] .pills-warn { color: #92400e; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.4); }
 :root[data-theme="light"] .live-toggle input:checked ~ span { color: #4338ca; }
 
-/* ================= Admin dashboard redesign — Light SaaS workspace (React mirror) ================
+/* ================= Admin dashboard redesign — Light SaaS workspace ================
    Scoped to body.admin-view only. The admin turns into an always-light, minimal SaaS
    workspace inspired by light-mode HR management dashboards: a cool near-white canvas,
    ONE indigo accent, hairline borders and soft shadows, with emerald/amber/sky reserved
    for status semantics. Customer-facing screens keep the app theme toggle untouched.
    Selectors are prefixed (html[data-theme] body.admin-view) to win over the existing
-   theme-scoped rules. No DOM ids/classes changed — app.js and test suites are safe.
-   Shape lock: cards 16px, controls/buttons 12px, chips/pills/avatars circular.
-   Mirrors the block appended to styles.css for the vanilla app — keep both in sync. */
+   theme-scoped rules. Shape lock: cards 16px, controls/buttons 12px, chips/pills/avatars circular. */
 
 /* 1) Tokens — redefined on body. Previously forced an always-light palette; now
       themed: indigo-accent light SaaS look for [data-theme="light"], an

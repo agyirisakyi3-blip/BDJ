@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
 
 export default function AdminLogin({ onLogin }) {
-  const { showFeedback, apiCall } = useApp();
+  const { apiCall } = useApp();
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [pinType, setPinType] = useState('password');

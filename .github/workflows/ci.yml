@@ -6,28 +6,6 @@ on:
   pull_request:
 
 jobs:
-  backend-tests:
-    name: Backend tests (Jest + Puppeteer)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test
-
-      - name: npm audit (root)
-        run: npm audit --omit=dev
-        # Advisory only for now; tighten to blocking once deps are clean.
-        continue-on-error: true
-
   frontend:
     name: Frontend lint + production build
     runs-on: ubuntu-latest

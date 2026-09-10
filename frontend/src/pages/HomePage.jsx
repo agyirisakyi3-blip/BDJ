@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { api, isConfigured } from '../api';
 import { parseQr, todayStr } from '../utils';
 import { lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import TopBar from '../components/layout/TopBar';
@@ -27,7 +26,7 @@ export default function HomePage() {
   const {
     profile, setStatus, status, config, showFeedback,
     loadRecent, loadWeek, loadMonth, apiCall, tenantFromProfile,
-    cycleTheme, refreshAdminAccess, onboarded,
+    cycleTheme, onboarded,
   } = useApp();
 
   const [showScanner, setShowScanner] = useState(false);
@@ -111,7 +110,7 @@ export default function HomePage() {
         showFeedback('error', 'Impossible de joindre le serveur : ' + err.message);
       }
     }
-  }, [apiCall, config, profile, status, setStatus, loadRecent, loadWeek, loadMonth, showFeedback, showScanSuccess, tenantFromProfile]);
+  }, [apiCall, profile, status, setStatus, loadRecent, loadWeek, loadMonth, showFeedback, showScanSuccess, tenantFromProfile]);
 
   const handleScan = useCallback((text) => {
     if (processing) return;

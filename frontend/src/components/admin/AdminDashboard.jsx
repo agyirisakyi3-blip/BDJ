@@ -156,35 +156,9 @@ function CollapsibleCard({ title, count, children, defaultCollapsed = false }) {
   );
 }
 
-function SortableTable({ columns, data, sortKey, sortDir, onSort, renderRow }) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((col) => (
-              <th key={col.key} className="sortable"
-                onClick={() => onSort(col.key)}
-                style={col.key === sortKey ? { color: 'var(--accent-light)' } : {}}>
-                {col.label}
-                {col.key === sortKey && (sortDir === 1 ? ' \u2191' : ' \u2193')}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.length === 0 ? (
-            <tr><td className="empty" colSpan={columns.length}>Aucun resultat.</td></tr>
-          ) : data.map((row, i) => renderRow(row, i))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const { showFeedback, apiCall, config, setAdminToken: contextSetToken, setAdminEmail: contextSetEmail, cycleTheme, themeMode } = useApp();
+  const { showFeedback, apiCall, setAdminToken: contextSetToken, setAdminEmail: contextSetEmail, cycleTheme, themeMode } = useApp();
   const [token, setToken] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminData, setAdminData] = useState(null);
@@ -193,14 +167,14 @@ export default function AdminDashboard() {
   const [dateTo, setDateTo] = useState(todayStr());
   const [activeQuickRange, setActiveQuickRange] = useState('today');
   const [activeView, setActiveView] = useState(() => {
-    try { return sessionStorage.getItem('adminView') || 'dashboard'; } catch (e) { return 'dashboard'; }
+    try { return sessionStorage.getItem('adminView') || 'dashboard'; } catch { return 'dashboard'; }
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
 
   const openAdminView = (v) => {
     setActiveView(v);
-    try { sessionStorage.setItem('adminView', v); } catch (e) {}
+    try { sessionStorage.setItem('adminView', v); } catch {}
   };
 
   // Confirm dialog state (replaces native window.confirm)
@@ -580,7 +554,7 @@ export default function AdminDashboard() {
         const res = await apiCall({ action: 'employee_add', token, ...r });
         if (!res.ok) throw new Error(res.message);
         if (res.employee && res.updated) updated++; else added++;
-      } catch (err) { failed++; }
+      } catch { failed++; }
     }
     if (added || updated) {
       showFeedback('success', added + ' ajoute' + (added > 1 ? 's' : '') + ', ' + updated + ' mis a jour' + (failed ? ', ' + failed + ' en erreur' : '') + '.');
@@ -794,7 +768,7 @@ export default function AdminDashboard() {
     <div className="admin-shell">
       <AdminSidebar
         active={activeView}
-        onSelect={(v) => { setActiveView(v); try { sessionStorage.setItem('adminView', v); } catch (e) {} }}
+        onSelect={(v) => { setActiveView(v); try { sessionStorage.setItem('adminView', v); } catch {} }}
         open={sidebarOpen}
         onToggle={(val) => { if (typeof val === 'boolean') setSidebarOpen(val); else setSidebarOpen((s) => !s); }}
         onLogout={() => { setToken(''); setAdminData(null); contextSetToken(''); }}
@@ -1393,7 +1367,6 @@ export default function AdminDashboard() {
           <>
             <p className="stat-caption">Acces</p>
             <QRGenerator />
-            <OfficeScreenLink />
           </>
         )}
 
@@ -1883,18 +1856,6 @@ function CorrectionSection({ onApply }) {
       </div>
       {error && <p className="feedback error">{error}</p>}
       {result && <p className="hint">{result}</p>}
-    </CollapsibleCard>
-  );
-}
-
-function OfficeScreenLink() {
-  return (
-    <CollapsibleCard title="Ecran d'entree (QR rotatif)">
-      <p className="hint">Ouvrez cette page sur la tablette ou l'ecran a l'entree du bureau.</p>
-      <a className="ghost-btn range-btn" href="office-screen.html" target="_blank" rel="noopener">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        Ouvrir l'ecran d'entree
-      </a>
     </CollapsibleCard>
   );
 }

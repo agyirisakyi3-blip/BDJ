@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
-import { lsSet } from '../../hooks/useEncryptedStorage';
 import { avatarHue, avatarInitials } from '../../utils';
 import PhotoModal from './PhotoModal';
 
 export default function ProfileModal({ isOpen, onClose }) {
-  const { profile, setProfile, showFeedback, refreshAdminAccess, loadRecent, loadWeek, loadMonth, config, setStatus, authenticated, logout } = useApp();
+  const { profile, setProfile, refreshAdminAccess, loadRecent, loadWeek, loadMonth, config, authenticated, logout } = useApp();
   const [name, setName] = useState(profile?.name || '');
   const [email, setEmail] = useState(profile?.email || '');
   const [tenant, setTenant] = useState(profile?.tenant || config?.DEFAULT_TENANT || '');
@@ -27,7 +26,6 @@ export default function ProfileModal({ isOpen, onClose }) {
     if (remind && 'Notification' in window && Notification.permission === 'default') {
       try { Notification.requestPermission().catch(() => {}); } catch {}
     }
-    const prevTenant = profile?.tenant || '';
     const newProfile = { name: name.trim(), email: email.trim(), tenant: tenant.trim(), photo: photo };
     setProfile(newProfile);
     setError('');

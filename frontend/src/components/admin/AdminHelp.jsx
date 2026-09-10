@@ -573,7 +573,7 @@ export default memo(function AdminHelp({ onOpenView, onStartTour }) {
     });
   }, [category, q]);
 
-  const openView = (v) => { if (onOpenView) { onOpenView(v); try { sessionStorage.setItem('adminView', v); } catch (e) {} if (window.scrollTo) window.scrollTo({ top: 0, behavior: 'smooth' }); } };
+  const openView = (v) => { if (onOpenView) { onOpenView(v); try { sessionStorage.setItem('adminView', v); } catch {} if (window.scrollTo) window.scrollTo({ top: 0, behavior: 'smooth' }); } };
 
   return (
     <div className="help-layout">
@@ -597,7 +597,7 @@ export default memo(function AdminHelp({ onOpenView, onStartTour }) {
           )}
           <nav className="help-toc-links">
             {filtered.map((s) => (
-              <a key={s.id} href={'#help-' + s.id} className="help-toc-link" onClick={() => { if (window.history) try { history.replaceState(null, '', '#'); } catch (e) {} }}>{s.short}</a>
+              <a key={s.id} href={'#help-' + s.id} className="help-toc-link" onClick={() => { if (window.history) try { history.replaceState(null, '', '#'); } catch {} }}>{s.short}</a>
             ))}
             {filtered.length === 0 && <span className="help-empty">Aucun article ne correspond.</span>}
           </nav>

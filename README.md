@@ -13,10 +13,8 @@ The app also includes: a first-run walkthrough, a recent-activity list and last-
 
 ## What's new
 
-- **Rotating QR codes** - the entrance screen (`office-screen.html`) shows a QR that re-photographs
-  every 30 seconds (`ROT-xxxxxx`, HMAC-signed time windows). A photo of an old code stops working,
-  so sharing a screenshot no longer lets anyone check in remotely. Admins open the page from the
-  admin dashboard (**Ecran d'entree**) and log in with email + one-time code.
+- **QR code management** - administrators generate and print office QR codes from the React admin
+  dashboard (**QR & acces**).
 - **Break tracking** - Check-out is now a small state machine: `Check-in -> Break-out -> Break-in -> Check-out`.
   Scanning while on break resumes work; dedicated buttons let staff pause/resume without the QR.
   Total break minutes per day are tracked and shown on home, admin chips and reports.
@@ -40,13 +38,10 @@ The app also includes: a first-run walkthrough, a recent-activity list and last-
 
 | File | Purpose |
 | --- | --- |
-| `index.html`, `styles.css`, `app.js` | The app UI and logic |
-| `utils.js` | Pure shared helpers (dates, formatting), ES module imported by `app.js` |
-| `config.js` | Your Apps Script web app URL (edit me) |
-| `manifest.webmanifest`, `sw.js` | PWA install + offline shell |
-| `icons/` | App icons |
-| `qr-generator.html` | Generates the printable office QR (open it, no server needed) |
-| `office-screen.html` | Entrance display: rotating admin-gated QR |
+| `frontend/` | Vite-powered React application |
+| `frontend/src/config.js` | Your Apps Script web app URL (edit me) |
+| `frontend/public/manifest.webmanifest` | PWA metadata |
+| `frontend/public/icons/` | App icons |
 | `appsscript/Code.gs` | Google Apps Script backend (paste into your Sheet's script editor) |
 
 ## Setup
@@ -81,7 +76,6 @@ The app also includes: a first-run walkthrough, a recent-activity list and last-
     - `lateAfter` - time (HH:MM) after which a check-in counts as late, e.g. `09:00` (leave empty to disable). Per-person shifts override this.
     - `selfieMode` - `off`, `optional` or `required`; requires a camera selfie on Check-in when `required`.
     - `reminderCheckInAfter` / `reminderCheckOutAfter` - minutes after shift start / end for local reminders (client-side, opt-in in Profile).
-    - `totpSecret` - secret used by the rotating entrance QR (`office-screen.html`). Rotate it like `qrSecret`.
 
    The **Roster** sheet (created automatically) holds one allowed email per row, used when `rosterMode` is `roster`.
 
@@ -109,7 +103,7 @@ Instead of `qrSecret`, you can define any number of offices on the **Offices** s
 
 - As soon as the Offices sheet has at least one row, only those tokens are accepted
   (the legacy `qrSecret` is ignored).
-- Print one QR per office using `qr-generator.html` with that office's token.
+- Print one QR per office from **Admin > QR & acces** using that office's token.
 - The check-in response and Attendance sheet record which office was used.
 
 ### 2. Deploy the web app
@@ -124,7 +118,7 @@ Instead of `qrSecret`, you can define any number of offices on the **Offices** s
 
 ### 3. Point the app at it
 
-Open `config.js` and replace `YOUR_SCRIPT_ID` in `API_URL` with your deployed script id, e.g.:
+Open `frontend/src/config.js` and replace `YOUR_SCRIPT_ID` in `API_URL` with your deployed script id, e.g.:
 
 ```js
 API_URL: 'https://script.google.com/macros/s/AKfycbxxxxxxxxxxx/exec'
@@ -132,9 +126,9 @@ API_URL: 'https://script.google.com/macros/s/AKfycbxxxxxxxxxxx/exec'
 
 ### 4. Print the office QR
 
-1. Open `qr-generator.html` in any browser.
-2. Paste the same `qrSecret` from the Config sheet.
-3. Generate, download the PNG, and print it. Post it at the office entrance.
+1. Open the React app and sign in as an administrator.
+2. Open **QR & acces**, paste the same `qrSecret` from the Config sheet, and generate the code.
+3. Download or print the PNG and post it at the office entrance.
 
 ### 5. Host the app
 

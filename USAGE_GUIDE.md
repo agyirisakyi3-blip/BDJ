@@ -262,7 +262,7 @@ Apres la creation, le systeme affiche :
 
 ### Imprimer le QR code
 
-1. Ouvrez le fichier `qr-generator.html` dans votre navigateur
+1. Ouvrez l'application React et connectez-vous comme administrateur
 2. Saisissez le code QR genere (format : `code-espace|token-QR`)
 3. Imprimez le QR code et placez-le a l'entree du bureau
 

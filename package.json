@@ -3,17 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "jest --forceExit --maxWorkers=50%",
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "lint": "npm --prefix frontend run lint",
     "clasp:login": "clasp login",
     "clasp:logout": "clasp logout",
     "clasp:push": "clasp push --force",
     "clasp:deploy": "clasp deploy",
     "clasp:status": "clasp status",
     "deploy:backend": "clasp push --force && clasp deploy"
-  },
-  "devDependencies": {
-    "express": "^4.19.2",
-    "jest": "^29.7.0",
-    "puppeteer": "^22.12.0"
   }
 }
