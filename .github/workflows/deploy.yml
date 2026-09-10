@@ -15,6 +15,12 @@ jobs:
     env:
       clasp_config_project: .clasp.json
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Check clasp credentials
         id: creds
         env:
@@ -68,6 +74,12 @@ jobs:
       VERCEL_ORG_ID: team_Zh8eIwDwXe9zypGZ0uvzPyBc
       VERCEL_PROJECT_ID: prj_CJSKanTAIPzhr1EfHgSk5glqkk7m
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Check Vercel token
         id: creds
         env:
