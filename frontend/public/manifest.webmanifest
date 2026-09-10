@@ -1,7 +1,8 @@
 {
-  "name": "addredance",
+  "name": "addredance - Systeme de presence",
   "short_name": "addredance",
-  "description": "Glad to be one them - addredance Attendance System",
+  "description": "Systeme de pointage et de gestion des presences. Scannez le QR code pour pointer l'entree et la sortie.",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

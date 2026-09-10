@@ -668,6 +668,17 @@ function getOffices_(ss, cfg) {
   return offices;
 }
 
+/** Great-circle distance in metres between two coordinates (Haversine). */
+function haversineM_(lat1, lng1, lat2, lng2) {
+  var R = 6371000;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 /* ================= Attendance ================= */
 
 function recordAttendance_(payload, cfg, now, tz, ss) {
@@ -812,7 +823,18 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
     return error_('Office is very busy right now. Try again in a few minutes.');
   }
 
-  att.appendRow([dateStr, timeStr, safeCell_(name), email, action, status, '', '', 0, qr, office.name, selfieFileId]);
+  /* Location (GPS) sent by the mobile app at check-in, best effort: it never
+     blocks the request. Distance is computed against the resolved office when
+     that office has coordinates configured. */
+  var hasCoords = isFinite(Number(payload.lat)) && isFinite(Number(payload.lng));
+  var latStr = hasCoords ? Number(payload.lat).toFixed(6) : '';
+  var lngStr = hasCoords ? Number(payload.lng).toFixed(6) : '';
+  var distM = 0;
+  if (hasCoords && isFinite(Number(office.lat)) && isFinite(Number(office.lng))) {
+    distM = Math.round(haversineM_(Number(payload.lat), Number(payload.lng), Number(office.lat), Number(office.lng)));
+  }
+
+  att.appendRow([dateStr, timeStr, safeCell_(name), email, action, status, latStr, lngStr, distM, qr, office.name, selfieFileId]);
 
   return {
     ok: true,

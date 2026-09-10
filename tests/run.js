@@ -168,6 +168,42 @@ async function run(browser) {
     const ok = resp.status() >= 200 && resp.status() < 400 && !!json.name;
     check('PWA manifest served', ok, `status=${resp.status()} name=${json.name || ''}`);
   });
+
+  // 8. Mobile viewport (360px): app renders with no horizontal overflow
+  await withPage(browser, async (page) => {
+    await page.setViewport({ width: 360, height: 740, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await page.goto(BASE + '#/', { waitUntil: 'networkidle2' });
+    await acceptConsent(page);
+    await sleep(1200);
+    const m = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      bodyScroll: document.body.scrollWidth,
+      innerWidth: window.innerWidth,
+      rootChildren: document.getElementById('root').children.length,
+      hasLogin: [...document.querySelectorAll('button')].some((b) => b.innerText.trim() === 'Se connecter'),
+    }));
+    const renders = m.rootChildren > 0 && m.hasLogin;
+    const fits = m.scrollWidth <= m.innerWidth + 1 && m.bodyScroll <= m.innerWidth + 1;
+    check('Mobile 360px: app renders', renders, JSON.stringify(m));
+    check('Mobile 360px: no horizontal overflow', fits, `scrollWidth=${m.scrollWidth} body=${m.bodyScroll} innerWidth=${m.innerWidth}`);
+  });
+
+  // 9. Small viewport (320px): signup and admin pages render without overflow
+  await withPage(browser, async (page) => {
+    await page.setViewport({ width: 320, height: 568, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    for (const route of ['#/signup', '#/admin']) {
+      await page.goto(BASE + route, { waitUntil: 'networkidle2' });
+      await acceptConsent(page);
+      await sleep(1200);
+      const m = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        rootChildren: document.getElementById('root').children.length,
+      }));
+      const fits = m.rootChildren > 0 && m.scrollWidth <= m.innerWidth + 1;
+      check(`Mobile 320px ${route}: renders without overflow`, fits, `scrollWidth=${m.scrollWidth} innerWidth=${m.innerWidth}`);
+    }
+  });
 }
 
 (async () => {

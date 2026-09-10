@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { cameraContextError, describeCameraError } from '../../media';
 
 export default function SelfieModal({ isOpen, onClose, onCapture }) {
   const videoRef = useRef(null);
@@ -16,8 +17,9 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
   if (isOpen !== prevIsOpen) setPrevIsOpen(isOpen);
 
   const startCamera = useCallback(async () => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError("L'appareil photo n'est pas disponible.");
+    const contextError = cameraContextError();
+    if (contextError) {
+      setError(contextError);
       return;
     }
     try {
@@ -31,8 +33,8 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
         videoRef.current.srcObject = s;
         videoRef.current.play().catch(() => {});
       }
-    } catch {
-      setError('Acces camera refuse. Autorisez la camera dans votre navigateur.');
+    } catch (err) {
+      setError(describeCameraError(err));
     }
   }, []);
 

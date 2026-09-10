@@ -136,6 +136,16 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+button, a, input, select, textarea, summary {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ============ Ambient background ============ */
 .bg-decor { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 
@@ -158,6 +168,18 @@ html, body {
   min-height: 100vh;
   min-height: 100dvh;
 }
+
+/* ============ Error boundary ============ */
+.error-boundary {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  background: var(--bg-0);
+}
+.error-boundary-card { width: 100%; max-width: 360px; text-align: center; margin: 0; }
+.error-boundary-card h3 { margin: 16px 0 8px; color: #fff; }
+.error-boundary-card p { margin: 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.error-boundary-card .btn-row .ghost-btn { min-width: 0; }
 
 .view { animation: fade-in 0.3s ease both; }
 

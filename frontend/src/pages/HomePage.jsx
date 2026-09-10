@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, Suspense, lazy } from 'react';
 import { useApp } from '../hooks/useApp';
 import { parseQr, todayStr } from '../utils';
+import { getLocationOnce, geoPermissionState } from '../geo';
 import { lsGet, lsSet } from '../hooks/useEncryptedStorage';
 import TopBar from '../components/layout/TopBar';
 import StatusCard from '../components/home/StatusCard';
@@ -56,15 +57,38 @@ export default function HomePage() {
     setTimeout(() => setScanSuccess({ show: false, action: '', time: '', name: '' }), 2000);
   }, []);
 
+  const ensureLocation = useCallback(async () => {
+    let state = 'prompt';
+    try { state = await geoPermissionState(); } catch { state = 'prompt'; }
+    if (state === 'denied') return { denied: true };
+    if (state === 'prompt') {
+      showFeedback('info', "Pour valider votre pointage, autorisez l'acces a votre position (GPS). La position sert uniquement a confirmer votre presence au bureau.");
+    }
+    try {
+      return await getLocationOnce();
+    } catch {
+      return {};
+    }
+  }, [showFeedback]);
+
   const postAttendance = useCallback(async (payload) => {
     setProcessing(true);
     showFeedback('info', 'Traitement de votre scan...');
     try {
-      const res = await apiCall(payload);
+      const finalPayload = { ...payload };
+      if (!payload.mode) {
+        const geo = await ensureLocation();
+        if (geo && !geo.denied && typeof geo.lat === 'number' && typeof geo.lng === 'number') {
+          finalPayload.lat = geo.lat;
+          finalPayload.lng = geo.lng;
+          finalPayload.accuracy = geo.accuracy || 0;
+        }
+      }
+      const res = await apiCall(finalPayload);
       setProcessing(false);
       if (!res.ok) {
         if (res.code === 'SELFIE_REQUIRED') {
-          setPendingPayload(payload);
+          setPendingPayload(finalPayload);
           setShowSelfie(true);
           return;
         }
@@ -77,7 +101,7 @@ export default function HomePage() {
         action: res.action,
         time: res.time,
         office: res.office,
-        tenant: payload.tenant || tenantFromProfile(),
+        tenant: finalPayload.tenant || tenantFromProfile(),
         breakMinToday: res.breakMinToday || 0,
         late: !!(res.late && res.action === 'Check-in'),
       };
@@ -99,7 +123,7 @@ export default function HomePage() {
     } catch (err) {
       setProcessing(false);
       if (err && err.offline) {
-        const queueItem = { queuedAt: Date.now(), payload: { ...payload } };
+        const queueItem = { queuedAt: Date.now(), payload: { ...finalPayload } };
         delete queueItem.payload.photoDataUrl;
         let q;
         try { const raw = await lsGet(LS_QUEUE); q = raw ? JSON.parse(raw) : []; } catch { q = []; }
@@ -110,7 +134,7 @@ export default function HomePage() {
         showFeedback('error', 'Impossible de joindre le serveur : ' + err.message);
       }
     }
-  }, [apiCall, profile, status, setStatus, loadRecent, loadWeek, loadMonth, showFeedback, showScanSuccess, tenantFromProfile]);
+  }, [apiCall, profile, status, setStatus, loadRecent, loadWeek, loadMonth, showFeedback, showScanSuccess, tenantFromProfile, ensureLocation]);
 
   const handleScan = useCallback((text) => {
     if (processing) return;

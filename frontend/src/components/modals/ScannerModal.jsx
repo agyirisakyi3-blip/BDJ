@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { cameraContextError, describeCameraError } from '../../media';
 
 const QR_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
 
@@ -51,6 +52,12 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
     if (!containerRef.current) return;
     containerRef.current.innerHTML = '';
 
+    const contextError = cameraContextError();
+    if (contextError) {
+      setCameraError(contextError);
+      return;
+    }
+
     try {
       await loadQrScript();
     } catch {
@@ -71,13 +78,13 @@ export default function ScannerModal({ isOpen, onClose, onScan }) {
       const scanner = new window.Html5Qrcode(el.id);
       scannerRef.current = scanner;
       await scanner.start(
-        { facingMode: 'environment' },
+        { facingMode: { ideal: 'environment' } },
         { fps: 10, qrbox: { width: 240, height: 240 } },
         (text) => { stopScanner(); onScanRef.current(text); },
         () => {}
       );
     } catch (err) {
-      setCameraError('Camera indisponible: ' + err);
+      setCameraError(describeCameraError(err));
     }
   }, [stopScanner]);
 

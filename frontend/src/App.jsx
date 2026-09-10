@@ -81,6 +81,7 @@ function AppContent() {
             <Route path="/" element={<HomePage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/employe/:email" element={<EmployeeDetailPage />} />
+            <Route path="*" element={<HomePage />} />
           </Routes>
         </Suspense>
       </main>
