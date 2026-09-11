@@ -16,6 +16,17 @@ const EmployeeDetailPage = lazy(() => import('./pages/EmployeeDetailPage'));
 const HelpModal = lazy(() => import('./components/modals/HelpModal'));
 const HistoryModal = lazy(() => import('./components/modals/HistoryModal'));
 
+function BackgroundDecor() {
+  return (
+    <div className="bg-decor" aria-hidden="true">
+      <div className="blob blob-1"></div>
+      <div className="blob blob-2"></div>
+      <div className="blob blob-3"></div>
+      <div className="grain"></div>
+    </div>
+  );
+}
+
 function AppContent() {
   const { consent, authenticated, authLoaded } = useApp();
   const [showHelp, setShowHelp] = useState(false);
@@ -24,12 +35,7 @@ function AppContent() {
   if (!consent) {
     return (
       <>
-        <div className="bg-decor" aria-hidden="true">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-          <div className="blob blob-3"></div>
-          <div className="grain"></div>
-        </div>
+        <BackgroundDecor />
         <ConsentBanner />
       </>
     );
@@ -38,10 +44,6 @@ function AppContent() {
   if (!authLoaded) {
     return (
       <div className="bg-decor" aria-hidden="true">
-        <div className="blob blob-1"></div>
-        <div className="blob blob-2"></div>
-        <div className="blob blob-3"></div>
-        <div className="grain"></div>
         <PageLoader />
       </div>
     );
@@ -50,12 +52,7 @@ function AppContent() {
   if (!authenticated) {
     return (
       <>
-        <div className="bg-decor" aria-hidden="true">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-          <div className="blob blob-3"></div>
-          <div className="grain"></div>
-        </div>
+        <BackgroundDecor />
         <Routes>
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/admin" element={<AdminPage />} />
@@ -68,12 +65,7 @@ function AppContent() {
 
   return (
     <>
-      <div className="bg-decor" aria-hidden="true">
-        <div className="blob blob-1"></div>
-        <div className="blob blob-2"></div>
-        <div className="blob blob-3"></div>
-        <div className="grain"></div>
-      </div>
+      <BackgroundDecor />
       <OfflinePill />
       <main className="app">
         <Suspense fallback={<PageLoader />}>

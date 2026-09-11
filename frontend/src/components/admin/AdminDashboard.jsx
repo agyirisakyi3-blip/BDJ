@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../hooks/useApp';
 import { fmtHours, todayStr, shiftDateStr, cmpVals } from '../../utils';
@@ -284,6 +284,221 @@ export default function AdminDashboard() {
 
   const handleRefresh = () => loadDashboard(dateFrom, dateTo);
 
+  const a = adminData || {};
+  const live = a.live || {};
+  const summary = a.summary || {};
+  const pairs = a.pairs || [];
+  const allPeople = a.people || [];
+
+  const {
+    photoByEmail, filteredPeople, filteredReport, hoursChartData, totalShownHours,
+    payroll, payrollTotals, depts, deptTotals, attendance, attSettings, attTopStreak,
+    expectedDays, statusBuckets, donutTotal,
+  } = useMemo(() => {
+    const a = adminData || {};
+    const live = a.live || {};
+    const pairs = a.pairs || [];
+    const allPeople = a.people || [];
+
+    // Map employee email -> uploaded photo (from the employees roster) so the
+    // Effectif table and bios can show photos.
+    const photoByEmail = {};
+    employees.forEach((e) => { if (e.email) photoByEmail[e.email.toLowerCase()] = e.photo || ''; });
+
+    // Filter + sort people
+    const pq = peopleQuery.trim().toLowerCase();
+    let filteredPeople = pq ? allPeople.filter((p) => [p.name, p.email, p.department].filter(Boolean).join(' ').toLowerCase().includes(pq)) : [...allPeople];
+    if (peopleSort.key && PEOPLE_SORT_KEYS[peopleSort.key]) {
+      filteredPeople.sort((x, y) => cmpVals(PEOPLE_SORT_KEYS[peopleSort.key](x), PEOPLE_SORT_KEYS[peopleSort.key](y)) * peopleSort.dir);
+    }
+
+    // Filter + sort report
+    const rq = reportQuery.trim().toLowerCase();
+    let filteredReport = rq ? pairs.filter((p) => (p.name || '').toLowerCase().includes(rq)) : [...pairs];
+    if (reportSort.key && REPORT_SORT_KEYS[reportSort.key]) {
+      filteredReport.sort((x, y) => cmpVals(REPORT_SORT_KEYS[reportSort.key](x), REPORT_SORT_KEYS[reportSort.key](y)) * reportSort.dir);
+    } else {
+      filteredReport.sort((x, y) => (y.date + y.in).localeCompare(x.date + x.in));
+    }
+
+    // Hours chart
+    const hoursByDate = {};
+    const dates = [];
+    pairs.forEach((p) => { if (!p.date) return; if (!hoursByDate[p.date]) { hoursByDate[p.date] = 0; dates.push(p.date); } hoursByDate[p.date] += (p.hours != null && !isNaN(p.hours)) ? p.hours : 0; });
+    dates.sort();
+    const totalShownHours = dates.slice(-14).reduce((s, d) => s + hoursByDate[d], 0);
+    const hoursChartData = dates.slice(-14).map((d) => ({
+      label: d.slice(8, 10) + '/' + d.slice(5, 7),
+      hours: Math.round(hoursByDate[d] * 10) / 10,
+    }));
+
+    // Payroll: aggregate net hours / breaks / late / missing per employee over period
+    const payrollMap = {};
+    pairs.forEach((p) => {
+      if (!p.email) return;
+      const e = p.email.toLowerCase();
+      if (!payrollMap[e]) payrollMap[e] = { email: e, name: p.name || e, days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 };
+      const row = payrollMap[e];
+      row.days += 1;
+      if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
+      if (p.breakMin != null) row.breakMin += p.breakMin;
+      if (p.late) row.late += 1;
+      if (p.missing) row.missing += 1;
+    });
+    let payroll = Object.keys(payrollMap).map((k) => {
+      const r = payrollMap[k];
+      return {
+        email: r.email,
+        name: r.name,
+        days: r.days,
+        hours: Math.round(r.hours * 100) / 100,
+        avgHours: r.days ? Math.round((r.hours / r.days) * 100) / 100 : 0,
+        breakMin: Math.round(r.breakMin),
+        late: r.late,
+        missing: r.missing,
+      };
+    });
+    const pql = payrollQuery.trim().toLowerCase();
+    if (pql) payroll = payroll.filter((r) => [r.name, r.email].filter(Boolean).join(' ').toLowerCase().includes(pql));
+    if (payrollSort.key && PAYROLL_SORT_KEYS[payrollSort.key]) {
+      payroll.sort((x, y) => cmpVals(PAYROLL_SORT_KEYS[payrollSort.key](x), PAYROLL_SORT_KEYS[payrollSort.key](y)) * payrollSort.dir);
+    }
+    const payrollTotals = payroll.reduce((acc, r) => {
+      acc.days += r.days; acc.hours += r.hours; acc.breakMin += r.breakMin; acc.late += r.late; acc.missing += r.missing;
+      return acc;
+    }, { days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
+    payrollTotals.hours = Math.round(payrollTotals.hours * 100) / 100;
+
+    // Department analytics: aggregate attendance per department over period
+    const deptOf = {};
+    allPeople.forEach((p) => { if (p && p.email) deptOf[String(p.email).toLowerCase()] = (p.department || '').trim(); });
+    const deptMap = {};
+    pairs.forEach((p) => {
+      if (!p.email) return;
+      const dept = deptOf[String(p.email).toLowerCase()] || 'Sans departement';
+      if (!deptMap[dept]) deptMap[dept] = { name: dept, emails: {}, hours: 0, days: 0, breakMin: 0, late: 0, missing: 0 };
+      const row = deptMap[dept];
+      row.emails[p.email.toLowerCase()] = 1;
+      row.days += 1;
+      if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
+      if (p.breakMin != null) row.breakMin += p.breakMin;
+      if (p.late) row.late += 1;
+      if (p.missing) row.missing += 1;
+    });
+    let depts = Object.keys(deptMap).map((k) => {
+      const r = deptMap[k];
+      return {
+        name: r.name,
+        employees: Object.keys(r.emails).length,
+        hours: Math.round(r.hours * 100) / 100,
+        avgHours: r.days ? Math.round((r.hours / r.days) * 100) / 100 : 0,
+        breakMin: Math.round(r.breakMin),
+        late: r.late,
+        missing: r.missing,
+      };
+    });
+    const dql = deptQuery.trim().toLowerCase();
+    if (dql) depts = depts.filter((r) => r.name.toLowerCase().includes(dql));
+    if (deptSort.key && DEPT_SORT_KEYS[deptSort.key]) {
+      depts.sort((x, y) => cmpVals(DEPT_SORT_KEYS[deptSort.key](x), DEPT_SORT_KEYS[deptSort.key](y)) * deptSort.dir);
+    }
+    const deptTotals = depts.reduce((acc, r) => {
+      acc.employees += r.employees; acc.days += r.days; acc.hours += r.hours; acc.breakMin += r.breakMin; acc.late += r.late; acc.missing += r.missing;
+      return acc;
+    }, { employees: 0, days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
+    deptTotals.hours = Math.round(deptTotals.hours * 100) / 100;
+
+    // Attendance: presence %, current & best consecutive-day streak per employee
+    const isWeekday = (ds) => { const p = ds.split('-'); const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])); const dw = d.getDay(); return dw !== 0 && dw !== 6; };
+    const parseD = (ds) => new Date(Number(ds.slice(0, 4)), Number(ds.slice(5, 7)) - 1, Number(ds.slice(8, 10)));
+    const diffDays = (b, a) => Math.round((parseD(b) - parseD(a)) / 86400000);
+    const expectedDays = (() => {
+      if (!dateFrom || !dateTo) return 0;
+      let n = 0;
+      const cur = new Date(parseD(dateFrom));
+      const end = parseD(dateTo);
+      while (cur <= end) {
+        const dw = cur.getDay();
+        if (dw !== 0 && dw !== 6) n++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return n;
+    })();
+    const attMap = {};
+    pairs.forEach((p) => {
+      if (!p.email || !p.date || !isWeekday(p.date)) return;
+      const e = p.email.toLowerCase();
+      if (!attMap[e]) attMap[e] = { email: e, name: p.name || e, days: 0, hours: 0, late: 0, missing: 0, dates: [] };
+      const row = attMap[e];
+      row.days += 1;
+      if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
+      if (p.late) row.late += 1;
+      if (p.missing) row.missing += 1;
+      row.dates.push(p.date);
+    });
+    let attendance = Object.keys(attMap).map((k) => {
+      const r = attMap[k];
+      const uniq = Array.from(new Set(r.dates)).sort();
+      if (!uniq.length) return null;
+      let currentStreak = 0, bestStreak = 0;
+      for (let i = 0; i < uniq.length; i++) {
+        if (i === 0) { currentStreak = 1; bestStreak = 1; continue; }
+        const gap = diffDays(uniq[i], uniq[i - 1]);
+        if (gap <= 3) currentStreak += 1;
+        else currentStreak = 1;
+        if (currentStreak > bestStreak) bestStreak = currentStreak;
+      }
+      return {
+        email: r.email,
+        name: r.name,
+        days: r.days,
+        percent: expectedDays ? Math.round((r.days / expectedDays) * 100) : 0,
+        hours: Math.round(r.hours * 100) / 100,
+        late: r.late,
+        missing: r.missing,
+        currentStreak,
+        bestStreak,
+      };
+    }).filter(Boolean);
+    const attSettings = (() => {
+      const bucket = (p) => p.percent >= 95 ? 'haute' : p.percent >= 75 ? 'moyenne' : p.percent >= 50 ? 'faible' : 'critique';
+      const zero = { count: 0, sum: 0, high: 0, med: 0, low: 0, crit: 0 };
+      const agg = attendance.reduce((acc, r) => {
+        acc.count += 1; acc.sum += r.percent;
+        const b = bucket(r);
+        if (b === 'haute') acc.high += 1; else if (b === 'moyenne') acc.med += 1; else if (b === 'faible') acc.low += 1; else acc.crit += 1;
+        return acc;
+      }, zero);
+      agg.avg = agg.count ? Math.round(agg.sum / agg.count) : 0;
+      return agg;
+    })();
+    const atql = attQuery.trim().toLowerCase();
+    if (atql) attendance = attendance.filter((r) => [r.name, r.email].filter(Boolean).join(' ').toLowerCase().includes(atql));
+    if (attSort.key && ATT_SORT_KEYS[attSort.key]) {
+      attendance.sort((x, y) => cmpVals(ATT_SORT_KEYS[attSort.key](x), ATT_SORT_KEYS[attSort.key](y)) * attSort.dir);
+    } else {
+      attendance.sort((x, y) => y.percent - x.percent);
+    }
+    const attTopStreak = attendance.reduce((m, r) => (r.bestStreak > m ? r.bestStreak : m), 0);
+
+    // Presence donut (today's status breakdown)
+    const onBreakCount = (live.onBreakNames || []).length;
+    const statusBuckets = [
+      { key: 'onsite', value: Number(live.onSite || 0) },
+      { key: 'break', value: onBreakCount },
+      { key: 'leave', value: Number(live.onLeave || 0) },
+      { key: 'out', value: Number(live.checkedOutToday || 0) },
+      { key: 'absent', value: Number((live.absent || []).length) },
+    ].filter((b) => b.value > 0);
+    const donutTotal = statusBuckets.reduce((s, b) => s + b.value, 0);
+
+    return {
+      photoByEmail, filteredPeople, filteredReport, hoursChartData, totalShownHours,
+      payroll, payrollTotals, depts, deptTotals, attendance, attSettings, attTopStreak,
+      expectedDays, statusBuckets, donutTotal,
+    };
+  }, [adminData, employees, dateFrom, dateTo, peopleQuery, peopleSort, reportQuery, reportSort, payrollQuery, payrollSort, deptQuery, deptSort, attQuery, attSort]);
+
   if (!adminData) {
     return (
       <div>
@@ -300,205 +515,6 @@ export default function AdminDashboard() {
       </div>
     );
   }
-
-  const a = adminData;
-  const live = a.live || {};
-  const summary = a.summary || {};
-  const pairs = a.pairs || [];
-  const allPeople = a.people || [];
-
-  // Map employee email -> uploaded photo (from the employees roster) so the
-  // Effectif table and bios can show photos.
-  const photoByEmail = {};
-  employees.forEach((e) => { if (e.email) photoByEmail[e.email.toLowerCase()] = e.photo || ''; });
-
-  // Filter + sort people
-  const pq = peopleQuery.trim().toLowerCase();
-  let filteredPeople = pq ? allPeople.filter((p) => [p.name, p.email, p.department].filter(Boolean).join(' ').toLowerCase().includes(pq)) : [...allPeople];
-  if (peopleSort.key && PEOPLE_SORT_KEYS[peopleSort.key]) {
-    filteredPeople.sort((x, y) => cmpVals(PEOPLE_SORT_KEYS[peopleSort.key](x), PEOPLE_SORT_KEYS[peopleSort.key](y)) * peopleSort.dir);
-  }
-
-  // Filter + sort report
-  const rq = reportQuery.trim().toLowerCase();
-  let filteredReport = rq ? pairs.filter((p) => (p.name || '').toLowerCase().includes(rq)) : [...pairs];
-  if (reportSort.key && REPORT_SORT_KEYS[reportSort.key]) {
-    filteredReport.sort((x, y) => cmpVals(REPORT_SORT_KEYS[reportSort.key](x), REPORT_SORT_KEYS[reportSort.key](y)) * reportSort.dir);
-  } else {
-    filteredReport.sort((x, y) => (y.date + y.in).localeCompare(x.date + x.in));
-  }
-
-  // Hours chart
-  const hoursByDate = {};
-  const dates = [];
-  pairs.forEach((p) => { if (!p.date) return; if (!hoursByDate[p.date]) { hoursByDate[p.date] = 0; dates.push(p.date); } hoursByDate[p.date] += (p.hours != null && !isNaN(p.hours)) ? p.hours : 0; });
-  dates.sort();
-  const shownDates = dates.slice(-14);
-  const totalShownHours = shownDates.reduce((s, d) => s + hoursByDate[d], 0);
-  const hoursChartData = shownDates.map((d) => ({
-    label: d.slice(8, 10) + '/' + d.slice(5, 7),
-    hours: Math.round(hoursByDate[d] * 10) / 10,
-  }));
-
-  // Payroll: aggregate net hours / breaks / late / missing per employee over period
-  const payrollMap = {};
-  pairs.forEach((p) => {
-    if (!p.email) return;
-    const e = p.email.toLowerCase();
-    if (!payrollMap[e]) payrollMap[e] = { email: e, name: p.name || e, days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 };
-    const row = payrollMap[e];
-    row.days += 1;
-    if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
-    if (p.breakMin != null) row.breakMin += p.breakMin;
-    if (p.late) row.late += 1;
-    if (p.missing) row.missing += 1;
-  });
-  let payroll = Object.keys(payrollMap).map((k) => {
-    const r = payrollMap[k];
-    return {
-      email: r.email,
-      name: r.name,
-      days: r.days,
-      hours: Math.round(r.hours * 100) / 100,
-      avgHours: r.days ? Math.round((r.hours / r.days) * 100) / 100 : 0,
-      breakMin: Math.round(r.breakMin),
-      late: r.late,
-      missing: r.missing,
-    };
-  });
-  const pql = payrollQuery.trim().toLowerCase();
-  if (pql) payroll = payroll.filter((r) => [r.name, r.email].filter(Boolean).join(' ').toLowerCase().includes(pql));
-  if (payrollSort.key && PAYROLL_SORT_KEYS[payrollSort.key]) {
-    payroll.sort((x, y) => cmpVals(PAYROLL_SORT_KEYS[payrollSort.key](x), PAYROLL_SORT_KEYS[payrollSort.key](y)) * payrollSort.dir);
-  }
-  const payrollTotals = payroll.reduce((acc, r) => {
-    acc.days += r.days; acc.hours += r.hours; acc.breakMin += r.breakMin; acc.late += r.late; acc.missing += r.missing;
-    return acc;
-  }, { days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
-  payrollTotals.hours = Math.round(payrollTotals.hours * 100) / 100;
-
-  // Department analytics: aggregate attendance per department over period
-  const deptOf = {};
-  allPeople.forEach((p) => { if (p && p.email) deptOf[String(p.email).toLowerCase()] = (p.department || '').trim(); });
-  const deptMap = {};
-  pairs.forEach((p) => {
-    if (!p.email) return;
-    const dept = deptOf[String(p.email).toLowerCase()] || 'Sans departement';
-    if (!deptMap[dept]) deptMap[dept] = { name: dept, emails: {}, hours: 0, days: 0, breakMin: 0, late: 0, missing: 0 };
-    const row = deptMap[dept];
-    row.emails[p.email.toLowerCase()] = 1;
-    row.days += 1;
-    if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
-    if (p.breakMin != null) row.breakMin += p.breakMin;
-    if (p.late) row.late += 1;
-    if (p.missing) row.missing += 1;
-  });
-  let depts = Object.keys(deptMap).map((k) => {
-    const r = deptMap[k];
-    return {
-      name: r.name,
-      employees: Object.keys(r.emails).length,
-      hours: Math.round(r.hours * 100) / 100,
-      avgHours: r.days ? Math.round((r.hours / r.days) * 100) / 100 : 0,
-      breakMin: Math.round(r.breakMin),
-      late: r.late,
-      missing: r.missing,
-    };
-  });
-  const dql = deptQuery.trim().toLowerCase();
-  if (dql) depts = depts.filter((r) => r.name.toLowerCase().includes(dql));
-  if (deptSort.key && DEPT_SORT_KEYS[deptSort.key]) {
-    depts.sort((x, y) => cmpVals(DEPT_SORT_KEYS[deptSort.key](x), DEPT_SORT_KEYS[deptSort.key](y)) * deptSort.dir);
-  }
-  const deptTotals = depts.reduce((acc, r) => {
-    acc.employees += r.employees; acc.days += r.days; acc.hours += r.hours; acc.breakMin += r.breakMin; acc.late += r.late; acc.missing += r.missing;
-    return acc;
-  }, { employees: 0, days: 0, hours: 0, breakMin: 0, late: 0, missing: 0 });
-  deptTotals.hours = Math.round(deptTotals.hours * 100) / 100;
-
-  // Attendance: presence %, current & best consecutive-day streak per employee
-  const isWeekday = (ds) => { const p = ds.split('-'); const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])); const dw = d.getDay(); return dw !== 0 && dw !== 6; };
-  const parseD = (ds) => new Date(Number(ds.slice(0, 4)), Number(ds.slice(5, 7)) - 1, Number(ds.slice(8, 10)));
-  const diffDays = (b, a) => Math.round((parseD(b) - parseD(a)) / 86400000);
-  const expectedDays = (() => {
-    if (!dateFrom || !dateTo) return 0;
-    let n = 0;
-    const cur = new Date(parseD(dateFrom));
-    const end = parseD(dateTo);
-    while (cur <= end) {
-      const dw = cur.getDay();
-      if (dw !== 0 && dw !== 6) n++;
-      cur.setDate(cur.getDate() + 1);
-    }
-    return n;
-  })();
-  const attMap = {};
-  pairs.forEach((p) => {
-    if (!p.email || !p.date || !isWeekday(p.date)) return;
-    const e = p.email.toLowerCase();
-    if (!attMap[e]) attMap[e] = { email: e, name: p.name || e, days: 0, hours: 0, late: 0, missing: 0, dates: [] };
-    const row = attMap[e];
-    row.days += 1;
-    if (p.hours != null && !isNaN(p.hours)) row.hours += p.hours;
-    if (p.late) row.late += 1;
-    if (p.missing) row.missing += 1;
-    row.dates.push(p.date);
-  });
-  let attendance = Object.keys(attMap).map((k) => {
-    const r = attMap[k];
-    const uniq = Array.from(new Set(r.dates)).sort();
-    if (!uniq.length) return null;
-    let currentStreak = 0, bestStreak = 0;
-    for (let i = 0; i < uniq.length; i++) {
-      if (i === 0) { currentStreak = 1; bestStreak = 1; continue; }
-      const gap = diffDays(uniq[i], uniq[i - 1]);
-      if (gap <= 3) currentStreak += 1;
-      else currentStreak = 1;
-      if (currentStreak > bestStreak) bestStreak = currentStreak;
-    }
-    return {
-      email: r.email,
-      name: r.name,
-      days: r.days,
-      percent: expectedDays ? Math.round((r.days / expectedDays) * 100) : 0,
-      hours: Math.round(r.hours * 100) / 100,
-      late: r.late,
-      missing: r.missing,
-      currentStreak,
-      bestStreak,
-    };
-  }).filter(Boolean);
-  const attSettings = (() => {
-    const bucket = (p) => p.percent >= 95 ? 'haute' : p.percent >= 75 ? 'moyenne' : p.percent >= 50 ? 'faible' : 'critique';
-    const zero = { count: 0, sum: 0, high: 0, med: 0, low: 0, crit: 0 };
-    const agg = attendance.reduce((acc, r) => {
-      acc.count += 1; acc.sum += r.percent;
-      const b = bucket(r);
-      if (b === 'haute') acc.high += 1; else if (b === 'moyenne') acc.med += 1; else if (b === 'faible') acc.low += 1; else acc.crit += 1;
-      return acc;
-    }, zero);
-    agg.avg = agg.count ? Math.round(agg.sum / agg.count) : 0;
-    return agg;
-  })();
-  const atql = attQuery.trim().toLowerCase();
-  if (atql) attendance = attendance.filter((r) => [r.name, r.email].filter(Boolean).join(' ').toLowerCase().includes(atql));
-  if (attSort.key && ATT_SORT_KEYS[attSort.key]) {
-    attendance.sort((x, y) => cmpVals(ATT_SORT_KEYS[attSort.key](x), ATT_SORT_KEYS[attSort.key](y)) * attSort.dir);
-  } else {
-    attendance.sort((x, y) => y.percent - x.percent);
-  }
-  const attTopStreak = attendance.reduce((m, r) => (r.bestStreak > m ? r.bestStreak : m), 0);
-
-  // Presence donut (today's status breakdown)
-  const onBreakCount = (live.onBreakNames || []).length;
-  const statusBuckets = [
-    { key: 'onsite', value: Number(live.onSite || 0) },
-    { key: 'break', value: onBreakCount },
-    { key: 'leave', value: Number(live.onLeave || 0) },
-    { key: 'out', value: Number(live.checkedOutToday || 0) },
-    { key: 'absent', value: Number((live.absent || []).length) },
-  ].filter((b) => b.value > 0);
-  const donutTotal = statusBuckets.reduce((s, b) => s + b.value, 0);
 
   const handleEmployeeAdd = async (data) => {
     try {
@@ -533,7 +549,7 @@ export default function AdminDashboard() {
     try {
       const res = await apiCall({ action: 'employee_code_reset', token, email });
       if (!res.ok) throw new Error(res.message);
-      showFeedback('success', 'Nouveau code pour ' + email + ' : ' + res.code);
+      showFeedback('success', 'Nouveau code envoye par email a ' + email + '.');
       loadSubData();
     } catch (err) { showFeedback('error', err.message); }
   };
@@ -595,10 +611,10 @@ export default function AdminDashboard() {
     } catch (err) { showFeedback('error', err.message); }
   };
 
-  const handleLeaveDelete = async (index) => {
+  const handleLeaveDelete = async (leave) => {
     if (!(await requestConfirm({ title: 'Supprimer le conge', message: 'Supprimer cette periode de conge ?', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
-      const res = await apiCall({ action: 'leave_delete', token, index, adminEmail });
+      const res = await apiCall({ action: 'leave_delete', token, email: leave.email, start: leave.start, end: leave.end, adminEmail });
       if (!res.ok) throw new Error(res.message);
       showFeedback('success', 'Conge supprime.');
       loadSubData();
@@ -614,10 +630,10 @@ export default function AdminDashboard() {
     } catch (err) { showFeedback('error', err.message); }
   };
 
-  const handleHolidayDelete = async (index) => {
+  const handleHolidayDelete = async (holiday) => {
     if (!(await requestConfirm({ title: 'Supprimer le jour ferie', message: 'Supprimer ce jour ferie ?', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
-      const res = await apiCall({ action: 'holiday_delete', token, index, adminEmail });
+      const res = await apiCall({ action: 'holiday_delete', token, date: holiday.date, adminEmail });
       if (!res.ok) throw new Error(res.message);
       showFeedback('success', 'Jour ferie supprime.');
       loadSubData();
@@ -640,10 +656,10 @@ export default function AdminDashboard() {
     } catch (err) { showFeedback('error', err.message); }
   };
 
-  const handleAnnouncementDelete = async (index) => {
+  const handleAnnouncementDelete = async (announcement) => {
     if (!(await requestConfirm({ title: 'Supprimer l\'annonce', message: 'Supprimer cette annonce ? Elle disparaitra aussi pour les employes.', confirmLabel: 'Supprimer', danger: true }))) return;
     try {
-      const res = await apiCall({ action: 'announcement_delete', token, index, adminEmail });
+      const res = await apiCall({ action: 'announcement_delete', token, title: announcement.title, body: announcement.body, postedOn: announcement.postedOn, adminEmail });
       if (!res.ok) throw new Error(res.message);
       showFeedback('success', 'Annonce supprimee.');
       loadSubData();
@@ -1014,8 +1030,8 @@ export default function AdminDashboard() {
                     <tbody>
                       {filteredReport.length === 0 ? (
                         <tr><td className="empty" colSpan={6}>{pairs.length === 0 ? 'Aucune presence dans cette periode.' : 'Aucun resultat pour cette recherche.'}</td></tr>
-                      ) : filteredReport.map((p, i) => (
-                        <tr key={i} className={p.missing ? 'row-missing' : p.late ? 'row-late' : ''}>
+                      ) : filteredReport.map((p) => (
+                        <tr key={p.email + '|' + (p.date || '')} className={p.missing ? 'row-missing' : p.late ? 'row-late' : ''}>
                           <td>{p.date}</td><td>{p.name}</td><td>{p.in || '\u2014'}</td><td>{p.out || '\u2014'}</td><td>{fmtHours(p.hours)}</td>
                           <td><span className={'tag ' + (p.missing ? 'neutral' : p.late ? 'out' : 'in')}>{p.missing ? 'Pas de sortie' : p.late ? 'Retard' : 'OK'}</span></td>
                         </tr>
@@ -1099,8 +1115,8 @@ export default function AdminDashboard() {
                       <tbody>
                         {payroll.length === 0 ? (
                           <tr><td className="empty" colSpan={7}>Aucun salarie dans cette periode.</td></tr>
-                        ) : payroll.map((r, i) => (
-                          <tr key={i}>
+                        ) : payroll.map((r) => (
+                          <tr key={r.email}>
                             <td>{r.name || r.email}</td>
                             <td>{r.days}</td>
                             <td className="num">{fmtHours(r.hours)}</td>
@@ -1188,8 +1204,8 @@ export default function AdminDashboard() {
                       <tbody>
                         {depts.length === 0 ? (
                           <tr><td className="empty" colSpan={7}>Aucun departement dans cette periode.</td></tr>
-                        ) : depts.map((r, i) => (
-                          <tr key={i}>
+                        ) : depts.map((r) => (
+                          <tr key={r.name}>
                             <td>{r.name}</td>
                             <td className="num">{r.employees}</td>
                             <td className="num">{fmtHours(r.hours)}</td>
@@ -1277,8 +1293,8 @@ export default function AdminDashboard() {
                       <tbody>
                         {attendance.length === 0 ? (
                           <tr><td className="empty" colSpan={8}>Aucune presence dans cette periode.</td></tr>
-                        ) : attendance.map((r, i) => (
-                          <tr key={i}>
+                        ) : attendance.map((r) => (
+                          <tr key={r.email}>
                             <td>{r.name || r.email}</td>
                             <td className="num">{r.days}</td>
                             <td className="num">
@@ -1403,8 +1419,8 @@ export default function AdminDashboard() {
                     <p className="empty">Aucune annonce pour l'instant.</p>
                   ) : (
                     <div className="ann-list">
-                      {announcements.map((an, i) => (
-                        <div key={i} className={'ann-item' + (an.pinned ? ' ann-pinned' : '')}>
+                      {announcements.map((an) => (
+                        <div key={(an.postedOn || 'a') + '|' + (an.title || an.body || '')} className={'ann-item' + (an.pinned ? ' ann-pinned' : '')}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                             <div style={{ flex: 1 }}>
                               {an.pinned && <span className="ann-pin">Epingl&eacute;</span>}
@@ -1412,7 +1428,7 @@ export default function AdminDashboard() {
                               {an.body && <p>{an.body}</p>}
                               {an.postedOn && <span className="ann-meta">{an.postedOn}</span>}
                             </div>
-                            <button type="button" className="ghost-btn sm" onClick={() => handleAnnouncementDelete(i + 1)}>Supprimer</button>
+                            <button type="button" className="ghost-btn sm" onClick={() => handleAnnouncementDelete(an)}>Supprimer</button>
                           </div>
                         </div>
                       ))}
@@ -1769,9 +1785,9 @@ function LeaveSection({ leaves, onAdd, onDelete }) {
         <table>
           <thead><tr><th>Email</th><th>Du</th><th>Au</th><th>Motif</th><th></th></tr></thead>
           <tbody>
-            {leaves.length === 0 ? <tr><td className="empty" colSpan={5}>Aucun conge.</td></tr> : leaves.map((l, idx) => (
-              <tr key={idx}><td>{l.email}</td><td>{l.start}</td><td>{l.end}</td><td>{l.reason || '\u2014'}</td>
-                <td><button className="ghost-btn sm" onClick={() => onDelete(idx + 1)}>Supprimer</button></td></tr>
+            {leaves.length === 0 ? <tr><td className="empty" colSpan={5}>Aucun conge.</td></tr> : leaves.map((l) => (
+              <tr key={l.email + '|' + l.start + '|' + l.end}><td>{l.email}</td><td>{l.start}</td><td>{l.end}</td><td>{l.reason || '\u2014'}</td>
+                <td><button className="ghost-btn sm" onClick={() => onDelete({ email: l.email, start: l.start, end: l.end })}>Supprimer</button></td></tr>
             ))}
           </tbody>
         </table>
@@ -1806,9 +1822,9 @@ function HolidaySection({ holidays, onAdd, onDelete }) {
         <table>
           <thead><tr><th>Date</th><th>Nom</th><th></th></tr></thead>
           <tbody>
-            {holidays.length === 0 ? <tr><td className="empty" colSpan={3}>Aucun jour ferie.</td></tr> : holidays.map((h, idx) => (
-              <tr key={idx}><td>{h.date}</td><td>{h.name}</td>
-                <td><button className="ghost-btn sm" onClick={() => onDelete(idx + 1)}>Supprimer</button></td></tr>
+            {holidays.length === 0 ? <tr><td className="empty" colSpan={3}>Aucun jour ferie.</td></tr> : holidays.map((h) => (
+              <tr key={h.date}><td>{h.date}</td><td>{h.name}</td>
+                <td><button className="ghost-btn sm" onClick={() => onDelete({ date: h.date })}>Supprimer</button></td></tr>
             ))}
           </tbody>
         </table>
