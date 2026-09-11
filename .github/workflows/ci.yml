@@ -32,7 +32,6 @@ jobs:
 
       - name: npm audit (frontend)
         run: npm audit
-        continue-on-error: true
 
   e2e:
     name: Frontend E2E tests (Puppeteer)
