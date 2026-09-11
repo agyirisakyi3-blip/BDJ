@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '../../hooks/useApp';
 
 export default function AdminLogin({ onLogin }) {
@@ -11,6 +11,7 @@ export default function AdminLogin({ onLogin }) {
   const [otpNote, setOtpNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const otpRefs = useRef([]);
 
   const handleLogin = async (submittedOtp) => {
     if (!email.trim()) { setError('Saisissez votre email.'); return; }
@@ -22,7 +23,7 @@ export default function AdminLogin({ onLogin }) {
       const res = await apiCall(body);
       if (res && res.needOtp) {
         setShowOtp(true);
-        setOtpNote(res.otpDev ? res.message + ' Code de developpement : ' + res.otpDev : (res.message || ''));
+        setOtpNote(res.otpDev && import.meta.env.DEV ? res.message + ' Code de developpement : ' + res.otpDev : (res.message || ''));
         setLoading(false);
         return;
       }
@@ -45,8 +46,8 @@ export default function AdminLogin({ onLogin }) {
     next[idx] = digits;
     setOtp(next);
     if (digits && idx < 5) {
-      const inputs = document.querySelectorAll('.otp-box');
-      if (inputs[idx + 1]) inputs[idx + 1].focus();
+      const nextEl = otpRefs.current[idx + 1];
+      if (nextEl) nextEl.focus();
     }
     if (next.every((d) => d) && next.join('').length === 6) {
       setTimeout(() => handleLogin(next.join('')), 100);
@@ -89,8 +90,9 @@ export default function AdminLogin({ onLogin }) {
             <div className="otp-seg" role="group" aria-label="Code a 6 chiffres">
               {otp.map((v, i) => (
                 <input key={i} className="otp-box" type="text" inputMode="numeric" maxLength={1}
+                  ref={(el) => { otpRefs.current[i] = el; }}
                   value={v} onChange={(e) => handleOtpInput(i, e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Backspace' && !v && i > 0) { document.querySelectorAll('.otp-box')[i-1]?.focus(); } }} />
+                  onKeyDown={(e) => { if (e.key === 'Backspace' && !v && i > 0) { otpRefs.current[i - 1]?.focus(); } }} />
               ))}
             </div>
             {otpNote && <p className="hint">{otpNote}</p>}

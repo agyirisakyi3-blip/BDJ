@@ -8,13 +8,13 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
   const [stream, setStream] = useState(null);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
-  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
 
-  if (isOpen && !prevIsOpen) {
-    setPreview(null);
-    setError('');
-  }
-  if (isOpen !== prevIsOpen) setPrevIsOpen(isOpen);
+  useEffect(() => {
+    if (isOpen) {
+      setPreview(null);
+      setError('');
+    }
+  }, [isOpen]);
 
   const startCamera = useCallback(async () => {
     const contextError = cameraContextError();
@@ -80,13 +80,11 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
     ctx.drawImage(video, (video.videoWidth - side) / 2, (video.videoHeight - side) / 2, side, side, 0, 0, out, out);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
     stopCamera();
-    video.classList.add('hidden');
     setPreview(dataUrl);
   };
 
   const retake = () => {
     setPreview(null);
-    videoRef.current?.classList.remove('hidden');
     startCamera();
   };
 

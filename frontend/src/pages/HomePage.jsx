@@ -74,8 +74,8 @@ export default function HomePage() {
   const postAttendance = useCallback(async (payload) => {
     setProcessing(true);
     showFeedback('info', 'Traitement de votre scan...');
+    const finalPayload = { ...payload };
     try {
-      const finalPayload = { ...payload };
       if (!payload.mode) {
         const geo = await ensureLocation();
         if (geo && !geo.denied && typeof geo.lat === 'number' && typeof geo.lng === 'number') {

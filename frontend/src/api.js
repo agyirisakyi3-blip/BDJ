@@ -18,7 +18,10 @@ export function api(body, tenant = '') {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload),
   })
-    .then((r) => r.text())
+    .then((r) => {
+      if (!r.ok) throw new Error('Erreur serveur (' + r.status + ').');
+      return r.text();
+    })
     .then((txt) => {
       try { return JSON.parse(txt); }
       catch { throw new Error('Reponse inattendue du serveur.'); }

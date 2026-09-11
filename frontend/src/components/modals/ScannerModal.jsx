@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { cameraContextError, describeCameraError } from '../../media';
 
-const JSQR_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+const JSQR_URL = '/jsQR.min.js';
 
 function loadJsQR() {
   if (typeof window.jsQR !== 'undefined') return Promise.resolve();
-  const existing = document.querySelector('script[src="' + JSQR_CDN + '"]');
+  const existing = document.querySelector('script[src="' + JSQR_URL + '"]');
   if (existing) {
     if (existing.dataset.loaded === 'true') return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -16,7 +16,7 @@ function loadJsQR() {
   }
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = JSQR_CDN;
+    s.src = JSQR_URL;
     s.async = true;
     const timer = setTimeout(() => { s.remove(); reject(new Error('timeout')); }, 10000);
     s.onload = () => { clearTimeout(timer); s.dataset.loaded = 'true'; resolve(); };

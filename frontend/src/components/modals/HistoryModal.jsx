@@ -99,7 +99,7 @@ export default function HistoryModal({ isOpen, onClose }) {
     if (!profile) return;
     setDeleting(true);
     try {
-      const res = await apiCall({ action: 'mydelete', email: profile.email, token: auth ? (auth.sessionToken || '') : '' });
+      const res = await apiCall({ action: 'mydelete', email: profile.email, token: auth ? (auth.sessionToken || '') : '', confirm: 'DELETE' });
       if (!res.ok) throw new Error(res.message);
       setShowConfirmDelete(false);
       onClose();

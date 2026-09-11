@@ -93,15 +93,19 @@ export function AppProvider({ children }) {
     try { localStorage.setItem(LS_ONBOARDED, '1'); } catch {}
   }, []);
 
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
+
   const login = useCallback(async (user, sessionToken) => {
+    const p = profileRef.current;
     await setAuthRaw({ user, sessionToken, ts: Date.now() });
     await setProfileRaw({
-      name: user && user.name ? user.name : (profile && profile.name) || '',
-      email: user && user.email ? user.email : (profile && profile.email) || '',
-      tenant: (user && user.tenant ? String(user.tenant).trim() : '') || (profile && profile.tenant) || '',
-      photo: (profile && profile.photo) || '',
+      name: user && user.name ? user.name : (p && p.name) || '',
+      email: user && user.email ? user.email : (p && p.email) || '',
+      tenant: (user && user.tenant ? String(user.tenant).trim() : '') || (p && p.tenant) || '',
+      photo: (p && p.photo) || '',
     });
-  }, [setAuthRaw, setProfileRaw, profile]);
+  }, [setAuthRaw, setProfileRaw]);
 
   const logout = useCallback(async () => {
     await setAuthRaw(null);
@@ -264,7 +268,7 @@ export function AppProvider({ children }) {
     consent, setConsent,
     onboarded, setOnboarded,
     themeMode, cycleTheme,
-    isAdmin, setIsAdmin,
+    isAdmin,
     adminToken, setAdminToken,
     adminEmail, setAdminEmail,
     feedback, showFeedback,
@@ -284,7 +288,7 @@ export function AppProvider({ children }) {
     isAdmin, adminToken, adminEmail, feedback, recent, recentLoading, week, weekLoading,
     shift, monthSummary, employees, admins, leaves, holidays, adminData, privacyNoticeShown,
     auth, authLoaded, login, logout,
-    setProfile, setStatus, setConfig, setConsent, setOnboarded, cycleTheme, setIsAdmin,
+    setProfile, setStatus, setConfig, setConsent, setOnboarded, cycleTheme,
     setAdminToken, setAdminEmail, showFeedback, loadRecent, loadWeek, loadMonth,
     setEmployees, setAdmins, setLeaves, setHolidays, setAdminData,
     apiCall, tenantFromProfile, refreshAdminAccess,

@@ -61,11 +61,14 @@ export async function lsSet(key, val) {
   if (!ENC_SUPPORTED) { try { localStorage.setItem(key, val); } catch {} return; }
   const k = await encKey();
   if (!k) { try { localStorage.setItem(key, val); } catch {} return; }
-  const cryptoKey = await importKey(k, 'encrypt');
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const ct = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(val));
-  const env = { v: 1, iv: bytesToBase64(iv), d: bytesToBase64(new Uint8Array(ct)) };
-  try { localStorage.setItem(key, 'enc1:' + JSON.stringify(env)); } catch {}
+  try {
+    const cryptoKey = await importKey(k, 'encrypt');
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const ct = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(val));
+    const env = { v: 1, iv: bytesToBase64(iv), d: bytesToBase64(new Uint8Array(ct)) };
+    try { localStorage.setItem(key, 'enc1:' + JSON.stringify(env)); return; } catch {}
+  } catch {}
+  try { localStorage.setItem(key, val); } catch {}
 }
 
 export function useEncryptedStorage(key, initialValue = null) {

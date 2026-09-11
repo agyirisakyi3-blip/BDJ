@@ -55,19 +55,15 @@ export default function SignupPage() {
               <img src="/bdj-logo.jpg" alt="Logo addredance" />
             </span>
             <h3>Organisation creee</h3>
-            <p>Voici les acces du compte administrateur de <strong>{result.tenant.appName}</strong>. Conservez-les precieusement.</p>
+            <p>L'espace de pointage de <strong>{result.tenant.appName}</strong> est pret. Un email avec vos acces administrateur a ete envoye a <strong>{adminEmail}</strong>.</p>
           </div>
 
           <div className="emp-login-form">
-            <label>Code organisation</label>
+            <label>Code organisation (a partager avec vos employes)</label>
             <div className="emp-signup-result">
               <code>{result.tenant.code}</code>
             </div>
-            <label>Code PIN administrateur</label>
-            <div className="emp-signup-result emp-signup-pin">
-              <code>{result.adminPin}</code>
-            </div>
-            <p className="emp-hint">Partagez le code organisation avec vos employes. Le PIN admin n'est visible qu'une fois.</p>
+            <p className="emp-hint">Le PIN administrateur a ete envoye par email. Il ne sera jamais affiche ici ni renvoye par l'application.</p>
             <Link className="emp-cta emp-cta-link" to="/" style={{ textDecoration: 'none', textAlign: 'center' }}>
               Aller a la connexion
             </Link>
