@@ -352,15 +352,28 @@ function provisionTenant_(payload, masterCfg, now, tz) {
   if (admins) admins.appendRow([adminEmail, appName, Utilities.formatDate(now, tz, 'yyyy-MM-dd'), 'self-service']);
   registerTenant_(code, tenant.getId());
 
+  var subject = 'Acces administrateur ' + appName;
+  var body = 'Votre espace de pointage addredance a ete cree.\n\n' +
+    'Organisation : ' + appName + '\n' +
+    'Code organisation : ' + code + '\n' +
+    'PIN administrateur : ' + tenantPin + '\n' +
+    'Feuille de travail : ' + tenant.getUrl() + '\n\n' +
+    'Le PIN sert a demarrer la connexion admin, completee par un code a usage unique envoye par email. ' +
+    'Le secret QR est stocke dans la feuille Config et sert a proteger la configuration.\n\n' +
+    'Conservez ces informations precieusement. Ne partagez jamais le PIN admin.';
+  try {
+    MailApp.sendEmail(adminEmail, subject, body);
+  } catch (e) {
+    return error_('Impossible d\'envoyer les acces par email. Verifiez l\'adresse et reessayez.');
+  }
+
   return {
     ok: true,
     tenant: {
       code: code,
       spreadsheetId: tenant.getId(),
       url: tenant.getUrl(),
-      appName: appName,
-      qrSecret: tenantQr,
-      adminPin: tenantPin
+      appName: appName
     }
   };
 }
@@ -756,7 +769,6 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
   var stateBreak = lastAction === 'Break-out';
   var stateIn = lastAction === 'Check-in' || lastAction === 'Break-in';
 
-  var mode = String(payload.mode || 'scan').toLowerCase();
   var action;
   var status;
 
@@ -781,7 +793,7 @@ function recordAttendance_(payload, cfg, now, tz, ss) {
       status = 'On-site';
     } else {
       action = 'Check-out';
-      status = 'On-site';
+      status = 'Checked-out';
     }
   }
 
@@ -1259,6 +1271,9 @@ function myDelete_(payload, cfg, now, tz, ss) {
   if (!ownsEmail_(ss, email, String(payload.token || ''))) return sessionError_(ss, email, now, tz);
   var gate = privacyGate_(ss, email, now, tz);
   if (gate) return gate;
+  if (String(payload.confirm || '').trim() !== 'DELETE') {
+    return error_('Confirmation requise : cette action efface definitivement toutes vos donnees de presence.');
+  }
 
   var att = ss.getSheetByName(SHEET_ATT);
   var data = att.getDataRange().getValues();
@@ -1432,10 +1447,11 @@ function lateResolver_(ss, cfg) {
   var map = {};
   var emp = ss.getSheetByName(SHEET_EMPLOYEES);
   if (emp) {
+    var c = employeeColumns_(emp);
     var rows = emp.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
-      var e = String(rows[i][1] || '').trim().toLowerCase();
-      var s = timeToSec_(cellTimeStr_(rows[i][4], tz));
+      var e = String(rows[i][c.email < 0 ? 1 : c.email] || '').trim().toLowerCase();
+      var s = timeToSec_(cellTimeStr_(rows[i][c.shiftStart < 0 ? 4 : c.shiftStart], tz));
       if (e && s >= 0) map[e] = s;
     }
   }
@@ -1756,7 +1772,18 @@ function employeeCodeReset_(payload, cfg, now, tz, ss) {
     var newCode = generateUniqueEmployeeCode_(ss, maps);
     sheet.getRange(i + 1, c.code + 1).setValue(codeHash_(ss, newCode));
     logAudit_(ss, String(payload.adminEmail || 'admin'), 'Employee code reset: ' + email, 'CODE_RESET', now, tz);
-    return { ok: true, code: newCode };
+    var subject = 'Votre nouveau code de pointage';
+    var body = 'Bonjour,\n\n' +
+      'Votre code personnel de pointage a ete regenere.\n\n' +
+      'Code : ' + newCode + '\n\n' +
+      'Il est strictement personnel et le nouveau remplace l\'ancien. Utilisez-le avec le QR code du bureau pour pointer.';
+    try {
+      MailApp.sendEmail(email, subject, body);
+    } catch (e) {
+      logAudit_(ss, String(payload.adminEmail || 'admin'), 'Code reset email failed: ' + email, 'CODE_RESET_MAIL_FAIL', now, tz);
+      return error_('Nouveau code genere mais l\'email n\'a pas pu etre envoye. Reessayez.');
+    }
+    return { ok: true };
   }
   return error_('Employee not found: ' + email);
 }
@@ -2055,14 +2082,20 @@ function leaveAdd_(payload, cfg, now, tz, ss) {
 function leaveDelete_(payload, cfg, now, tz, ss) {
   var access = adminAccess_(payload, cfg, now, tz, ss);
   if (!access.ok) return error_(access.message);
-  var idx = Number(payload.index);
+  var email = String(payload.email || '').trim().toLowerCase();
+  var start = sanitizeDate_(payload.start, '');
+  var end = sanitizeDate_(payload.end, start);
   var sheet = ss.getSheetByName(SHEET_LEAVE);
+  if (!sheet || !email || !start) return error_('Entree introuvable.');
   var rows = sheet.getDataRange().getValues();
-  if (!isFinite(idx) || idx < 1 || idx >= rows.length) return error_('Entree introuvable.');
-  var removed = rows[idx];
-  sheet.deleteRow(idx + 1);
-  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Leave removed: ' + removed[0] + ' ' + removed[1] + '..' + removed[2], 'LEAVE_REMOVED', now, tz);
-  return { ok: true };
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() !== email) continue;
+    if (sanitizeDate_(rows[i][1], '') !== start || sanitizeDate_(rows[i][2], '') !== end) continue;
+    sheet.deleteRow(i + 1);
+    logAudit_(ss, String(payload.adminEmail || 'admin'), 'Leave removed: ' + email + ' ' + start + '..' + end, 'LEAVE_REMOVED', now, tz);
+    return { ok: true };
+  }
+  return error_('Entree introuvable.');
 }
 
 function holidayList_(payload, cfg, now, tz, ss) {
@@ -2092,14 +2125,17 @@ function holidayAdd_(payload, cfg, now, tz, ss) {
 function holidayDelete_(payload, cfg, now, tz, ss) {
   var access = adminAccess_(payload, cfg, now, tz, ss);
   if (!access.ok) return error_(access.message);
-  var idx = Number(payload.index);
+  var d = sanitizeDate_(payload.date, '');
   var sheet = ss.getSheetByName(SHEET_HOLIDAYS);
+  if (!sheet || !d) return error_('Entree introuvable.');
   var rows = sheet.getDataRange().getValues();
-  if (!isFinite(idx) || idx < 1 || idx >= rows.length) return error_('Entree introuvable.');
-  var removed = rows[idx];
-  sheet.deleteRow(idx + 1);
-  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Holiday removed: ' + removed[0] + ' ' + removed[1], 'HOLIDAY_REMOVED', now, tz);
-  return { ok: true };
+  for (var i = 1; i < rows.length; i++) {
+    if (sanitizeDate_(rows[i][0], '') !== d) continue;
+    sheet.deleteRow(i + 1);
+    logAudit_(ss, String(payload.adminEmail || 'admin'), 'Holiday removed: ' + d + ' ' + String(rows[i][1] || ''), 'HOLIDAY_REMOVED', now, tz);
+    return { ok: true };
+  }
+  return error_('Entree introuvable.');
 }
 
 /* ================= Announcements ================= */
@@ -2159,14 +2195,21 @@ function announcementAdd_(payload, cfg, now, tz, ss) {
 function announcementDelete_(payload, cfg, now, tz, ss) {
   var access = adminAccess_(payload, cfg, now, tz, ss);
   if (!access.ok) return error_(access.message);
-  var idx = Number(payload.index);
+  var title = safeCell_(String(payload.title || '').trim());
+  var body = safeCell_(String(payload.body || '').trim());
+  var postedOn = String(payload.postedOn || '').trim();
   var sheet = ss.getSheetByName(SHEET_ANNOUNCEMENTS);
+  if (!sheet) return error_('Annonce introuvable.');
   var rows = sheet.getDataRange().getValues();
-  if (!isFinite(idx) || idx < 1 || idx >= rows.length) return error_('Annonce introuvable.');
-  var removed = rows[idx];
-  sheet.deleteRow(idx + 1);
-  logAudit_(ss, String(payload.adminEmail || 'admin'), 'Announcement removed: ' + (removed[0] || removed[1]), 'ANNOUNCEMENT_REMOVED', now, tz);
-  return { ok: true };
+  for (var i = 1; i < rows.length; i++) {
+    if (safeCell_(String(rows[i][0] || '').trim()) !== title) continue;
+    if (safeCell_(String(rows[i][1] || '').trim()) !== body) continue;
+    if (String(rows[i][2] || '').trim() !== postedOn) continue;
+    sheet.deleteRow(i + 1);
+    logAudit_(ss, String(payload.adminEmail || 'admin'), 'Announcement removed: ' + (rows[i][0] || rows[i][1]), 'ANNOUNCEMENT_REMOVED', now, tz);
+    return { ok: true };
+  }
+  return error_('Annonce introuvable.');
 }
 
 /* ================= Manual corrections ================= */
