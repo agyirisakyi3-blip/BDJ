@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -40,12 +40,16 @@ function AppContent() {
   const [status, setStatus] = useState(null);
   const [recent, setRecent] = useState([]);
   const [queue, setQueue] = useState([]);
+  const toastTimer = useRef(null);
   const tenant = profile?.tenant || '';
 
   const notify = (message, type = 'info') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
   };
+
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   const loadAttendance = async (activeProfile, activeSession) => {
     if (!activeProfile || !activeSession) return;

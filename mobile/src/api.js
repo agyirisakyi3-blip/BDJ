@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 export const API_URL =
+  (process.env.EXPO_PUBLIC_API_URL || '').trim() ||
   'https://script.google.com/macros/s/AKfycbzo9vVXXha0KA-qu9Bt4OVl0YdJUJRX6blG6qfQtyU8qHJKdE5LlNMErWsIJGmQJHyH_Q/exec';
 
 const AUTH_KEY = 'addredance.auth.v1';
@@ -24,6 +25,7 @@ export async function api(body, tenant = '') {
     throw offlineError;
   }
 
+  if (!response.ok) throw new Error('Server error (' + response.status + ').');
   const text = await response.text();
   try {
     return JSON.parse(text);
