@@ -49,7 +49,7 @@ function startServer() {
   return child;
 }
 
-async function withPage(browser, fn) {
+async function withPage(browser, label, fn) {
   const page = await browser.newPage();
   const pageErrors = [];
   const consoleErrors = [];
@@ -65,6 +65,8 @@ async function withPage(browser, fn) {
   } finally {
     await page.close();
   }
+  check(`${label}: no uncaught page errors`, pageErrors.length === 0, pageErrors.join(' | '));
+  check(`${label}: no console errors`, consoleErrors.length === 0, consoleErrors.join(' | '));
   return { pageErrors, consoleErrors };
 }
 
@@ -84,7 +86,7 @@ function bodyText(page) {
 
 async function run(browser) {
   // 1. App loads on root with no errors
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'App load', async (page) => {
     await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 20000 });
     await sleep(1000);
     const info = await page.evaluate(() => {
@@ -95,7 +97,7 @@ async function run(browser) {
   });
 
   // 2. Consent banner appears and is dismissible
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'Consent banner', async (page) => {
     await page.goto(BASE, { waitUntil: 'networkidle2' });
     await sleep(1200);
     const banner = await bodyText(page);
@@ -107,7 +109,7 @@ async function run(browser) {
   });
 
   // 3. Home shows employee login
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'Employee login', async (page) => {
     await page.goto(BASE + '#/', { waitUntil: 'networkidle2' });
     await acceptConsent(page);
     await sleep(1200);
@@ -120,7 +122,7 @@ async function run(browser) {
   });
 
   // 4. Signup page renders and validates
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'Signup page', async (page) => {
     await page.goto(BASE + '#/signup', { waitUntil: 'networkidle2' });
     await acceptConsent(page);
     await sleep(1200);
@@ -136,7 +138,7 @@ async function run(browser) {
   });
 
   // 5. Admin page renders login + validates
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'Admin page', async (page) => {
     await page.goto(BASE + '#/admin', { waitUntil: 'networkidle2' });
     await acceptConsent(page);
     await sleep(1200);
@@ -147,7 +149,7 @@ async function run(browser) {
   });
 
   // 6. Navigation between hash routes works
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'Navigation', async (page) => {
     await page.goto(BASE + '#/', { waitUntil: 'networkidle2' });
     await acceptConsent(page);
     await sleep(1000);
@@ -162,15 +164,29 @@ async function run(browser) {
   });
 
   // 7. PWA manifest served
-  await withPage(browser, async (page) => {
-    const resp = await page.goto(BASE + 'manifest.webmanifest', { waitUntil: 'networkidle2' });
-    const json = await resp.json();
-    const ok = resp.status() >= 200 && resp.status() < 400 && !!json.name;
-    check('PWA manifest served', ok, `status=${resp.status()} name=${json.name || ''}`);
+  await withPage(browser, 'PWA manifest', async (page) => {
+    await page.goto(BASE + '#/', { waitUntil: 'networkidle2' });
+    const data = await page.evaluate(async () => {
+      const resp = await fetch('/manifest.webmanifest');
+      return { status: resp.status, json: await resp.json() };
+    });
+    const ok = data.status >= 200 && data.status < 400 && !!data.json.name;
+    check('PWA manifest served', ok, `status=${data.status} name=${data.json.name || ''}`);
+  });
+
+  // 7b. QR generation library is vendored and served from our own origin
+  await withPage(browser, 'QR library', async (page) => {
+    await page.goto(BASE + '#/', { waitUntil: 'networkidle2' });
+    const res = await page.evaluate(async () => {
+      const r = await fetch('/qrcode.min.js');
+      const txt = await r.text();
+      return { status: r.status, hasQrCode: txt.includes('var QRCode') };
+    });
+    check('QR library served from own origin', res.status === 200 && res.hasQrCode, JSON.stringify(res));
   });
 
   // 8. Mobile viewport (360px): app renders with no horizontal overflow
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'Mobile 360', async (page) => {
     await page.setViewport({ width: 360, height: 740, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
     await page.goto(BASE + '#/', { waitUntil: 'networkidle2' });
     await acceptConsent(page);
@@ -189,7 +205,7 @@ async function run(browser) {
   });
 
   // 9. Small viewport (320px): signup and admin pages render without overflow
-  await withPage(browser, async (page) => {
+  await withPage(browser, 'Mobile 320', async (page) => {
     await page.setViewport({ width: 320, height: 568, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
     for (const route of ['#/signup', '#/admin']) {
       await page.goto(BASE + route, { waitUntil: 'networkidle2' });
@@ -204,6 +220,46 @@ async function run(browser) {
       check(`Mobile 320px ${route}: renders without overflow`, fits, `scrollWidth=${m.scrollWidth} innerWidth=${m.innerWidth}`);
     }
   });
+
+  // 10. Service worker: registered, controls the page, and cold-starts offline
+  {
+    const page = await browser.newPage();
+    const pageErrors = [];
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    await page.goto(BASE + '#/', { waitUntil: 'networkidle2' });
+    const reg = await page.evaluate(async () => {
+      if (!('serviceWorker' in navigator)) return { ok: false, reason: 'unsupported' };
+      const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 15000));
+      const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
+      return { ok: !!registration, scope: registration ? registration.scope : '' };
+    });
+    check('Service worker registered', reg.ok, JSON.stringify(reg));
+
+    const swServed = await page.evaluate(async () => {
+      const res = await fetch('/sw.js');
+      return { status: res.status, type: res.headers.get('content-type') || '' };
+    });
+    check('Service worker file served', swServed.status === 200, JSON.stringify(swServed));
+
+    // Go offline immediately: this is the first visit, before the page has ever
+    // been controlled. A successful render proves the build assets were
+    // precached during install, not merely cached by earlier traffic.
+    await page.setOfflineMode(true);
+    await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+    await sleep(1500);
+    const controlled = await page.evaluate(() => !!navigator.serviceWorker.controller).catch(() => false);
+    check('Service worker controls the page after offline reload', controlled);
+    const offline = await page.evaluate(() => {
+      const root = document.getElementById('root');
+      return { html: root ? root.innerText.replace(/\s+/g, ' ').trim() : '', children: root ? root.children.length : -1 };
+    }).catch(() => ({ html: '', children: -1 }));
+    const offlineOk = offline.children > 0 && /Connectez-vous|Accepter/.test(offline.html);
+    check('First-visit offline cold start renders the app shell', offlineOk, offline.html.slice(0, 90));
+    await page.setOfflineMode(false);
+
+    check('Service worker: no uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));
+    await page.close();
+  }
 }
 
 (async () => {

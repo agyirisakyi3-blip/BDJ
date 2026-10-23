@@ -1,21 +1,27 @@
 import { useState, useRef, useCallback } from 'react';
 import { useApp } from '../../hooks/useApp';
 
-const QR_LIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+// Vendored locally so it satisfies the production CSP (`script-src 'self'`).
+const QR_LIB_URL = '/qrcode.min.js';
 
 function loadQrLib() {
   if (typeof window.QRCode !== 'undefined') return Promise.resolve();
   const existing = document.querySelector('script[src="' + QR_LIB_URL + '"]');
-  if (existing) return new Promise((resolve, reject) => {
-    existing.addEventListener('load', resolve);
-    existing.addEventListener('error', reject);
-  });
+  if (existing) {
+    if (existing.dataset.loaded === 'true') return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 10000);
+      existing.addEventListener('load', () => { clearTimeout(timer); existing.dataset.loaded = 'true'; resolve(); });
+      existing.addEventListener('error', () => { clearTimeout(timer); reject(new Error('load failed')); });
+    });
+  }
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = QR_LIB_URL;
     s.async = true;
-    s.onload = resolve;
-    s.onerror = reject;
+    const timer = setTimeout(() => { s.remove(); reject(new Error('timeout')); }, 10000);
+    s.onload = () => { clearTimeout(timer); s.dataset.loaded = 'true'; resolve(); };
+    s.onerror = () => { clearTimeout(timer); s.remove(); reject(new Error('load failed')); };
     document.head.appendChild(s);
   });
 }
@@ -27,9 +33,7 @@ export default function QRGenerator() {
   const [error, setError] = useState('');
   const [generated, setGenerated] = useState(false);
   const [loading, setLoading] = useState(false);
-  const boxRef = useRef(null);
   const qrInstance = useRef(null);
-
   const qrContainerRef = useRef(null);
 
   const generate = useCallback(async () => {
@@ -136,7 +140,7 @@ export default function QRGenerator() {
           </button>
         </div>
         {error && <p className="feedback error">{error}</p>}
-        <div ref={boxRef} style={generated ? { textAlign: 'center', marginTop: '16px' } : { display: 'none' }}>
+        <div style={generated ? { textAlign: 'center', marginTop: '16px' } : { display: 'none' }}>
           <div ref={qrContainerRef} style={{ display: 'inline-block', padding: '16px', background: '#fff', borderRadius: '16px' }} />
           <p className="hint" style={{ marginTop: '8px' }}>
             Ce code est permanent. Imprimez-le et placez-le a l'entree du bureau.

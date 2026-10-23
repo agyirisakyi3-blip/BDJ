@@ -9,7 +9,7 @@ A mobile-friendly web app (PWA) for office attendance check-in / check-out:
 - Every rejected attempt is logged to an Audit sheet; a daily email digest can be enabled.
 - Multi-office: give each location its own QR token + geo-fence.
 
-The app also includes: a first-run walkthrough, a recent-activity list and last-7-days hours chart on the home screen, live distance-from-office while checked in, an offline check-in queue that auto-syncs, vibration + shake feedback on scans, a camera-failure retry card, a check-in success overlay, a "not checked in today" roster view for admins, collapsible admin cards, loading skeletons, and a light/dark/auto theme toggle.
+The app also includes: a first-run walkthrough, a recent-activity list and last-7-days hours chart on the home screen, live distance-from-office while checked in, an offline check-in queue that auto-syncs, an installable PWA with a service-worker-cached app shell (opens offline), vibration + shake feedback on scans, a camera-failure retry card, a check-in success overlay, a "not checked in today" roster view for admins, collapsible admin cards, loading skeletons, and a light/dark/auto theme toggle.
 
 ## What's new
 
@@ -32,7 +32,7 @@ The app also includes: a first-run walkthrough, a recent-activity list and last-
   in shortly after their shift start, or is still checked in after hours (toggle in Profile).
 - **Monthly summary card** - days present, total hours, break time, late count for the current
   month, right on the home screen.
-- **CI** - GitHub Actions runs the full Puppeteer test suite on every push/PR.
+- **CI** - GitHub Actions runs the unit tests plus the full Puppeteer E2E suite on every push/PR.
 
 ## Files
 
@@ -41,6 +41,8 @@ The app also includes: a first-run walkthrough, a recent-activity list and last-
 | `frontend/` | Vite-powered React application |
 | `frontend/src/config.js` | Your Apps Script web app URL (edit me) |
 | `frontend/public/manifest.webmanifest` | PWA metadata |
+| `frontend/public/sw.js` | Service worker (offline app shell + install support) |
+| `frontend/scripts/build-sw.mjs` | Post-build: injects the hashed asset list + cache version into the service worker |
 | `frontend/public/icons/` | App icons |
 | `appsscript/Code.gs` | Google Apps Script backend (paste into your Sheet's script editor) |
 
@@ -134,9 +136,12 @@ API_URL: 'https://script.google.com/macros/s/AKfycbxxxxxxxxxxx/exec'
 
 Camera and geolocation **require HTTPS**. Any static host works:
 
-- **GitHub Pages** - push this folder to a repo, enable Pages.
-- **Netlify / Vercel** - drag-and-drop the folder.
-- Test locally with `npx serve .` (localhost is treated as secure).
+- **Vercel** - this repo already includes `vercel.json`: import the repo, set `API_URL` in
+  `frontend/src/config.js`, and deploy. Pushes to the production branch rebuild `frontend/dist`.
+- **Netlify / GitHub Pages / any static host** - run `npm run build` and serve the contents of
+  `frontend/dist`; rewrite unknown routes to `index.html`.
+- Test the production build locally with `npm run build && npm --prefix frontend run preview`
+  (localhost is treated as secure). `npm test` runs unit + E2E.
 
 ## Security & privacy
 
@@ -182,8 +187,9 @@ Camera and geolocation **require HTTPS**. Any static host works:
   your spreadsheet; over-quota attempts are logged (`QUOTA_EMAIL` / `QUOTA_TENANT`).
 - **No secret data in URLs** - all requests use POST with a JSON body; tokens and emails are
   never in query strings, and the `no-referrer` policy keeps the sheet URL from leaking.
-- **Content Security Policy** - the app ships a CSP that only allows its own scripts plus the
-  QR library CDN, which blocks injected scripts / XSS-style data exfiltration.
+- **Content Security Policy** - the app ships a strict CSP (`script-src 'self'`) with all scripts
+  served from its own origin - including the vendored QR libraries - which blocks injected
+  scripts / XSS-style data exfiltration.
 - **Geofence + replay + coordinate-reuse checks** - the server independently re-verifies the
   office radius, rejects stale timestamps (`replayMaxAgeMs`) and blocks shared-location reuse
   (`coordReuseBlock`), so a QR captured elsewhere or a replayed request is refused.
@@ -242,6 +248,7 @@ Camera and geolocation **require HTTPS**. Any static host works:
   (the sheet copy is only a migration fallback) and are never exposed to the app UI
   (only the web app and the printed QR know them).
 - Cross-midnight shifts are counted as two days (open day + next-day check-out); fine for standard office hours.
+- **Offline mode** - the service worker precaches the app shell, every build asset, icons and QR libraries, so the app opens and scans offline from the first visit; queued check-ins flush when you reconnect. Admin reports and employee history always need the backend.
 - Browser geolocation can be spoofed; the accuracy cap, travel-speed check and coord-reuse
   check make that much harder, but this remains a reasonable-enough guard for a small office.
 - Apps Script "Anyone" web apps are rate-limited; fine for a small team.

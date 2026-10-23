@@ -53,6 +53,9 @@ jobs:
       - name: Build (production)
         run: npm run build
 
+      - name: Run unit tests
+        run: node tests/unit.mjs
+
       - name: Run E2E tests
         run: node tests/run.js
 

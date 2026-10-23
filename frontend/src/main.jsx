@@ -4,16 +4,15 @@ import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import './index.css'
 
-// No service worker is registered by this app. Unregistering on startup is a
-// deliberate guard: it prevents a stale cache from an older deployment from
-// serving outdated JS bundles to returning mobile users.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations()
-    .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
-    .then(() => (typeof caches === 'undefined'
-      ? undefined
-      : caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('att-')).map((key) => caches.delete(key))))))
-    .catch((error) => console.error('Legacy service worker cleanup failed:', error));
+// Register the service worker in production builds so the app can be installed
+// and cold-started offline. Navigations stay network-first, so a new deploy is
+// picked up immediately instead of serving a stale bundle.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((error) => console.error('Service worker registration failed:', error));
+  });
 }
 
 createRoot(document.getElementById('root')).render(

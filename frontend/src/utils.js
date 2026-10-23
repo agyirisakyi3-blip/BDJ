@@ -105,12 +105,18 @@ export function printReportPDF(title, period, columns, rows) {
     '<div class="h"><div><h1>' + esc(title) + '</h1><p>' + esc(period) + '</p></div></div>' +
     '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
     '<p class="f">Genere le ' + new Date().toLocaleString() + ' \u00b7 ' + esc(title) + '</p>' +
-    '<button class="no-print" onclick="window.print()">Imprimer / Enregistrer en PDF</button>' +
-    '<script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>';
+    '<button id="print-btn" class="no-print" type="button">Imprimer / Enregistrer en PDF</button>' +
+    '</body></html>';
   const w = window.open('', '_blank', 'width=900,height=700');
   if (!w) { alert('Autorisez les fenetres pop-up pour exporter en PDF.'); return; }
   w.document.write(html);
   w.document.close();
+  // The report window inherits this page's CSP, so inline scripts/handlers are
+  // blocked. Trigger printing and wrap the button from here instead.
+  const printNow = () => { try { w.focus(); w.print(); } catch {} };
+  const btn = w.document.getElementById('print-btn');
+  if (btn) btn.addEventListener('click', printNow);
+  setTimeout(printNow, 300);
 }
 
 /**
