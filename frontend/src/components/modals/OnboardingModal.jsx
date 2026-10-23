@@ -50,7 +50,7 @@ export default function OnboardingModal({ isOpen, onClose }) {
           <button className="ghost-btn" type="button" onClick={handleDismiss}>Passer</button>
         </div>
       </div>
-      <ProfileModal isOpen={showProfile} onClose={() => { setShowProfile(false); handleDismiss(); }} />
+      <ProfileModal isOpen={showProfile} onClose={() => { setShowProfile(false); setStep(2); }} />
     </>
   );
 }

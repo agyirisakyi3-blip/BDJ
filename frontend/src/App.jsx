@@ -43,9 +43,10 @@ function AppContent() {
 
   if (!authLoaded) {
     return (
-      <div className="bg-decor" aria-hidden="true">
+      <>
+        <BackgroundDecor />
         <PageLoader />
-      </div>
+      </>
     );
   }
 

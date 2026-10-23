@@ -390,6 +390,7 @@ export default function AdminDashboard() {
       return {
         name: r.name,
         employees: Object.keys(r.emails).length,
+        days: r.days,
         hours: Math.round(r.hours * 100) / 100,
         avgHours: r.days ? Math.round((r.hours / r.days) * 100) / 100 : 0,
         breakMin: Math.round(r.breakMin),
@@ -448,6 +449,8 @@ export default function AdminDashboard() {
         else currentStreak = 1;
         if (currentStreak > bestStreak) bestStreak = currentStreak;
       }
+      // currentStreak holds the final run — update bestStreak if needed
+      if (currentStreak > bestStreak) bestStreak = currentStreak;
       return {
         email: r.email,
         name: r.name,

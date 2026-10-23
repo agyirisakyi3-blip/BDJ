@@ -6,16 +6,8 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
   const canvasRef = useRef(null);
   const fileRef = useRef(null);
   const streamRef = useRef(null);
-  const [stream, setStream] = useState(null);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
-  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-
-  if (isOpen && !prevIsOpen) {
-    setPreview(null);
-    setError('');
-  }
-  if (isOpen !== prevIsOpen) setPrevIsOpen(isOpen);
 
   const startCamera = useCallback(async () => {
     const contextError = cameraContextError();
@@ -29,7 +21,6 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
         audio: false,
       });
       streamRef.current = s;
-      setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
         videoRef.current.play().catch(() => {});
@@ -44,25 +35,24 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    setStream(null);
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      stopCamera();
+      return;
+    }
+    // oxlint-disable-next-line react/set-state-in-effect -- resetting modal UI state on open is correct here
+    setPreview(null);
+    // oxlint-disable-next-line react/set-state-in-effect
+    setError('');
     const t = setTimeout(startCamera, 100);
-    const streamToClean = streamRef.current;
-    const videoToClean = videoRef.current;
     return () => {
       clearTimeout(t);
-      if (streamToClean) {
-        streamToClean.getTracks().forEach((tr) => tr.stop());
-      }
-      streamRef.current = null;
-      setStream(null);
-      if (videoToClean) videoToClean.srcObject = null;
+      stopCamera();
     };
-  }, [isOpen, startCamera]);
+  }, [isOpen, startCamera, stopCamera]);
 
   if (!isOpen) return null;
 
@@ -80,7 +70,7 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
 
   const capture = () => {
     const video = videoRef.current;
-    if (!stream || !video || !video.videoWidth) {
+    if (!streamRef.current || !video || !video.videoWidth) {
       setError("La camera n'est pas prete. Reessayez.");
       return;
     }
@@ -110,7 +100,7 @@ export default function PhotoModal({ isOpen, onClose, onCapture, existing }) {
     }
     const img = new window.Image();
     img.onload = () => {
-      if (stream) stopCamera();
+      if (streamRef.current) stopCamera();
       const dataUrl = cropToSquare(img, img.width, img.height);
       setPreview(dataUrl);
     };

@@ -5,16 +5,9 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
-  const [stream, setStream] = useState(null);
+  // preview and error are reset to null/'': tracked as state for rendering
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      setPreview(null);
-      setError('');
-    }
-  }, [isOpen]);
 
   const startCamera = useCallback(async () => {
     const contextError = cameraContextError();
@@ -28,7 +21,6 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
         audio: false,
       });
       streamRef.current = s;
-      setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
         videoRef.current.play().catch(() => {});
@@ -43,31 +35,30 @@ export default function SelfieModal({ isOpen, onClose, onCapture }) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    setStream(null);
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      stopCamera();
+      return;
+    }
+    // oxlint-disable-next-line react/set-state-in-effect -- resetting modal UI state on open is correct here
+    setPreview(null);
+    // oxlint-disable-next-line react/set-state-in-effect
+    setError('');
     const t = setTimeout(startCamera, 100);
-    const streamToClean = streamRef.current;
-    const videoToClean = videoRef.current;
     return () => {
       clearTimeout(t);
-      if (streamToClean) {
-        streamToClean.getTracks().forEach((tr) => tr.stop());
-      }
-      streamRef.current = null;
-      setStream(null);
-      if (videoToClean) videoToClean.srcObject = null;
+      stopCamera();
     };
-  }, [isOpen, startCamera]);
+  }, [isOpen, startCamera, stopCamera]);
 
   if (!isOpen) return null;
 
   const capture = () => {
     const video = videoRef.current;
-    if (!stream || !video || !video.videoWidth) {
+    if (!streamRef.current || !video || !video.videoWidth) {
       setError("La camera n'est pas prete. Reessayez.");
       return;
     }

@@ -111,7 +111,7 @@ export default function HistoryModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const h = data;
-  const pairs = h ? (h.pairs || []).slice().sort((x, y) => (y.date + y.in).localeCompare(x.date + x.in)) : [];
+  const pairs = h ? (h.pairs || []).slice().sort((x, y) => ((y.date || '') + (y.in || '')).localeCompare((x.date || '') + (x.in || ''))) : [];
 
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-label="Mon historique de présence">
