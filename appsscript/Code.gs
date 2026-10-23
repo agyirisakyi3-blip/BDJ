@@ -30,6 +30,8 @@ var SHEET_ADMINS = 'Admins';
 var SHEET_LEAVE = 'Leave';
 var SHEET_HOLIDAYS = 'Holidays';
 var SHEET_ANNOUNCEMENTS = 'Announcements';
+var BACKUP_FOLDER_NAME = 'Attendance Backups';
+var BACKUP_PREFIX = '[Backup] ';
 
 /* Break state machine: OUT -> Check-in -> Break-out -> Break-in -> Check-out.
    A scan while on break resumes work (Break-in); a second button press while
@@ -61,6 +63,8 @@ function onOpen() {
       .addItem('Rotate QR secret', 'rotateQrSecret')
       .addItem('Enable auto-purge (retentionDays)', 'enableAutoPurge')
       .addItem('Run retention purge now', 'purgeOldData_')
+      .addItem('Enable daily backups (03:00)', 'enableDailyBackup')
+      .addItem('Run backup now', 'runBackupNow')
       .addToUi();
   } catch (e) {}
 }
@@ -421,6 +425,7 @@ function ensureSheets_(ss) {
     c.appendRow(['writeQuotaPerEmail', '60']);
     c.appendRow(['writeQuotaTenant', '600']);
     c.appendRow(['retentionDays', '0']);
+    c.appendRow(['backupRetentionDays', '30']);
     c.appendRow(['lateAfter', '']);
     c.appendRow(['selfieMode', 'off']);
     c.appendRow(['reminderCheckInAfter', '']);
@@ -546,6 +551,7 @@ function getConfig_(ss) {
   cfg.writeQuotaPerEmail = Number(cfg.writeQuotaPerEmail || 60);
   cfg.writeQuotaTenant = Number(cfg.writeQuotaTenant || 600);
   cfg.retentionDays = Number(cfg.retentionDays || 0);
+  cfg.backupRetentionDays = Number(cfg.backupRetentionDays || 30);
   cfg.selfieMode = String(cfg.selfieMode || 'off').toLowerCase();
   if (['off', 'optional', 'required'].indexOf(cfg.selfieMode) === -1) cfg.selfieMode = 'off';
   var wo = String(cfg.weekendsOff == null ? 'on' : cfg.weekendsOff).toLowerCase();
@@ -694,7 +700,26 @@ function haversineM_(lat1, lng1, lat2, lng2) {
 
 /* ================= Attendance ================= */
 
+/**
+ * Serialize attendance writes. Apps Script has no transactions: without a lock,
+ * two concurrent scans can both read the same "today" state before either
+ * appends, producing a double check-in or a double break. A script lock keeps
+ * the read -> decide -> append critical section atomic (including the optional
+ * selfie upload, which is off by default).
+ */
 function recordAttendance_(payload, cfg, now, tz, ss) {
+  var lock = LockService.getScriptLock();
+  try {
+    if (!lock.tryLock(15000)) {
+      return error_('The server is busy. Please scan again in a few seconds.');
+    }
+    return recordAttendanceLocked_(payload, cfg, now, tz, ss);
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
+function recordAttendanceLocked_(payload, cfg, now, tz, ss) {
   var qr = String(payload.qr || '').trim();
   var name = String(payload.name || '').trim();
   var email = String(payload.email || '').trim().toLowerCase();
@@ -1313,6 +1338,100 @@ function enableAutoPurge() {
   }
   ScriptApp.newTrigger('purgeOldData_').timeBased().everyDays(1).atHour(2).create();
   SpreadsheetApp.getUi().alert('Auto-purge enabled: runs daily at 02:00 using Config > retentionDays (0 disables).');
+}
+
+/* ================= Backups ================= */
+
+/**
+ * Copy the master spreadsheet and every tenant spreadsheet into the
+ * "Attendance Backups" Drive folder, then delete copies older than
+ * Config > backupRetentionDays (default 30). Run by the daily trigger
+ * (enableDailyBackup) or from the Attendance menu.
+ */
+function backupSpreadsheets_() {
+  var master = SpreadsheetApp.getActiveSpreadsheet();
+  var cfg = getConfig_(master);
+  var retentionDays = Number(cfg.backupRetentionDays || 30);
+  var tz = Session.getScriptTimeZone();
+  var stamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH-mm');
+  var folder = getBackupFolder_();
+
+  var targets = [{ id: master.getId(), name: master.getName() }];
+  var seen = {};
+  seen[master.getId()] = true;
+  var tenants = master.getSheetByName(SHEET_TENANTS);
+  if (tenants && tenants.getLastRow() > 1) {
+    var rows = tenants.getRange(2, 1, tenants.getLastRow() - 1, 2).getValues();
+    for (var i = 0; i < rows.length; i++) {
+      var id = String(rows[i][1] || '').trim();
+      if (!id || seen[id]) continue;
+      seen[id] = true;
+      var label = String(rows[i][0] || id).trim();
+      try { label = SpreadsheetApp.openById(id).getName(); } catch (e) {}
+      targets.push({ id: id, name: label });
+    }
+  }
+
+  var made = 0;
+  var failed = [];
+  for (var t = 0; t < targets.length; t++) {
+    try {
+      DriveApp.getFileById(targets[t].id)
+        .makeCopy(BACKUP_PREFIX + targets[t].name + ' ' + stamp, folder);
+      made++;
+    } catch (e) {
+      failed.push(targets[t].name + ': ' + e.message);
+    }
+  }
+
+  var removed = pruneBackups_(folder, new Date(), retentionDays);
+  return 'Backups created: ' + made + '/' + targets.length +
+    (removed ? '; old backups removed: ' + removed : '') +
+    (failed.length ? '; failures: ' + failed.join(' | ') : '') + '.';
+}
+
+function getBackupFolder_() {
+  var folders = DriveApp.getFoldersByName(BACKUP_FOLDER_NAME);
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder(BACKUP_FOLDER_NAME);
+}
+
+function pruneBackups_(folder, now, retentionDays) {
+  var files = folder.getFiles();
+  var expired = [];
+  while (files.hasNext()) {
+    var file = files.next();
+    if (String(file.getName()).indexOf(BACKUP_PREFIX) !== 0) continue;
+    if (backupExpired_(file.getDateCreated(), now, retentionDays)) expired.push(file);
+  }
+  for (var i = 0; i < expired.length; i++) expired[i].setTrashed(true);
+  return expired.length;
+}
+
+/** True when a backup is older than the retention window (default 30 days). */
+function backupExpired_(createdAt, now, retentionDays) {
+  if (!createdAt || !(createdAt instanceof Date) || isNaN(createdAt.getTime())) return false;
+  var days = Number(retentionDays);
+  if (!isFinite(days) || days <= 0) days = 30;
+  return now.getTime() - createdAt.getTime() > days * 86400000;
+}
+
+function enableDailyBackup() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'backupSpreadsheets_') {
+      SpreadsheetApp.getUi().alert('Daily backups are already enabled (03:00).');
+      return;
+    }
+  }
+  ScriptApp.newTrigger('backupSpreadsheets_').timeBased().everyDays(1).atHour(3).create();
+  SpreadsheetApp.getUi().alert('Daily backups enabled at 03:00. Copies go to the "Attendance Backups" folder in Drive. Set Config > backupRetentionDays to change how many days are kept (default 30).');
+}
+
+function runBackupNow() {
+  var message = backupSpreadsheets_();
+  SpreadsheetApp.getUi().alert(message);
+  return message;
 }
 
 function recentAttendance_(payload, cfg, now, tz, ss) {

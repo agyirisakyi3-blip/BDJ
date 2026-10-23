@@ -97,5 +97,23 @@ check('safeCell_ strips control characters', safeCell_('a\u0000b\u0007c') === 'a
 check('safeCell_ caps length at 200', safeCell_('x'.repeat(500)).length === 200);
 check('safeCell_ handles null', safeCell_(null) === '');
 
+/* ---------- concurrency lock + backups (Code.gs) ---------- */
+const backupExpired_ = new Function(extract('backupExpired_') + '; return backupExpired_;')();
+const nowMs = new Date('2026-10-23T12:00:00Z');
+const daysAgo = (n) => new Date(nowMs.getTime() - n * 86400000);
+check('backupExpired_ keeps recent backups', !backupExpired_(daysAgo(29), nowMs, 30));
+check('backupExpired_ expires old backups', backupExpired_(daysAgo(31), nowMs, 30));
+check('backupExpired_ defaults to 30 days', !backupExpired_(daysAgo(29), nowMs, 0) && backupExpired_(daysAgo(31), nowMs, 0));
+check('backupExpired_ ignores invalid dates', !backupExpired_(null, nowMs, 30) && !backupExpired_(new Date('invalid'), nowMs, 30));
+check('Attendance writes are serialized by a script lock',
+  /function recordAttendance_\([^)]*\)\s*\{[\s\S]*?getScriptLock\(\)[\s\S]*?tryLock\(/.test(gs) &&
+  /return recordAttendanceLocked_\(/.test(gs));
+check('Backup functions are present',
+  ['backupSpreadsheets_', 'pruneBackups_', 'enableDailyBackup', 'runBackupNow'].every((name) => gs.includes('function ' + name + '(')));
+check('Backup retention is configurable', gs.includes("appendRow(['backupRetentionDays', '30'])") && gs.includes('cfg.backupRetentionDays'));
+check('Attendance menu exposes backups', gs.includes("'Enable daily backups (03:00)'") && gs.includes("'Run backup now'"));
+const manifest = JSON.parse(readFileSync(new URL('appsscript/appsscript.json', ROOT), 'utf8'));
+check('Manifest grants Drive access for backups', (manifest.oauthScopes || []).includes('https://www.googleapis.com/auth/drive'));
+
 console.log(`\n${passCount} passed, ${failCount} failed`);
 process.exit(failCount ? 1 : 0);

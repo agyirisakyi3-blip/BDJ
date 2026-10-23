@@ -75,6 +75,7 @@ The app also includes: a first-run walkthrough, a recent-activity list and last-
     - `maxAccuracyM` - maximum allowed GPS fix error in metres (default `200`, blocks weak/spoofed fixes).
     - `maxMoveKmh` - maximum implied travel speed between your check-ins (default `300` km/h).
     - `retentionDays` - how many days of Attendance rows to keep (default `0` = keep everything; >0 enables purging).
+    - `backupRetentionDays` - how many days of daily Drive backups to keep (default `30`).
     - `lateAfter` - time (HH:MM) after which a check-in counts as late, e.g. `09:00` (leave empty to disable). Per-person shifts override this.
     - `selfieMode` - `off`, `optional` or `required`; requires a camera selfie on Check-in when `required`.
     - `reminderCheckInAfter` / `reminderCheckOutAfter` - minutes after shift start / end for local reminders (client-side, opt-in in Profile).
@@ -181,6 +182,9 @@ Camera and geolocation **require HTTPS**. Any static host works:
   names) is defused with `safeCell_`: a value starting with `=`, `+`, `-` or `@` is prefixed
   with `'` so it can never execute as a formula in your Sheets, control characters are
   stripped, and length is capped.
+- **Serialized attendance writes** - `recordAttendance_` holds a script lock across the
+  read → decide → append section, so two simultaneous scans cannot both record a check-in or
+  a duplicate break (Sheets has no transactions).
 - **Write quotas** - the Attendance endpoint is rate-limited per email (`writeQuotaPerEmail`,
   default 60/hour) and per tenant (`writeQuotaTenant`, default 600/hour), and tenant creation
   is limited to 10/hour. This stops a scripted flood from burning Apps Script quota or bloating
@@ -241,6 +245,9 @@ Camera and geolocation **require HTTPS**. Any static host works:
    - **Enable check-out reminders (hourly)** - hourly email nudge for people still checked in.
    - **Rotate admin PIN** / **Rotate QR secret** - rotate credentials (stored in Script Properties).
    - **Enable auto-purge** / **Run retention purge now** - retention cleanup using `retentionDays`.
+   - **Enable daily backups (03:00)** / **Run backup now** - copies the master and every tenant
+     spreadsheet to the **Attendance Backups** Drive folder and prunes copies older than
+     `backupRetentionDays` (default 30).
 
 ## Notes & limitations
 
